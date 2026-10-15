@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+
+# Go binaries & test cache
+backend/meterbox
+backend/bin/
+*.exe
+*.test
+*.out
+
+# Environment & local config
+.env
+.env.*
+!.env.example
+
+# OS & Editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

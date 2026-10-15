@@ -1,0 +1,50 @@
+# Upstream OpenMeter Server & Worker Configuration for Meterbox Stack
+address: 0.0.0.0:8888
+
+telemetry:
+  address: 0.0.0.0:10000
+  log:
+    level: info
+    format: json
+
+postgres:
+  url: postgres://meterbox:meterbox_secret@postgres:5432/meterbox?sslmode=disable
+  autoMigrate: migration
+
+aggregation:
+  clickhouse:
+    address: clickhouse:9000
+    tls: false
+    username: default
+    password: ""
+    database: openmeter
+    asyncInsert: false
+
+ingest:
+  kafka:
+    broker: redpanda:9092
+    securityProtocol: ""
+    saslMechanisms: ""
+    topicProvisioner:
+      cacheSize: 500
+      cacheTTL: 5m
+      partitions: 8
+      replicationFactor: 1
+
+sink:
+  minCommitCount: 500
+  maxCommitWait: 1s
+  namespaceRefresher: 15s
+  dedupe:
+    enabled: true
+    driver: redis
+    config:
+      address: redis:6379
+      database: 0
+      expiration: 24h
+      mode: single
+
+portal:
+  enabled: true
+  tokenSecret: "meterbox-portal-hmac-secret-key-change-in-prod"
+  tokenExpiration: 1h
