@@ -64,6 +64,7 @@ func (s *Server) Router() http.Handler {
 
 	apiMux.HandleFunc("GET /api/v1/entitlements", s.handleListEntitlements)
 	apiMux.HandleFunc("POST /api/v1/entitlements", s.handleCreateEntitlement)
+	apiMux.HandleFunc("GET /api/v1/grants", s.handleListGrants)
 	apiMux.HandleFunc("POST /api/v1/entitlements/{id}/grants", s.handleCreateGrant)
 	apiMux.HandleFunc("GET /api/v1/subjects/{subject}/entitlements/{feature}/value", s.handleEvaluateEntitlement)
 
@@ -76,9 +77,17 @@ func (s *Server) Router() http.Handler {
 
 	apiMux.HandleFunc("POST /api/v1/portal/tokens", s.handleCreatePortalToken)
 
+	// Native PostHog Ingestion & User Profile Hydration Bridge
+	apiMux.HandleFunc("POST /api/v1/posthog/capture", s.handlePostHogCapture)
+	apiMux.HandleFunc("POST /api/v1/posthog/batch", s.handlePostHogBatch)
+
 	// ========================================================================
 	// 2. METERBOX CONTROL PLANE API (`/api/control/v1/*`)
 	// ========================================================================
+	apiMux.HandleFunc("GET /api/control/v1/snapshot", s.handleGetSnapshot)
+	apiMux.HandleFunc("GET /api/control/v1/cost-intelligence", s.handleGetCostIntelligence)
+	apiMux.HandleFunc("GET /api/control/v1/analytics", s.handleGetProductAnalytics)
+
 	apiMux.HandleFunc("GET /api/control/v1/organizations", s.handleListOrganizations)
 	apiMux.HandleFunc("POST /api/control/v1/organizations", s.handleCreateOrganization)
 	apiMux.HandleFunc("GET /api/control/v1/environments", s.handleListEnvironments)
@@ -168,7 +177,8 @@ func (s *Server) handleQueryMeter(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
 	slug := r.PathValue("slug")
 	subject := r.URL.Query().Get("subject")
-	res, err := s.Store.QueryMeter(tc.Namespace, slug, subject, nil, nil)
+	window := r.URL.Query().Get("window")
+	res, err := s.Store.QueryMeter(tc.Namespace, slug, subject, nil, nil, window)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "meter_not_found", err.Error())
 		return
@@ -551,6 +561,93 @@ func (s *Server) handlePortalSummary(w http.ResponseWriter, r *http.Request) {
 		"meters":       meterSummaries,
 		"invoices":     subjectInvoices,
 	})
+}
+
+func (s *Server) handleListGrants(w http.ResponseWriter, r *http.Request) {
+	tc := auth.TenantFromContext(r.Context())
+	subject := r.URL.Query().Get("subject")
+	writeJSON(w, http.StatusOK, s.Store.ListAllGrants(tc.Namespace, subject))
+}
+
+func (s *Server) handlePostHogCapture(w http.ResponseWriter, r *http.Request) {
+	tc := auth.TenantFromContext(r.Context())
+	var rawBody interface{}
+	if err := json.NewDecoder(r.Body).Decode(&rawBody); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", "Request body must be valid PostHog capture JSON")
+		return
+	}
+
+	var batch []map[string]interface{}
+	switch v := rawBody.(type) {
+	case map[string]interface{}:
+		if innerBatch, ok := v["batch"].([]interface{}); ok {
+			for _, item := range innerBatch {
+				if m, ok := item.(map[string]interface{}); ok {
+					batch = append(batch, m)
+				}
+			}
+		} else {
+			batch = []map[string]interface{}{v}
+		}
+	case []interface{}:
+		for _, item := range v {
+			if m, ok := item.(map[string]interface{}); ok {
+				batch = append(batch, m)
+			}
+		}
+	default:
+		writeError(w, http.StatusBadRequest, "invalid_payload", "Expected PostHog event object or batch array")
+		return
+	}
+
+	res := s.Ingest.IngestPostHogBatch(tc, batch)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":        1,
+		"ingest_result": res,
+	})
+}
+
+func (s *Server) handlePostHogBatch(w http.ResponseWriter, r *http.Request) {
+	s.handlePostHogCapture(w, r)
+}
+
+func (s *Server) handleGetCostIntelligence(w http.ResponseWriter, r *http.Request) {
+	tc := auth.TenantFromContext(r.Context())
+	writeJSON(w, http.StatusOK, s.Store.GetCostIntelligence(tc.Namespace))
+}
+
+func (s *Server) handleGetProductAnalytics(w http.ResponseWriter, r *http.Request) {
+	tc := auth.TenantFromContext(r.Context())
+	writeJSON(w, http.StatusOK, s.Store.GetProductAnalytics(tc.Namespace))
+}
+
+func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
+	tc := auth.TenantFromContext(r.Context())
+	ns := tc.Namespace
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	if limit <= 0 {
+		limit = 35
+	}
+
+	snap := models.NamespaceSnapshot{
+		Namespace:        ns,
+		Organizations:    s.Store.ListOrganizations(),
+		Environments:     s.Store.ListEnvironments(),
+		Telemetry:        s.Store.GetTelemetry(ns),
+		Meters:           s.Store.ListMeters(ns),
+		Subjects:         s.Store.ListSubjects(ns),
+		Entitlements:     s.Store.ListEntitlements(ns, ""),
+		Grants:           s.Store.ListAllGrants(ns, ""),
+		Plans:            s.Store.ListPlans(ns),
+		Subscriptions:    s.Store.ListSubscriptions(ns),
+		Invoices:         s.Store.ListInvoices(ns),
+		APIKeys:          s.Store.ListAPIKeys(ns),
+		DLQEvents:        s.Store.ListDLQEvents(ns),
+		RecentEvents:     s.Store.ListRecentEvents(ns, limit),
+		CostIntelligence: s.Store.GetCostIntelligence(ns),
+		ProductAnalytics: s.Store.GetProductAnalytics(ns),
+	}
+	writeJSON(w, http.StatusOK, snap)
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

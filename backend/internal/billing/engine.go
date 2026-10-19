@@ -37,16 +37,18 @@ func (e *Engine) GenerateInvoice(namespace, subjectKey, planSlug string, syncToS
 	// 1. Recurring Base Subscription Fee
 	if plan.BasePriceCents > 0 {
 		lineItems = append(lineItems, models.InvoiceLineItem{
-			Description:   fmt.Sprintf("%s — Base Subscription (%s)", plan.Name, plan.BillingCadence),
-			Quantity:      1,
-			IncludedUnits: 0,
-			BillableUnits: 1,
-			AmountCents:   plan.BasePriceCents,
+			Description:    fmt.Sprintf("%s — Base Subscription (%s)", plan.Name, plan.BillingCadence),
+			Quantity:       1,
+			IncludedUnits:  0,
+			BillableUnits:  1,
+			UnitPriceCents: float64(plan.BasePriceCents),
+			AmountCents:    plan.BasePriceCents,
 		})
 		subtotalCents += plan.BasePriceCents
 	}
 
 	// 2. Evaluate each Usage RateCard against ClickHouse meter aggregations
+	usageCentsTotal := 0
 	for _, rc := range plan.RateCards {
 		qRes, err := e.store.QueryMeter(namespace, rc.MeterSlug, subjectKey, &periodStart, &periodEnd)
 		usageQty := 0.0
@@ -56,16 +58,29 @@ func (e *Engine) GenerateInvoice(namespace, subjectKey, planSlug string, syncToS
 
 		billableQty := math.Max(0, usageQty-rc.IncludedQuantity)
 		amountCents := calculateRateCardAmountCents(rc, billableQty)
+		unitPrice := 0.0
+		if len(rc.Tiers) > 0 {
+			unitPrice = rc.Tiers[0].UnitPriceCents
+		}
 
 		lineItems = append(lineItems, models.InvoiceLineItem{
-			Description:   fmt.Sprintf("%s (%s)", rc.Name, rc.PricingModel),
-			MeterSlug:     rc.MeterSlug,
-			Quantity:      usageQty,
-			IncludedUnits: rc.IncludedQuantity,
-			BillableUnits: billableQty,
-			AmountCents:   amountCents,
+			Description:    fmt.Sprintf("%s (%s)", rc.Name, rc.PricingModel),
+			MeterSlug:      rc.MeterSlug,
+			Quantity:       usageQty,
+			IncludedUnits:  rc.IncludedQuantity,
+			BillableUnits:  billableQty,
+			UnitPriceCents: unitPrice,
+			AmountCents:    amountCents,
 		})
 		subtotalCents += amountCents
+		usageCentsTotal += amountCents
+	}
+
+	// 3. Apply Priority 1 Prepaid Credit Grants against usage & base fee
+	creditsAppliedCents := e.store.CalculateSubjectCreditOffsetCents(namespace, subjectKey, subtotalCents)
+	totalCents := subtotalCents - creditsAppliedCents
+	if totalCents < 0 {
+		totalCents = 0
 	}
 
 	status := "issued"
@@ -76,18 +91,21 @@ func (e *Engine) GenerateInvoice(namespace, subjectKey, planSlug string, syncToS
 	}
 
 	inv := models.Invoice{
-		Namespace:       namespace,
-		SubjectKey:      subjectKey,
-		PlanSlug:        plan.Slug,
-		Currency:        plan.Currency,
-		SubtotalCents:   subtotalCents,
-		TaxCents:        0,
-		TotalCents:      subtotalCents,
-		Status:          status,
-		StripeInvoiceID: stripeInvoiceID,
-		LineItems:       lineItems,
-		PeriodStart:     periodStart,
-		PeriodEnd:       periodEnd,
+		Namespace:           namespace,
+		SubjectKey:          subjectKey,
+		PlanSlug:            plan.Slug,
+		Currency:            plan.Currency,
+		SubtotalCents:       subtotalCents,
+		CreditsAppliedCents: creditsAppliedCents,
+		TaxCents:            0,
+		TotalCents:          totalCents,
+		Status:              status,
+		StripeInvoiceID:     stripeInvoiceID,
+		LineItems:           lineItems,
+		PeriodStart:         periodStart,
+		PeriodEnd:           periodEnd,
+		IssuedAt:            now,
+		CreatedAt:           now,
 	}
 
 	return e.store.SaveInvoice(inv), nil

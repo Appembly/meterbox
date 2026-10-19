@@ -90,7 +90,7 @@ func (c *Client) InsertEventsBatch(events []models.CloudEvent) error {
 }
 
 // AggregateMeter evaluates an OpenMeter aggregation (`COUNT`, `SUM`, `MAX`, `AVG`, `UNIQUE_COUNT`)
-// strictly scoped to `(namespace, meter.EventType)` with optional subject & time filters.
+// strictly scoped to `(namespace, meter.EventType)` with optional subject, window override, & time filters.
 // This mirrors ClickHouse's primary key pruning on `ORDER BY (namespace, type, subject, toStartOfHour(time), id)`.
 func (c *Client) AggregateMeter(
 	meter models.Meter,
@@ -98,8 +98,16 @@ func (c *Client) AggregateMeter(
 	subjectFilter string,
 	from *time.Time,
 	to *time.Time,
+	windowOverride ...string,
 ) models.MeterQueryResult {
 	start := time.Now()
+	effectiveWindow := meter.WindowSize
+	if len(windowOverride) > 0 && strings.TrimSpace(windowOverride[0]) != "" {
+		effectiveWindow = strings.TrimSpace(windowOverride[0])
+	}
+	if effectiveWindow == "" {
+		effectiveWindow = "HOUR"
+	}
 
 	type bucketKey struct {
 		windowStart time.Time
@@ -140,7 +148,7 @@ func (c *Client) AggregateMeter(
 			continue
 		}
 
-		winStart, winEnd := truncateWindow(ev.Time.UTC(), meter.WindowSize)
+		winStart, winEnd := truncateWindow(ev.Time.UTC(), effectiveWindow)
 		grpMap, grpSig := extractGroupBy(ev.Data, meter.GroupBy)
 		bKey := bucketKey{
 			windowStart: winStart,
@@ -210,6 +218,7 @@ func (c *Client) AggregateMeter(
 			WindowEnd:   acc.windowEnd,
 			Subject:     acc.subject,
 			GroupBy:     acc.groupMap,
+			Groups:      acc.groupMap,
 			Value:       math.Round(val*10000) / 10000,
 			EventCount:  acc.count,
 		})
@@ -247,23 +256,28 @@ func (c *Client) AggregateMeter(
 		MeterSlug:   meter.Slug,
 		Namespace:   meter.Namespace,
 		Aggregation: string(meter.Aggregation),
+		WindowSize:  effectiveWindow,
 		TotalValue:  math.Round(finalTotal*10000) / 10000,
 		TotalEvents: totalEvents,
 		Data:        rows,
+		Series:      rows,
 		QueryEngine: engineLabel,
 		ExecutionMs: float64(time.Since(start).Microseconds()) / 1000.0,
 	}
 }
 
 func truncateWindow(t time.Time, windowSize string) (time.Time, time.Time) {
-	switch strings.ToUpper(windowSize) {
-	case "MINUTE":
+	switch strings.ToUpper(strings.TrimSpace(windowSize)) {
+	case "MINUTE", "1M":
 		s := t.Truncate(time.Minute)
 		return s, s.Add(time.Minute)
-	case "DAY":
+	case "5MINUTE", "5M":
+		s := t.Truncate(5 * time.Minute)
+		return s, s.Add(5 * time.Minute)
+	case "DAY", "1D", "24H":
 		s := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 		return s, s.Add(24 * time.Hour)
-	default: // HOUR
+	default: // HOUR / 1H
 		s := t.Truncate(time.Hour)
 		return s, s.Add(time.Hour)
 	}

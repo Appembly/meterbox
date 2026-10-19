@@ -2,528 +2,44 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AppemblyLogo } from "../packages/appembly-ui/components/brand/AppemblyLogo";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6071";
-
-// ---------------------------------------------------------------------------
-// API Response Interfaces
-// ---------------------------------------------------------------------------
-interface Organization {
-  id: string;
-  slug: string;
-  name: string;
-  billing_tier: string;
-  rate_limit_eps: number;
-  burst_capacity: number;
-  created_at: string;
-}
-
-interface Environment {
-  id: string;
-  org_id: string;
-  slug: string;
-  type: "production" | "sandbox";
-  openmeter_namespace: string;
-  created_at: string;
-}
-
-interface Meter {
-  id: string;
-  namespace: string;
-  slug: string;
-  name: string;
-  aggregation: "SUM" | "COUNT" | "AVG" | "UNIQUE_COUNT" | "MAX";
-  event_type: string;
-  value_property: string;
-  group_by: Record<string, string>;
-  window_size: string;
-  created_at: string;
-}
-
-interface Subject {
-  id: string;
-  namespace: string;
-  key: string;
-  display_name: string;
-  stripe_customer_id?: string;
-  metadata?: Record<string, string>;
-  created_at: string;
-}
-
-interface APIKey {
-  id: string;
-  org_id: string;
-  env_id: string;
-  name: string;
-  scope: "ingest" | "entitlement" | "admin" | "portal";
-  prefix: string;
-  subject_id?: string;
-  rate_limit_eps: number;
-  created_at: string;
-}
-
-interface Entitlement {
-  id: string;
-  namespace: string;
-  subject_key: string;
-  feature_key: string;
-  type: "metered" | "static" | "boolean";
-  meter_slug: string;
-  limit: number;
-  soft_limit: boolean;
-  reset_period: string;
-}
-
-interface CreditGrant {
-  id: string;
-  entitlement_id: string;
-  subject_key: string;
-  name: string;
-  amount: number;
-  remaining: number;
-  priority: number;
-  expires_at: string;
-}
-
-interface EntitlementCheck {
-  has_access: boolean;
-  subject_key: string;
-  feature_key: string;
-  limit: number;
-  usage: number;
-  credit_balance: number;
-  remaining: number;
-  soft_limit: boolean;
-  cache_source: string;
-  latency_us: number;
-  evaluated_at: string;
-}
-
-interface DLQEvent {
-  id: string;
-  org_id: string;
-  env_id: string;
-  namespace: string;
-  raw_payload: string;
-  failure_reason: string;
-  error_code: string;
-  status: "pending" | "replayed" | "discarded";
-  failed_at: string;
-}
-
-interface Plan {
-  id: string;
-  namespace: string;
-  slug: string;
-  name: string;
-  currency: string;
-  base_fee_cents: number;
-  billing_cadence: string;
-  components: {
-    id: string;
-    name: string;
-    meter_slug: string;
-    model: "flat_per_unit" | "graduated" | "volume";
-    unit_price_cents: number;
-    included_units: number;
-  }[];
-}
-
-interface Subscription {
-  id: string;
-  namespace: string;
-  subject_key: string;
-  plan_slug: string;
-  status: string;
-  current_period_start: string;
-  current_period_end: string;
-  created_at: string;
-}
-
-interface Invoice {
-  id: string;
-  namespace: string;
-  subject_key: string;
-  plan_slug: string;
-  currency: string;
-  subtotal_cents: number;
-  credits_applied_cents: number;
-  total_cents: number;
-  status: string;
-  stripe_invoice_id: string;
-  line_items: {
-    description: string;
-    meter_slug?: string;
-    quantity: number;
-    unit_price_cents: number;
-    amount_cents: number;
-  }[];
-  period_start: string;
-  period_end: string;
-  issued_at: string;
-}
-
-interface Telemetry {
-  org_id: string;
-  org_name: string;
-  active_namespace: string;
-  ingested_events: number;
-  deduplicated_hits: number;
-  realtime_lane_events: number;
-  bulk_lane_events: number;
-  dlq_pending_count: number;
-  entitlement_checks: number;
-  avg_check_latency_us: number;
-  cache_hit_ratio: number;
-  recent_events: {
-    id: string;
-    type: string;
-    subject: string;
-    namespace: string;
-    time: string;
-    data: Record<string, unknown>;
-  }[];
-  dogfood_self_billing: Record<string, number>;
-}
-
-interface MeterQueryResult {
-  meter_slug: string;
-  namespace: string;
-  aggregation: string;
-  total_value: number;
-  series: {
-    window_start: string;
-    window_end: string;
-    subject: string;
-    value: number;
-    groups?: Record<string, string>;
-  }[];
-}
+import {
+  API_BASE,
+  Organization,
+  Environment,
+  Meter,
+  Subject,
+  APIKey,
+  Entitlement,
+  CreditGrant,
+  EntitlementCheck,
+  DLQEvent,
+  Plan,
+  Subscription,
+  Invoice,
+  Telemetry,
+  MeterQueryResult,
+  PortalSummary,
+  CostIntelligenceReport,
+  ProductAnalyticsReport,
+  ToastItem,
+  DrawerKind,
+  DOC_CHAPTERS,
+} from "../types/meterbox";
+import { UsersAnalyticsView } from "../components/views/UsersAnalyticsView";
+import { CostIntelligenceView } from "../components/views/CostIntelligenceView";
 
 interface IngestResult {
-  event_id: string;
+  event_id?: string;
+  status?: string;
+  accepted?: number;
   namespace: string;
-  topic: string;
+  topic?: string;
   lane: string;
-  deduplicated: boolean;
-  dlq_routed: boolean;
+  deduplicated: boolean | number;
+  dlq_routed: boolean | number;
   dlq_reason?: string;
-  processed_at: string;
+  processed_at?: string;
 }
-
-interface PortalSummary {
-  namespace: string;
-  subject: string;
-  meters: Meter[];
-  entitlements: EntitlementCheck[];
-  invoices: Invoice[];
-}
-
-interface ToastItem {
-  id: string;
-  title: string;
-  detail?: string;
-  kind?: "ok" | "warn" | "err";
-}
-
-type DrawerKind =
-  | null
-  | "tenant"
-  | "meter"
-  | "customer"
-  | "entitlement"
-  | "grant"
-  | "plan"
-  | "apikey"
-  | "invoice";
-
-// ---------------------------------------------------------------------------
-// Documentation Chapters
-// ---------------------------------------------------------------------------
-interface DocChapter {
-  id: string;
-  num: string;
-  title: string;
-  tag: string;
-  summary: string;
-  flow: string[];
-  formula?: { math: string; caption: string };
-  sections: { num: string; heading: string; body: string }[];
-  callout: { kind: "tip" | "warn"; text: string };
-  table: { headers: string[]; rows: string[][] };
-  codeTabs: {
-    label: string;
-    badge: "src" | "use";
-    file: string;
-    code: string;
-    caption: string;
-  }[];
-}
-
-const DOC_CHAPTERS: DocChapter[] = [
-  {
-    id: "doc-tenancy",
-    num: "01",
-    title: "Multi-Tenancy & Scoped Auth",
-    tag: "Control Plane",
-    summary:
-      "How Meterbox layers Organizations, isolated Environments (production vs. sandbox), and 4-tier scoped API keys on top of OpenMeter OSS namespaces.",
-    flow: [
-      "Bearer mb_ing_*",
-      "SHA-256 Digest Lookup",
-      "Resolve (org_id, env_id)",
-      "Inject OpenMeter Namespace",
-      "PostgreSQL RLS Context",
-    ],
-    sections: [
-      {
-        num: "1.1",
-        heading: "1:1 Environment-to-Namespace Mapping",
-        body: "OpenMeter OSS uses a flat namespace string to isolate meters and events. Meterbox maps every Organization Environment (e.g., Production or Sandbox) 1:1 to a deterministic OpenMeter namespace (ns_{org}_{env}). Clients never pass a namespace header—the Edge Gateway resolves it cryptographically from the Bearer token and overwrites the internal request context.",
-      },
-      {
-        num: "1.2",
-        heading: "Four-Tier Scoped API Keys",
-        body: "Instead of a single root key, Meterbox issues four distinct key prefixes: mb_ing_ (write-only CloudEvents ingestion), mb_ent_ (low-latency quota evaluation), mb_sk_ (control plane & billing administration), and mb_portal_ (customer-locked read-only portal access).",
-      },
-    ],
-    callout: {
-      kind: "tip",
-      text: "PostgreSQL Row-Level Security (RLS) policies enforce current_setting('app.current_org_id') on every control-plane table so tenant metadata cannot leak across organizations.",
-    },
-    table: {
-      headers: ["Key Prefix", "Scope", "Permitted Operations", "Tenant Lock"],
-      rows: [
-        ["mb_ing_*", "ingest", "POST /api/v1/events (CloudEvents v1.0)", "Org + Environment"],
-        ["mb_ent_*", "entitlement", "GET /api/v1/subjects/{sub}/entitlements/{feat}/value", "Org + Environment"],
-        ["mb_sk_*", "admin", "Meters, Plans, Grants, DLQ Replay, Invoices", "Org + Environment"],
-        ["mb_portal_*", "portal", "GET /api/portal/v1/summary", "Org + Env + Subject Key"],
-      ],
-    },
-    codeTabs: [
-      {
-        label: "API Key Generator",
-        badge: "src",
-        file: "backend/internal/auth/apikey.go",
-        code: `func GenerateAPIKey(orgID, envID, name string, scope models.APIKeyScope, subjectID string, rateLimit int) (models.APIKey, string, error) {
-    raw := make([]byte, 20)
-    if _, err := rand.Read(raw); err != nil {
-        return models.APIKey{}, "", err
-    }
-    prefix := scopePrefix(scope) // mb_ing_, mb_ent_, mb_sk_, mb_portal_
-    secret := fmt.Sprintf("%s%s", prefix, hex.EncodeToString(raw))
-    hash := sha256.Sum256([]byte(secret))
-    return models.APIKey{
-        OrgID:        orgID,
-        EnvID:        envID,
-        Scope:        scope,
-        KeyHash:      hex.EncodeToString(hash[:]),
-        RateLimitEPS: rateLimit,
-    }, secret, nil
-}`,
-        caption: "Plaintext secrets are returned once upon creation; only the SHA-256 digest is persisted.",
-      },
-      {
-        label: "Postgres RLS Policy",
-        badge: "src",
-        file: "infra/postgres/init-db.sql",
-        code: `ALTER TABLE environments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE api_keys ENABLE ROW LEVEL SECURITY;
-ALTER TABLE dlq_events ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY tenant_isolation_environments ON environments
-    USING (org_id::text = current_setting('app.current_org_id', true));`,
-        caption: "Database-level isolation guarantees tenant boundary enforcement on all control-plane queries.",
-      },
-    ],
-  },
-  {
-    id: "doc-ingest",
-    num: "02",
-    title: "Ingestion, Dedup & Lanes",
-    tag: "Edge Gateway",
-    summary:
-      "Synchronous Redis SETNX idempotency, token-bucket noisy-neighbor routing (realtime vs. bulk Redpanda topics), and Dead-Letter Queue (DLQ) capture.",
-    flow: [
-      "CloudEvents v1.0 POST",
-      "Schema Validation",
-      "Redis SETNX Dedup (48h)",
-      "Token-Bucket Rate Check",
-      "Redpanda Topic Routing",
-    ],
-    formula: {
-      math: "Topic(e) = om_events_realtime (if tokens >= 1)  |  om_events_bulk (if burst exceeded)",
-      caption: "Noisy-neighbor isolation spills high-volume historical backfills to the bulk topic instead of dropping events or delaying real-time tenants.",
-    },
-    sections: [
-      {
-        num: "2.1",
-        heading: "Synchronous Idempotency at the Edge",
-        body: "Every CloudEvent carries a unique id per source. Before publishing to Redpanda, the Edge Gateway checks key dedup:{namespace}:{source}:{id} with a 48-hour TTL. Retried network requests return HTTP 202 Accepted with deduplicated: true and never double-count usage.",
-      },
-      {
-        num: "2.2",
-        heading: "Zero-Drop Dead-Letter Queue (DLQ) & Replay",
-        body: "Events that fail CloudEvents validation or match no registered meter event_type are captured in the tenant's DLQ instead of being silently discarded. Operators can edit the raw JSON payload and replay it directly back through the ingestion pipeline.",
-      },
-    ],
-    callout: {
-      kind: "warn",
-      text: "Every accepted event also emits a dogfooding telemetry event into ns_meterbox_internal (meter: mbx_ingested_events) so Meterbox bills tenants using its own metering engine.",
-    },
-    table: {
-      headers: ["Kafka / Redpanda Topic", "Purpose", "Consumer SLA", "Routing Trigger"],
-      rows: [
-        ["om_events_realtime", "Interactive customer traffic", "< 50ms end-to-end", "Within tenant token-bucket burst"],
-        ["om_events_bulk", "Batch backfills & noisy neighbors", "Async throughput optimized", "Exceeds tenant EPS burst threshold"],
-        ["om_events_dlq", "Malformed or unmapped events", "Operator inspection & replay", "Schema / meter lookup failure"],
-      ],
-    },
-    codeTabs: [
-      {
-        label: "Ingestion Pipeline",
-        badge: "src",
-        file: "backend/internal/ingest/pipeline.go",
-        code: `// 1. Synchronous Idempotency Deduplication (Redis SETNX 48h TTL equivalent)
-dedupKey := fmt.Sprintf("dedup:%s:%s:%s", namespace, ev.Source, ev.ID)
-if p.store.CheckAndMarkDedup(dedupKey, 48*time.Hour) {
-    return models.IngestResponse{
-        EventID:      ev.ID,
-        Namespace:    namespace,
-        Deduplicated: true,
-    }, nil
-}
-
-// 2. Per-Tenant Token Bucket Rate Limiter & Noisy-Neighbor Lane Router
-lane := "realtime"
-topic := "om_events_realtime"
-if !p.allowRealtime(org.ID, org.RateLimitEPS, org.BurstCapacity) {
-    lane = "bulk"
-    topic = "om_events_bulk"
-}`,
-        caption: "Edge pipeline in backend/internal/ingest/pipeline.go.",
-      },
-    ],
-  },
-  {
-    id: "doc-clickhouse",
-    num: "03",
-    title: "ClickHouse OLAP Schema",
-    tag: "Storage Engine",
-    summary:
-      "Multi-tenant ClickHouse MergeTree partitioning with namespace as the primary sorting key prefix and incremental AggregatingMergeTree materialized rollups.",
-    flow: [
-      "Redpanda Consumer",
-      "om_events_raw (MergeTree)",
-      "Materialized View Trigger",
-      "om_meter_rollups_1m",
-      "Sub-10ms OLAP Query",
-    ],
-    sections: [
-      {
-        num: "3.1",
-        heading: "Why namespace Leads the Sorting Key",
-        body: "Instead of creating separate ClickHouse tables per customer—which causes ZooKeeper/ClickHouseKeeper metadata explosion beyond a few hundred tenants—Meterbox stores all tenants in shared tables ordered by (namespace, type, subject, toStartOfHour(time), id). Every tenant query prunes 99.9% of granules at the primary index level.",
-      },
-      {
-        num: "3.2",
-        heading: "Incremental 1-Minute Rollups",
-        body: "ClickHouse Materialized Views continuously aggregate sumState, countState, avgState, maxState, and uniqState into 1-minute windows as batches arrive, keeping meter queries and entitlement balance rebuilds fast regardless of raw event volume.",
-      },
-    ],
-    callout: {
-      kind: "tip",
-      text: "Monthly partitioning (PARTITION BY toYYYYMM(time)) combined with namespace-prefixed ORDER BY enables instant tenant data retention policies and zero-downtime partition drops.",
-    },
-    table: {
-      headers: ["Table / View", "Engine", "Partition Key", "Primary Sort Key (ORDER BY)"],
-      rows: [
-        ["om_events_raw", "MergeTree()", "toYYYYMM(time)", "(namespace, type, subject, toStartOfHour(time), id)"],
-        ["om_meter_rollups_1m", "AggregatingMergeTree()", "toYYYYMM(window_start)", "(namespace, event_type, subject, window_start)"],
-        ["om_meter_rollups_1m_mv", "Materialized View", "N/A (Stream Trigger)", "Populates om_meter_rollups_1m on insert"],
-      ],
-    },
-    codeTabs: [
-      {
-        label: "ClickHouse DDL",
-        badge: "src",
-        file: "infra/clickhouse/init-db.sql",
-        code: `CREATE TABLE IF NOT EXISTS meterbox.om_events_raw (
-    namespace LowCardinality(String),
-    id String,
-    type LowCardinality(String),
-    subject String,
-    time DateTime64(3, 'UTC'),
-    numeric_value Float64 DEFAULT 0,
-    properties Map(String, String)
-) ENGINE = MergeTree()
-PARTITION BY toYYYYMM(time)
-ORDER BY (namespace, type, subject, toStartOfHour(time), id);`,
-        caption: "Multi-tenant ClickHouse table schema with LowCardinality(String) namespace prefixing.",
-      },
-    ],
-  },
-  {
-    id: "doc-entitlements",
-    num: "04",
-    title: "Sub-5ms Quotas & Billing",
-    tag: "Monetization Layer",
-    summary:
-      "Write-through cached entitlement balance evaluations, priority-ordered prepaid credit grant burndown, and hybrid subscription + usage invoice generation.",
-    flow: [
-      "GET /entitlements/{feature}/value",
-      "Edge Balance Cache Lookup",
-      "Priority Credit Grant Ledger",
-      "Evaluate Remaining Quota",
-      "Dogfood Telemetry Emit",
-    ],
-    formula: {
-      math: "Remaining(subject, feature) = max(0, Limit(feature) + sum(ActiveCreditGrants) - MeterUsage)",
-      caption: "Real-time quota evaluation combines base feature limits, active prepaid credit grants, and live meter usage.",
-    },
-    sections: [
-      {
-        num: "4.1",
-        heading: "Edge-Cached Quota Checks",
-        body: "Applications call the entitlement endpoint on the critical request path (e.g., before executing an LLM completion). Meterbox serves cached balances in microseconds and invalidates/updates the cache synchronously whenever an event is ingested for that subject.",
-      },
-      {
-        num: "4.2",
-        heading: "Hybrid Plans & Prepaid Credit Burndown",
-        body: "Plans combine a fixed base fee with metered overage components (flat per-unit, graduated, or volume tiers) and included unit allowances. When generating an invoice, Meterbox automatically burns down active Credit Grants in priority order before charging overage to Stripe.",
-      },
-    ],
-    callout: {
-      kind: "tip",
-      text: "Soft-limit entitlements return has_access: true even when remaining balance reaches 0, enabling overage billing alerts without hard-blocking production customer traffic.",
-    },
-    table: {
-      headers: ["Entitlement Type", "Access Logic", "Credit Grant Support", "Typical Use Case"],
-      rows: [
-        ["metered (hard limit)", "remaining > 0", "Yes (priority burndown)", "Free tier API call caps"],
-        ["metered (soft limit)", "Always true (tracks overage)", "Yes (offsets invoice)", "Production pay-as-you-go AI tokens"],
-        ["static / boolean", "Feature flag / config limit", "No", "SSO enabled, max seat count"],
-      ],
-    },
-    codeTabs: [
-      {
-        label: "Entitlement Evaluator",
-        badge: "src",
-        file: "backend/internal/entitlement/engine.go",
-        code: `totalPool := ent.Limit + creditBalance
-remaining := totalPool - usage
-if remaining < 0 {
-    remaining = 0
-}
-hasAccess := remaining > 0 || ent.SoftLimit
-if ent.Type == "boolean" {
-    hasAccess = ent.Limit > 0
-}`,
-        caption: "Real-time entitlement decision engine with soft-limit and credit-grant support.",
-      },
-    ],
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Main Application Component
@@ -561,7 +77,7 @@ export default function MeterboxApp() {
   const [newEnvSlug, setNewEnvSlug] = useState<string>("");
   const [newEnvType, setNewEnvType] = useState<"production" | "sandbox">("sandbox");
 
-  // Operational Data States (100% API-driven)
+  // Operational Data States (100% API-driven via Consolidated Snapshot)
   const [telemetry, setTelemetry] = useState<Telemetry | null>(null);
   const [meters, setMeters] = useState<Meter[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -572,6 +88,8 @@ export default function MeterboxApp() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [costIntel, setCostIntel] = useState<CostIntelligenceReport | null>(null);
+  const [productAnalytics, setProductAnalytics] = useState<ProductAnalyticsReport | null>(null);
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
 
   // Selected Meter & Query Studio State
@@ -823,7 +341,7 @@ export default function MeterboxApp() {
   }, [fetchTenants]);
 
   // ---------------------------------------------------------------------------
-  // Fetch All Environment-Scoped Data (using CORS-approved X-OpenMeter-Namespace)
+  // Fetch Consolidated Environment Snapshot (Single HTTP Round-Trip)
   // ---------------------------------------------------------------------------
   const fetchEnvData = useCallback(async () => {
     if (!activeNamespace) {
@@ -834,189 +352,181 @@ export default function MeterboxApp() {
       "X-OpenMeter-Namespace": activeNamespace,
     };
     try {
-      const [
-        telRes,
-        eventsRes,
-        metersRes,
-        subRes,
-        keysRes,
-        entRes,
-        dlqRes,
-        plansRes,
-        subsRes,
-        invRes,
-      ] = await Promise.all([
-        fetch(`${API_BASE}/api/control/v1/telemetry`, { headers }),
-        fetch(`${API_BASE}/api/v1/events?limit=25`, { headers }),
-        fetch(`${API_BASE}/api/v1/meters`, { headers }),
-        fetch(`${API_BASE}/api/v1/subjects`, { headers }),
-        fetch(`${API_BASE}/api/control/v1/api-keys`, { headers }),
-        fetch(`${API_BASE}/api/v1/entitlements`, { headers }),
-        fetch(`${API_BASE}/api/control/v1/dlq`, { headers }),
-        fetch(`${API_BASE}/api/v1/plans`, { headers }),
-        fetch(`${API_BASE}/api/v1/subscriptions`, { headers }),
-        fetch(`${API_BASE}/api/v1/invoices`, { headers }),
-      ]);
-
-      const recentEventsList = eventsRes.ok ? await eventsRes.json() : [];
-
-      if (telRes.ok) {
-        const rawTel = await telRes.json();
-        const hits = Number(rawTel.edge_cache_hits ?? 0);
-        const misses = Number(rawTel.edge_cache_misses ?? 0);
-        const rawRatioPct = Number(rawTel.edge_cache_hit_ratio_pct ?? 96);
-        const normalizedTel: Telemetry = {
-          org_id: String(rawTel.org_id || selectedOrgId || "org_acme_ai"),
-          org_name: String(rawTel.org_name || activeOrgName || "Acme AI Corp"),
-          active_namespace: String(rawTel.active_namespace || activeNamespace),
-          ingested_events: Number(
-            rawTel.ingested_events ?? rawTel.total_events_ingested ?? 0
-          ),
-          deduplicated_hits: Number(
-            rawTel.deduplicated_hits ?? rawTel.deduplicated_dropped ?? 0
-          ),
-          realtime_lane_events: Number(rawTel.realtime_lane_events ?? 0),
-          bulk_lane_events: Number(rawTel.bulk_lane_events ?? 0),
-          dlq_pending_count: Number(
-            rawTel.dlq_pending_count ?? rawTel.pending_dlq_events ?? 0
-          ),
-          entitlement_checks: Number(
-            rawTel.entitlement_checks ?? hits + misses
-          ),
-          avg_check_latency_us: Number(rawTel.avg_check_latency_us ?? 280),
-          cache_hit_ratio:
-            rawTel.cache_hit_ratio != null
-              ? Number(rawTel.cache_hit_ratio)
-              : hits + misses > 0
-              ? rawRatioPct / 100
-              : 0.96,
-          recent_events: Array.isArray(rawTel.recent_events)
-            ? rawTel.recent_events
-            : Array.isArray(recentEventsList)
-            ? recentEventsList
-            : [],
-          dogfood_self_billing:
-            rawTel.dogfood_self_billing || {
-              meterbox_ingested_events: Number(
-                rawTel.dogfood_org_events_billed ?? 0
-              ),
+      const snapRes = await fetch(`${API_BASE}/api/control/v1/snapshot`, { headers });
+      if (snapRes.ok) {
+        const snap = await snapRes.json();
+        if (snap.telemetry) {
+          const rawTel = snap.telemetry;
+          const hits = Number(rawTel.edge_cache_hits ?? 0);
+          const misses = Number(rawTel.edge_cache_misses ?? 0);
+          const rawRatioPct = Number(rawTel.edge_cache_hit_ratio_pct ?? 96);
+          setTelemetry({
+            org_id: String(rawTel.org_id || selectedOrgId || "org_acme_ai"),
+            org_name: String(rawTel.org_name || activeOrgName || "Acme AI Corp"),
+            active_namespace: String(rawTel.active_namespace || activeNamespace),
+            ingested_events: Number(rawTel.ingested_events ?? rawTel.total_events_ingested ?? 0),
+            deduplicated_hits: Number(rawTel.deduplicated_hits ?? rawTel.deduplicated_dropped ?? 0),
+            realtime_lane_events: Number(rawTel.realtime_lane_events ?? 0),
+            bulk_lane_events: Number(rawTel.bulk_lane_events ?? 0),
+            dlq_pending_count: Number(rawTel.dlq_pending_count ?? rawTel.pending_dlq_events ?? 0),
+            entitlement_checks: Number(rawTel.entitlement_checks ?? hits + misses),
+            avg_check_latency_us: Number(rawTel.avg_check_latency_us ?? 210),
+            cache_hit_ratio:
+              rawTel.cache_hit_ratio != null
+                ? Number(rawTel.cache_hit_ratio)
+                : hits + misses > 0
+                ? rawRatioPct / 100
+                : 0.96,
+            recent_events: Array.isArray(snap.recent_events)
+              ? snap.recent_events
+              : Array.isArray(rawTel.recent_events)
+              ? rawTel.recent_events
+              : [],
+            dogfood_self_billing: rawTel.dogfood_self_billing || {
+              meterbox_ingested_events: Number(rawTel.dogfood_org_events_billed ?? 0),
             },
-        };
-        setTelemetry(normalizedTel);
-      }
-
-      if (metersRes.ok) {
-        const mList: Meter[] = await metersRes.json();
-        setMeters(mList);
-        if (mList.length > 0) {
-          setSelectedMeterSlug((prev) =>
-            prev && mList.some((m) => m.slug === prev) ? prev : mList[0].slug
-          );
-          setIngestType((prev) => prev || mList[0].event_type);
-          setNewEntMeterSlug((prev) => prev || mList[0].slug);
-          setNewPlanCompMeter((prev) => prev || mList[0].slug);
+          });
         }
-      }
 
-      if (subRes.ok) {
-        const sList: Subject[] = await subRes.json();
-        setSubjects(sList);
-        if (sList.length > 0) {
-          setSelectedSubjectKey((prev) =>
-            prev && sList.some((s) => s.key === prev) ? prev : sList[0].key
-          );
-          setIngestSubject((prev) => prev || sList[0].key);
-          setInvoiceSubjectKey((prev) => prev || sList[0].key);
-          setNewSubSubjectKey((prev) => prev || sList[0].key);
-          setPortalSubjectKey((prev) => prev || sList[0].key);
-        }
-      }
-
-      if (keysRes.ok) {
-        const rawKeys = await keysRes.json();
-        const normalizedKeys: APIKey[] = (rawKeys || []).map(
-          (k: Record<string, unknown>) => ({
-            id: String(k.id || ""),
-            org_id: String(k.org_id || ""),
-            env_id: String(k.env_id || ""),
-            name: String(k.name || ""),
-            scope: (k.scope || "ingest") as APIKey["scope"],
-            prefix: String(k.key_preview || k.key_prefix || k.prefix || "mb_"),
-            subject_id: String(k.subject_filter || k.subject_id || ""),
-            rate_limit_eps: Number(k.rate_limit_rps ?? k.rate_limit_eps ?? 1000),
-            created_at: String(k.created_at || new Date().toISOString()),
-          })
-        );
-        setApiKeys(normalizedKeys);
-      }
-
-      if (entRes.ok) {
-        const rawEnts = await entRes.json();
-        const eList: Entitlement[] = (rawEnts || []).map(
-          (e: Record<string, unknown>) => ({
-            id: String(e.id || ""),
-            namespace: String(e.namespace || activeNamespace),
-            subject_key: String(e.subject_key || ""),
-            feature_key: String(e.feature_key || ""),
-            type: (e.type || "metered") as Entitlement["type"],
-            meter_slug: String(e.meter_slug || ""),
-            limit: Number(e.limit ?? e.issue_after_reset ?? 0),
-            soft_limit: Boolean(e.soft_limit ?? e.is_soft_limit ?? false),
-            reset_period: String(e.reset_period || "MONTH"),
-          })
-        );
-        setEntitlements(eList);
-        if (eList.length > 0) {
-          setSelectedFeatureKey((prev) =>
-            prev && eList.some((e) => e.feature_key === prev)
-              ? prev
-              : eList[0].feature_key
-          );
-          setNewGrantEntId((prev) => prev || eList[0].id);
-        }
-      }
-
-      if (dlqRes.ok) {
-        const rawDlq = await dlqRes.json();
-        const dList: DLQEvent[] = (rawDlq || []).map(
-          (d: Record<string, unknown>) => {
-            const rawStr =
-              typeof d.raw_payload === "string"
-                ? d.raw_payload
-                : JSON.stringify(d.raw_payload || {}, null, 2);
-            return {
-              id: String(d.id || ""),
-              org_id: String(d.org_id || selectedOrgId || ""),
-              env_id: String(d.env_id || activeEnvId || ""),
-              namespace: String(
-                d.namespace || d.openmeter_namespace || activeNamespace
-              ),
-              raw_payload: rawStr,
-              failure_reason: String(
-                d.failure_reason || d.error_reason || d.error_code || "Validation error"
-              ),
-              error_code: String(d.error_code || "invalid_payload"),
-              status: (d.status || "pending") as DLQEvent["status"],
-              failed_at: String(d.failed_at || new Date().toISOString()),
-            };
+        if (Array.isArray(snap.meters)) {
+          const mList: Meter[] = snap.meters;
+          setMeters(mList);
+          if (mList.length > 0) {
+            const preferredMeter =
+              mList.find((m) => m.slug === "llm_tokens_total") || mList[0];
+            setSelectedMeterSlug((prev) =>
+              prev && mList.some((m) => m.slug === prev) ? prev : preferredMeter.slug
+            );
+            setIngestType((prev) =>
+              prev && mList.some((m) => m.event_type === prev)
+                ? prev
+                : preferredMeter.event_type
+            );
+            setNewEntMeterSlug((prev) =>
+              prev && mList.some((m) => m.slug === prev) ? prev : preferredMeter.slug
+            );
+            setNewPlanCompMeter((prev) =>
+              prev && mList.some((m) => m.slug === prev) ? prev : preferredMeter.slug
+            );
           }
-        );
-        setDlqEvents(dList);
-        setDlqDrafts((prev) => {
-          const next = { ...prev };
-          for (const item of dList) {
-            if (next[item.id] === undefined) {
-              next[item.id] = item.raw_payload;
+        }
+
+        if (Array.isArray(snap.subjects)) {
+          const sList: Subject[] = snap.subjects;
+          setSubjects(sList);
+          if (sList.length > 0) {
+            const preferredSub =
+              sList.find((s) => s.key === "ws_cyclode_default") || sList[0];
+            setSelectedSubjectKey((prev) =>
+              prev && sList.some((s) => s.key === prev) ? prev : preferredSub.key
+            );
+            setIngestSubject((prev) =>
+              prev && sList.some((s) => s.key === prev) ? prev : preferredSub.key
+            );
+            setInvoiceSubjectKey((prev) =>
+              prev && sList.some((s) => s.key === prev) ? prev : preferredSub.key
+            );
+            setNewSubSubjectKey((prev) =>
+              prev && sList.some((s) => s.key === prev) ? prev : preferredSub.key
+            );
+            setPortalSubjectKey((prev) =>
+              prev && sList.some((s) => s.key === prev) ? prev : preferredSub.key
+            );
+          }
+        }
+
+        if (Array.isArray(snap.api_keys)) {
+          const normalizedKeys: APIKey[] = snap.api_keys.map(
+            (k: Record<string, unknown>) => ({
+              id: String(k.id || ""),
+              org_id: String(k.org_id || ""),
+              env_id: String(k.env_id || ""),
+              name: String(k.name || ""),
+              scope: (k.scope || "ingest") as APIKey["scope"],
+              prefix: String(k.prefix || k.key_preview || "mb_"),
+              subject_id: String(k.subject_id || k.subject_filter || ""),
+              rate_limit_eps: Number(k.rate_limit_eps ?? k.rate_limit_rps ?? 1000),
+              created_at: String(k.created_at || new Date().toISOString()),
+            })
+          );
+          setApiKeys(normalizedKeys);
+        }
+
+        if (Array.isArray(snap.entitlements)) {
+          const eList: Entitlement[] = snap.entitlements.map(
+            (e: Record<string, unknown>) => ({
+              id: String(e.id || ""),
+              namespace: String(e.namespace || activeNamespace),
+              subject_key: String(e.subject_key || ""),
+              feature_key: String(e.feature_key || ""),
+              type: (e.type || "metered") as Entitlement["type"],
+              meter_slug: String(e.meter_slug || ""),
+              limit: Number(e.limit ?? e.issue_after_reset ?? 0),
+              soft_limit: Boolean(e.soft_limit ?? e.is_soft_limit ?? false),
+              reset_period: String(e.reset_period || "MONTH"),
+            })
+          );
+          setEntitlements(eList);
+          if (eList.length > 0) {
+            setSelectedFeatureKey((prev) =>
+              prev && eList.some((e) => e.feature_key === prev)
+                ? prev
+                : eList[0].feature_key
+            );
+            setNewGrantEntId((prev) => prev || eList[0].id);
+          }
+        }
+
+        if (Array.isArray(snap.grants)) {
+          const gList: CreditGrant[] = snap.grants.map(
+            (g: Record<string, unknown>) => ({
+              id: String(g.id || ""),
+              entitlement_id: String(g.entitlement_id || ""),
+              subject_key: String(g.subject_key || ""),
+              name: String(g.name || "Prepaid Credit Grant"),
+              amount: Number(g.amount ?? 0),
+              remaining: Number(g.remaining ?? g.remaining_balance ?? g.amount ?? 0),
+              priority: Number(g.priority ?? 1),
+              expires_at: String(g.expires_at || new Date(Date.now() + 30 * 86400 * 1000).toISOString()),
+            })
+          );
+          setGrants(gList);
+        }
+
+        if (Array.isArray(snap.dlq_events)) {
+          const dList: DLQEvent[] = snap.dlq_events.map(
+            (d: Record<string, unknown>) => {
+              const rawStr =
+                typeof d.raw_payload === "string"
+                  ? d.raw_payload
+                  : JSON.stringify(d.raw_payload || {}, null, 2);
+              return {
+                id: String(d.id || ""),
+                org_id: String(d.org_id || selectedOrgId || ""),
+                env_id: String(d.env_id || activeEnvId || ""),
+                namespace: String(d.namespace || d.openmeter_namespace || activeNamespace),
+                raw_payload: rawStr,
+                failure_reason: String(d.failure_reason || d.error_reason || "Validation error"),
+                error_code: String(d.error_code || "invalid_payload"),
+                status: (d.status || "pending") as DLQEvent["status"],
+                failed_at: String(d.failed_at || new Date().toISOString()),
+              };
             }
-          }
-          return next;
-        });
-      }
+          );
+          setDlqEvents(dList);
+          setDlqDrafts((prev) => {
+            const next = { ...prev };
+            for (const item of dList) {
+              if (next[item.id] === undefined) {
+                next[item.id] = item.raw_payload;
+              }
+            }
+            return next;
+          });
+        }
 
-      if (plansRes.ok) {
-        const rawPlans = await plansRes.json();
-        const pList: Plan[] = (rawPlans || []).map(
-          (p: Record<string, unknown>) => ({
+        if (Array.isArray(snap.plans)) {
+          const pList: Plan[] = snap.plans.map((p: Record<string, unknown>) => ({
             id: String(p.id || ""),
             namespace: String(p.namespace || activeNamespace),
             slug: String(p.slug || ""),
@@ -1024,80 +534,73 @@ export default function MeterboxApp() {
             currency: String(p.currency || "USD"),
             base_fee_cents: Number(p.base_fee_cents ?? p.base_price_cents ?? 0),
             billing_cadence: String(p.billing_cadence || "MONTH"),
-            components: Array.isArray(p.components)
-              ? (p.components as Plan["components"])
-              : Array.isArray(p.rate_cards)
-              ? (p.rate_cards as Record<string, unknown>[]).map((rc, idx) => ({
-                  id: `rc_${idx}`,
-                  name: String(rc.name || rc.meter_slug || ""),
-                  meter_slug: String(rc.meter_slug || ""),
-                  model: "graduated" as const,
-                  unit_price_cents: 1,
-                  included_units: Number(rc.included_quantity || 0),
-                }))
-              : [],
-          })
-        );
-        setPlans(pList);
-        if (pList.length > 0) {
-          setInvoicePlanSlug((prev) =>
-            prev && pList.some((p) => p.slug === prev) ? prev : pList[0].slug
-          );
-          setNewSubPlanSlug((prev) => prev || pList[0].slug);
-        }
-      }
-
-      if (subsRes.ok) setSubscriptions(await subsRes.json());
-
-      if (invRes.ok) {
-        const rawInvs = await invRes.json();
-        const invList: Invoice[] = (rawInvs || []).map(
-          (inv: Record<string, unknown>) => {
-            const rawLines = Array.isArray(inv.line_items)
-              ? (inv.line_items as Record<string, unknown>[])
-              : [];
-            return {
-              id: String(inv.id || ""),
-              namespace: String(inv.namespace || activeNamespace),
-              subject_key: String(inv.subject_key || ""),
-              plan_slug: String(inv.plan_slug || ""),
-              currency: String(inv.currency || "USD"),
-              subtotal_cents: Number(inv.subtotal_cents ?? 0),
-              credits_applied_cents: Number(inv.credits_applied_cents ?? 0),
-              total_cents: Number(inv.total_cents ?? 0),
-              status: String(inv.status || "issued"),
-              stripe_invoice_id: String(
-                inv.stripe_invoice_id || "in_stripe_synced"
-              ),
-              line_items: rawLines.map((li) => {
-                const qty = Number(li.quantity ?? 1);
-                const amt = Number(li.amount_cents ?? 0);
-                const unitPrice =
-                  li.unit_price_cents != null
-                    ? Number(li.unit_price_cents)
-                    : qty > 0
-                    ? amt / qty
-                    : amt;
-                return {
-                  description: String(li.description || ""),
-                  meter_slug: li.meter_slug ? String(li.meter_slug) : undefined,
-                  quantity: qty,
-                  unit_price_cents: unitPrice,
-                  amount_cents: amt,
-                };
-              }),
-              period_start: String(inv.period_start || new Date().toISOString()),
-              period_end: String(inv.period_end || new Date().toISOString()),
-              issued_at: String(
-                inv.issued_at || inv.created_at || new Date().toISOString()
-              ),
-            };
+            components: Array.isArray(p.components) ? (p.components as Plan["components"]) : [],
+          }));
+          setPlans(pList);
+          if (pList.length > 0) {
+            setInvoicePlanSlug((prev) =>
+              prev && pList.some((p) => p.slug === prev) ? prev : pList[0].slug
+            );
+            setNewSubPlanSlug((prev) => prev || pList[0].slug);
           }
-        );
-        setInvoices(invList);
-      }
+        }
 
-      setBackendConnected(true);
+        if (Array.isArray(snap.subscriptions)) {
+          setSubscriptions(snap.subscriptions);
+        }
+
+        if (Array.isArray(snap.invoices)) {
+          const invList: Invoice[] = snap.invoices.map(
+            (inv: Record<string, unknown>) => {
+              const rawLines = Array.isArray(inv.line_items)
+                ? (inv.line_items as Record<string, unknown>[])
+                : [];
+              return {
+                id: String(inv.id || ""),
+                namespace: String(inv.namespace || activeNamespace),
+                subject_key: String(inv.subject_key || ""),
+                plan_slug: String(inv.plan_slug || ""),
+                currency: String(inv.currency || "USD"),
+                subtotal_cents: Number(inv.subtotal_cents ?? 0),
+                credits_applied_cents: Number(inv.credits_applied_cents ?? 0),
+                total_cents: Number(inv.total_cents ?? 0),
+                status: String(inv.status || "issued"),
+                stripe_invoice_id: String(inv.stripe_invoice_id || "in_stripe_synced"),
+                line_items: rawLines.map((li) => {
+                  const qty = Number(li.quantity ?? 1);
+                  const amt = Number(li.amount_cents ?? 0);
+                  return {
+                    description: String(li.description || ""),
+                    meter_slug: li.meter_slug ? String(li.meter_slug) : undefined,
+                    quantity: qty,
+                    unit_price_cents:
+                      li.unit_price_cents != null
+                        ? Number(li.unit_price_cents)
+                        : qty > 0
+                        ? amt / qty
+                        : amt,
+                    amount_cents: amt,
+                  };
+                }),
+                period_start: String(inv.period_start || new Date().toISOString()),
+                period_end: String(inv.period_end || new Date().toISOString()),
+                issued_at: String(inv.issued_at || inv.created_at || new Date().toISOString()),
+              };
+            }
+          );
+          setInvoices(invList);
+        }
+
+        if (snap.cost_intelligence) {
+          setCostIntel(snap.cost_intelligence as CostIntelligenceReport);
+        }
+        if (snap.product_analytics) {
+          setProductAnalytics(snap.product_analytics as ProductAnalyticsReport);
+        }
+
+        setBackendConnected(true);
+        return;
+      }
     } catch {
       setBackendConnected(false);
     }
@@ -1109,12 +612,14 @@ export default function MeterboxApp() {
     return () => clearInterval(interval);
   }, [fetchEnvData]);
 
-  // Query selected meter series
+  // Query selected meter series (with dynamic window granularity)
   const fetchMeterQuery = useCallback(async () => {
     if (!activeNamespace || !selectedMeterSlug) return;
     try {
       const res = await fetch(
-        `${API_BASE}/api/v1/meters/${encodeURIComponent(selectedMeterSlug)}/query`,
+        `${API_BASE}/api/v1/meters/${encodeURIComponent(
+          selectedMeterSlug
+        )}/query?window=${encodeURIComponent(selectedWindowGranularity)}`,
         { headers: { "X-OpenMeter-Namespace": activeNamespace } }
       );
       if (res.ok) {
@@ -1141,7 +646,7 @@ export default function MeterboxApp() {
     } catch {
       // ignore transient error
     }
-  }, [activeNamespace, selectedMeterSlug]);
+  }, [activeNamespace, selectedMeterSlug, selectedWindowGranularity]);
 
   useEffect(() => {
     fetchMeterQuery();
@@ -1768,6 +1273,17 @@ export default function MeterboxApp() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 7v10M9.5 9.5c0-1.1 1.1-2 2.5-2s2.5.9 2.5 2-1.1 1.8-2.5 2-2.5.9-2.5 2 1.1 2 2.5 2 2.5-.9 2.5-2" strokeLinecap="round" />
+        </svg>
+      ),
+    },
+    {
+      id: "users-analytics",
+      label: "Users & PostHog",
+      badge: `${subjects.length} usr`,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
         </svg>
       ),
     },
@@ -2777,788 +2293,49 @@ export default function MeterboxApp() {
             )}
 
             {/* ===============================================================
-                2b. AI COST INTELLIGENCE & TOKEN ECONOMICS STUDIO
+                2b. AI COST INTELLIGENCE & TOKEN ECONOMICS STUDIO (Modular)
                 =============================================================== */}
             {activeView === "cost-intel" && (
-              <>
-                {(() => {
-                  const rawEvents = telemetry?.recent_events ?? [];
-                  const totalMeterTokens = Math.max(
-                    meterQueryResult?.total_value ?? 0,
-                    rawEvents.reduce((acc, ev) => acc + Number(ev.data?.tokens ?? 0), 0),
-                    74420
-                  );
-                  const promptTok = Math.round(totalMeterTokens * 0.38);
-                  const cachedTok = Math.round(totalMeterTokens * 0.34);
-                  const reasonTok = Math.round(totalMeterTokens * 0.11);
-                  const compTok = Math.max(0, totalMeterTokens - promptTok - cachedTok - reasonTok);
+              <CostIntelligenceView
+                apiBase={API_BASE}
+                activeNamespace={activeNamespace}
+                costIntel={costIntel}
+                telemetry={telemetry}
+                meterQueryResult={meterQueryResult}
+                entitlementCheck={entitlementCheck}
+                subjects={subjects}
+                selectedSubjectKey={selectedSubjectKey}
+                setActiveView={setActiveView}
+                onRefresh={async () => {
+                  await fetchEnvData();
+                  await fetchMeterQuery();
+                  await fetchEntitlementEvaluation();
+                }}
+                pushToast={pushToast}
+              />
+            )}
 
-                  const inCost = (promptTok / 1_000_000) * 3.0;
-                  const cacheCost = (cachedTok / 1_000_000) * 0.3;
-                  const reasonCost = (reasonTok / 1_000_000) * 15.0;
-                  const outCost = (compTok / 1_000_000) * 15.0;
-                  const totalCost = inCost + cacheCost + reasonCost + outCost;
-                  const baselineCost =
-                    ((promptTok + cachedTok) / 1_000_000) * 3.0 +
-                    ((reasonTok + compTok) / 1_000_000) * 15.0;
-                  const savedCost = Math.max(0, baselineCost - totalCost);
-                  const savingsPct =
-                    baselineCost > 0 ? ((savedCost / baselineCost) * 100).toFixed(1) : "31.4";
-
-                  const totalToolCalls = Math.max(15, rawEvents.length * 3);
-                  const avgCostPerStep = totalCost / Math.max(1, totalToolCalls);
-                  const cacheHitPct = (
-                    (cachedTok / Math.max(1, promptTok + cachedTok)) *
-                    100
-                  ).toFixed(1);
-
-                  const cachedPctBar = Math.round((cachedTok / totalMeterTokens) * 100);
-                  const promptPctBar = Math.round((promptTok / totalMeterTokens) * 100);
-                  const reasonPctBar = Math.round((reasonTok / totalMeterTokens) * 100);
-                  const outPctBar = Math.max(
-                    4,
-                    100 - cachedPctBar - promptPctBar - reasonPctBar
-                  );
-
-                  const activeSubj =
-                    selectedSubjectKey || subjects[0]?.key || "ws_cyclode_default";
-
-                  const handleSimulateAgentStep = async (replaySameId = false) => {
-                    const stepId = replaySameId
-                      ? `cyclode:${activeNamespace}:step_checkpoint_demo`
-                      : `cyclode:task_${Date.now().toString(36)}:step_${rawEvents.length + 1}`;
-                    const batch = [
-                      {
-                        specversion: "1.0",
-                        id: stepId,
-                        source: "urn:appembly:cyclode:executor",
-                        type: "ai.llm.tokens",
-                        subject: activeSubj,
-                        time: new Date().toISOString(),
-                        data: {
-                          tokens: 4200,
-                          model: "claude-3-7-sonnet",
-                          token_type: "input",
-                          persona: "IssueResolver",
-                          tool: "run_command",
-                        },
-                      },
-                    ];
-                    const res = await fetch(`${API_BASE}/api/v1/events`, {
-                      method: "POST",
-                      headers: {
-                        "Content-Type": "application/json",
-                        "X-OpenMeter-Namespace": activeNamespace,
-                      },
-                      body: JSON.stringify(batch),
-                    });
-                    if (res.ok) {
-                      const d = await res.json();
-                      await fetchEnvData();
-                      await fetchMeterQuery();
-                      await fetchEntitlementEvaluation();
-                      if (d.deduplicated > 0) {
-                        pushToast(
-                          `SETNX Idempotency Guard Triggered`,
-                          `Duplicate checkpoint "${stepId}" dropped (0 double-billing)`,
-                          "warn"
-                        );
-                      } else {
-                        pushToast(
-                          `+4,200 Agent Step Tokens Metered`,
-                          `Subject: ${activeSubj} · Event: ${stepId}`,
-                          "ok"
-                        );
-                      }
-                    }
-                  };
-
-                  const toolRows = [
-                    {
-                      name: "run_command",
-                      persona: "IssueResolver",
-                      calls: Math.max(6, Math.round(totalToolCalls * 0.4)),
-                      tokens: Math.round(totalMeterTokens * 0.42),
-                      avgMs: 356,
-                      passRate: "100%",
-                    },
-                    {
-                      name: "replace_file_content",
-                      persona: "IssueResolver",
-                      calls: Math.max(4, Math.round(totalToolCalls * 0.27)),
-                      tokens: Math.round(totalMeterTokens * 0.31),
-                      avgMs: 370,
-                      passRate: "100%",
-                    },
-                    {
-                      name: "view_file",
-                      persona: "ArchitectPod",
-                      calls: Math.max(5, Math.round(totalToolCalls * 0.33)),
-                      tokens: Math.round(totalMeterTokens * 0.27),
-                      avgMs: 240,
-                      passRate: "100%",
-                    },
-                  ];
-
-                  const modelRows = [
-                    {
-                      model: "claude-3-7-sonnet",
-                      tier: "Major",
-                      provider: "Anthropic",
-                      inputRate: "$3.00",
-                      cacheRate: "$0.30",
-                      outputRate: "$15.00",
-                      tokens: Math.round(totalMeterTokens * 0.56),
-                      cacheHit: "51.4%",
-                      cost: totalCost * 0.68,
-                    },
-                    {
-                      model: "gemini-3.8-flash",
-                      tier: "Minor",
-                      provider: "Google",
-                      inputRate: "$0.30",
-                      cacheRate: "$0.075",
-                      outputRate: "$1.20",
-                      tokens: Math.round(totalMeterTokens * 0.31),
-                      cacheHit: "44.0%",
-                      cost: totalCost * 0.19,
-                    },
-                    {
-                      model: "deepseek-v4-pro",
-                      tier: "Frontier",
-                      provider: "DeepSeek",
-                      inputRate: "$0.55",
-                      cacheRate: "$0.14",
-                      outputRate: "$2.19",
-                      tokens: Math.round(totalMeterTokens * 0.13),
-                      cacheHit: "39.8%",
-                      cost: totalCost * 0.13,
-                    },
-                  ];
-
-                  return (
-                    <>
-                      <div className="ws-head">
-                        <div>
-                          <div className="eyebrow">
-                            <span className="eb-dot" />
-                            <span>Appembly Shared FinOps Telemetry</span>
-                            <span className="sep" />
-                            <span className="mono">{activeNamespace}</span>
-                          </div>
-                          <h1>AI Cost Intelligence &amp; Token Economics</h1>
-                          <p className="lede">
-                            Real-time token anatomy, prefix cache savings, tool invocation burn, and
-                            crash-safe step checkpoint deduplication across{" "}
-                            <code>Cyclode (:6013)</code>, <code>Swarmteam (:6040)</code>, and{" "}
-                            <code>Valiscale (:6030)</code>.
-                          </p>
-                        </div>
-                        <div className="ws-actions">
-                          <button
-                            type="button"
-                            className="btn"
-                            onClick={() => handleSimulateAgentStep(true)}
-                            title="Send the exact same checkpoint ID twice to verify Redis SETNX deduplication"
-                          >
-                            Test Checkpoint Dedup (SETNX)
-                          </button>
-                          <button
-                            type="button"
-                            className="btn primary"
-                            onClick={() => handleSimulateAgentStep(false)}
-                          >
-                            + Simulate Live Agent Step (+4.2k tok)
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* 4 Top KPI Summary Cards with Inline SVG Sparklines */}
-                      <div className="cards">
-                        <div className="card">
-                          <div className="card-head">
-                            <div className="eyebrow">Attributed Token Spend</div>
-                            <span className="chip ok mono">{activeNamespace}</span>
-                          </div>
-                          <div className="card-stat-row">
-                            <div className="stat">${totalCost.toFixed(4)}</div>
-                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
-                              <path
-                                d="M2 24L16 20L30 18L44 13L58 10L76 5"
-                                stroke="var(--primary)"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                          <p>
-                            {totalMeterTokens.toLocaleString()} total tokens across{" "}
-                            {subjects.length || 3} active subjects
-                          </p>
-                          <div className="meta">
-                            <span className="mono">
-                              In: ${(inCost + cacheCost).toFixed(4)}
-                            </span>
-                            <span className="mono">
-                              Out: ${(reasonCost + outCost).toFixed(4)}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="card">
-                          <div className="card-head">
-                            <div className="eyebrow">Avg Cost / Tool Step</div>
-                            <span className="chip mono">{totalToolCalls} steps</span>
-                          </div>
-                          <div className="card-stat-row">
-                            <div className="stat">${avgCostPerStep.toFixed(4)}</div>
-                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
-                              <path
-                                d="M2 18L18 16L32 19L48 14L62 15L76 11"
-                                stroke="var(--ok)"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                          <p>Checkpointed tool &amp; reasoning turns</p>
-                          <div className="meta">
-                            <span>Pass rate: 98.4%</span>
-                            <span className="mono">
-                              {Math.round(totalMeterTokens / totalToolCalls).toLocaleString()} tok/step
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="card">
-                          <div className="card-head">
-                            <div className="eyebrow">Prefix Cache &amp; Routing Savings</div>
-                            <span className="chip ok mono">-{savingsPct}%</span>
-                          </div>
-                          <div className="card-stat-row">
-                            <div className="stat" style={{ color: "var(--ok)" }}>
-                              ${savedCost.toFixed(4)}
-                            </div>
-                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
-                              <path
-                                d="M2 22L18 19L34 15L50 11L64 8L76 4"
-                                stroke="var(--ok)"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                          <p>Saved vs. uncached frontier baseline (${baselineCost.toFixed(4)})</p>
-                          <div className="meta">
-                            <span className="mono">Cache Hit: {cacheHitPct}%</span>
-                            <span className="mono">{cachedTok.toLocaleString()} cached tok</span>
-                          </div>
-                        </div>
-
-                        <div
-                          className="card clickable"
-                          onClick={() => setActiveView("entitlements")}
-                        >
-                          <div className="card-head">
-                            <div className="eyebrow">Remaining Token Quota</div>
-                            <span className="chip ok mono">
-                              {entitlementCheck?.cache_source || "HIT"} ·{" "}
-                              {entitlementCheck?.latency_us ?? telemetry?.avg_check_latency_us ?? 180} µs
-                            </span>
-                          </div>
-                          <div className="card-stat-row">
-                            <div className="stat">
-                              {(
-                                (entitlementCheck?.remaining ?? 5466780) / 1_000_000
-                              ).toFixed(2)}
-                              M
-                            </div>
-                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
-                              <path
-                                d="M2 8L18 9L34 11L50 12L64 14L76 16"
-                                stroke="var(--primary)"
-                                strokeWidth="2.2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </svg>
-                          </div>
-                          <p>Priority credit grant waterfall active</p>
-                          <div className="meta">
-                            <span className="mono">Subject: {activeSubj}</span>
-                            <span>{ telemetry?.deduplicated_hits ?? 0 } dedup hits</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Token Consumption Anatomy Stacked Bar + Breakdown Panel */}
-                      <div className="panel" style={{ marginBottom: 20 }}>
-                        <h3>
-                          <span className="title-left">
-                            <svg
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                            >
-                              <rect x="3" y="4" width="18" height="16" rx="2" />
-                              <line x1="3" y1="10" x2="21" y2="10" />
-                            </svg>
-                            Token Consumption Anatomy &amp; Multi-Tier Model Economics
-                          </span>
-                          <span className="chip mono">
-                            412 LOC Modified · {(totalMeterTokens / 412).toFixed(1)} tok/LOC
-                          </span>
-                        </h3>
-
-                        {/* 4-Segment Stacked Bar */}
-                        <div
-                          style={{
-                            display: "flex",
-                            height: 12,
-                            width: "100%",
-                            borderRadius: 99,
-                            overflow: "hidden",
-                            background: "var(--surface-subtle)",
-                            border: "1px solid var(--border)",
-                            marginBottom: 14,
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: `${cachedPctBar}%`,
-                              background: "var(--ok)",
-                            }}
-                            title={`Cached Context: ${cachedTok.toLocaleString()} tok`}
-                          />
-                          <div
-                            style={{
-                              width: `${promptPctBar}%`,
-                              background: "var(--info)",
-                            }}
-                            title={`Prompt Input: ${promptTok.toLocaleString()} tok`}
-                          />
-                          <div
-                            style={{
-                              width: `${reasonPctBar}%`,
-                              background: "#8B5CF6",
-                            }}
-                            title={`Reasoning: ${reasonTok.toLocaleString()} tok`}
-                          />
-                          <div
-                            style={{
-                              width: `${outPctBar}%`,
-                              background: "var(--warn)",
-                            }}
-                            title={`Completion Output: ${compTok.toLocaleString()} tok`}
-                          />
-                        </div>
-
-                        {/* 4 Segment Legend Pills */}
-                        <div
-                          style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                            gap: 12,
-                            marginBottom: 18,
-                          }}
-                        >
-                          <div
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: "var(--surface-subtle)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                fontSize: 11.5,
-                                color: "var(--muted-foreground)",
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 2,
-                                    background: "var(--ok)",
-                                  }}
-                                />
-                                Cached Context ({cachedPctBar}%)
-                              </span>
-                              <span className="mono">$0.30/1M</span>
-                            </div>
-                            <div
-                              className="mono"
-                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
-                            >
-                              {cachedTok.toLocaleString()} tok{" "}
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  color: "var(--muted-foreground)",
-                                }}
-                              >
-                                (${cacheCost.toFixed(4)})
-                              </span>
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: "var(--surface-subtle)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                fontSize: 11.5,
-                                color: "var(--muted-foreground)",
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 2,
-                                    background: "var(--info)",
-                                  }}
-                                />
-                                Prompt Input ({promptPctBar}%)
-                              </span>
-                              <span className="mono">$3.00/1M</span>
-                            </div>
-                            <div
-                              className="mono"
-                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
-                            >
-                              {promptTok.toLocaleString()} tok{" "}
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  color: "var(--muted-foreground)",
-                                }}
-                              >
-                                (${inCost.toFixed(4)})
-                              </span>
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: "var(--surface-subtle)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                fontSize: 11.5,
-                                color: "var(--muted-foreground)",
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 2,
-                                    background: "#8B5CF6",
-                                  }}
-                                />
-                                Reasoning ({reasonPctBar}%)
-                              </span>
-                              <span className="mono">$15.00/1M</span>
-                            </div>
-                            <div
-                              className="mono"
-                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
-                            >
-                              {reasonTok.toLocaleString()} tok{" "}
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  color: "var(--muted-foreground)",
-                                }}
-                              >
-                                (${reasonCost.toFixed(4)})
-                              </span>
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: 10,
-                              background: "var(--surface-subtle)",
-                              border: "1px solid var(--border)",
-                            }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "space-between",
-                                fontSize: 11.5,
-                                color: "var(--muted-foreground)",
-                              }}
-                            >
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                                <span
-                                  style={{
-                                    width: 8,
-                                    height: 8,
-                                    borderRadius: 2,
-                                    background: "var(--warn)",
-                                  }}
-                                />
-                                Output ({outPctBar}%)
-                              </span>
-                              <span className="mono">$15.00/1M</span>
-                            </div>
-                            <div
-                              className="mono"
-                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
-                            >
-                              {compTok.toLocaleString()} tok{" "}
-                              <span
-                                style={{
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  color: "var(--muted-foreground)",
-                                }}
-                              >
-                                (${outCost.toFixed(4)})
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Model Rate-Card & Routing Attribution Table */}
-                        <div className="table-wrap">
-                          <table className="cmp">
-                            <thead>
-                              <tr>
-                                <th>Model Identifier</th>
-                                <th>Routing Tier</th>
-                                <th>Input / Cached / Output (per 1M)</th>
-                                <th>Prefix Cache Hit</th>
-                                <th className="num">Metered Tokens</th>
-                                <th className="num">Attributed Cost</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {modelRows.map((m) => (
-                                <tr key={m.model}>
-                                  <td className="mono" style={{ fontWeight: 700 }}>
-                                    {m.model}
-                                  </td>
-                                  <td>
-                                    <span className="chip mono">{m.tier}</span>
-                                  </td>
-                                  <td className="mono" style={{ fontSize: 12 }}>
-                                    {m.inputRate} / {m.cacheRate} / {m.outputRate}
-                                  </td>
-                                  <td>
-                                    <span className="chip ok mono">{m.cacheHit}</span>
-                                  </td>
-                                  <td className="num mono">{m.tokens.toLocaleString()}</td>
-                                  <td className="num mono" style={{ fontWeight: 700 }}>
-                                    ${m.cost.toFixed(4)}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Two-Column Tool Token Breakdown & Subject/Checkpoint Attribution */}
-                      <div className="grid2">
-                        <div className="panel">
-                          <h3>
-                            <span className="title-left">
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                              </svg>
-                              Tool-Level Token Burn &amp; Latency
-                            </span>
-                            <span className="chip mono">{totalToolCalls} invocations</span>
-                          </h3>
-                          <div className="table-wrap">
-                            <table className="cmp">
-                              <thead>
-                                <tr>
-                                  <th>Tool Name</th>
-                                  <th>Calls</th>
-                                  <th>Avg Latency</th>
-                                  <th>Token Share</th>
-                                  <th className="num">Tokens (USD)</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {toolRows.map((tr) => {
-                                  const sharePct = Math.round(
-                                    (tr.tokens / Math.max(1, totalMeterTokens)) * 100
-                                  );
-                                  const toolUsd =
-                                    (tr.tokens / Math.max(1, totalMeterTokens)) * totalCost;
-                                  return (
-                                    <tr key={tr.name}>
-                                      <td>
-                                        <code>{tr.name}</code>
-                                      </td>
-                                      <td className="mono">{tr.calls}×</td>
-                                      <td className="mono" style={{ fontSize: 12 }}>
-                                        {tr.avgMs} ms
-                                      </td>
-                                      <td style={{ width: 130 }}>
-                                        <div className="bar" style={{ margin: 0 }}>
-                                          <i style={{ width: `${sharePct}%` }} />
-                                        </div>
-                                      </td>
-                                      <td className="num mono" style={{ fontWeight: 600 }}>
-                                        {tr.tokens.toLocaleString()}{" "}
-                                        <span
-                                          style={{
-                                            color: "var(--muted-foreground)",
-                                            fontWeight: 400,
-                                          }}
-                                        >
-                                          (${toolUsd.toFixed(4)})
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-
-                        <div className="panel">
-                          <h3>
-                            <span className="title-left">
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                              >
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                              </svg>
-                              Workspace Attribution &amp; Checkpoint Dedup
-                            </span>
-                            <span className="chip ok mono">SETNX Active</span>
-                          </h3>
-                          <div className="table-wrap">
-                            <table className="cmp">
-                              <thead>
-                                <tr>
-                                  <th>Subject / Product</th>
-                                  <th>Checkpoint Guard</th>
-                                  <th className="num">Share</th>
-                                  <th className="num">Attributed Spend</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(subjects.length > 0
-                                  ? subjects
-                                  : [
-                                      {
-                                        id: "s1",
-                                        namespace: activeNamespace,
-                                        key: "ws_cyclode_default",
-                                        display_name: "Cyclode Workstation (:6013)",
-                                        created_at: "",
-                                      },
-                                      {
-                                        id: "s2",
-                                        namespace: activeNamespace,
-                                        key: "ws_swarmteam_pods",
-                                        display_name: "Swarmteam DAG (:6040)",
-                                        created_at: "",
-                                      },
-                                      {
-                                        id: "s3",
-                                        namespace: activeNamespace,
-                                        key: "ws_valiscale_studio",
-                                        display_name: "Valiscale Studio (:6030)",
-                                        created_at: "",
-                                      },
-                                    ]
-                                ).map((s, idx) => {
-                                  const weights = [0.54, 0.31, 0.15];
-                                  const w = weights[idx % weights.length];
-                                  const subTok = Math.round(totalMeterTokens * w);
-                                  const subCost = totalCost * w;
-                                  return (
-                                    <tr
-                                      key={s.key}
-                                      onClick={() => setSelectedSubjectKey(s.key)}
-                                      className={
-                                        selectedSubjectKey === s.key ? "selected-row" : ""
-                                      }
-                                      style={{ cursor: "pointer" }}
-                                    >
-                                      <td>
-                                        <div style={{ fontWeight: 700 }} className="mono">
-                                          {s.key}
-                                        </div>
-                                        <div
-                                          style={{
-                                            fontSize: 11.5,
-                                            color: "var(--muted-foreground)",
-                                          }}
-                                        >
-                                          {s.display_name}
-                                        </div>
-                                      </td>
-                                      <td>
-                                        <span className="chip ok mono">step_id dedup</span>
-                                      </td>
-                                      <td className="num mono">{subTok.toLocaleString()} tok</td>
-                                      <td className="num mono" style={{ fontWeight: 700 }}>
-                                        ${subCost.toFixed(4)}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-              </>
+            {/* ===============================================================
+                2c. USERS, GEOIP LOCATIONS & POSTHOG PRODUCT ANALYTICS STUDIO
+                =============================================================== */}
+            {activeView === "users-analytics" && (
+              <UsersAnalyticsView
+                apiBase={API_BASE}
+                activeNamespace={activeNamespace}
+                subjects={subjects}
+                analytics={productAnalytics}
+                recentEvents={telemetry?.recent_events ?? []}
+                selectedSubjectKey={selectedSubjectKey}
+                setSelectedSubjectKey={setSelectedSubjectKey}
+                setActiveDrawer={setActiveDrawer}
+                onRefresh={async () => {
+                  await fetchEnvData();
+                  await fetchMeterQuery();
+                  await fetchEntitlementEvaluation();
+                }}
+                pushToast={pushToast}
+                copyToClipboard={copyToClipboard}
+              />
             )}
 
             {/* ===============================================================

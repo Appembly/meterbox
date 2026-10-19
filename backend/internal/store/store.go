@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
+	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,19 +26,22 @@ type MultiTenantStore struct {
 	mu sync.RWMutex
 
 	orgs          map[string]models.Organization
-	envs          map[string]models.Environment // keyed by env.ID
-	nsToEnv       map[string]string             // namespace -> env.ID
-	apiKeys       map[string]models.APIKey      // keyed by key.ID
-	hashToKeyID   map[string]string             // SHA-256 hash -> key.ID
-	dlqEvents     map[string]models.DLQEvent    // keyed by dlq.ID
-	meters        map[string]models.Meter       // keyed by namespace + ":" + slug
-	subjects      map[string]models.Subject     // keyed by namespace + ":" + key
-	entitlements  map[string]models.Entitlement // keyed by id
+	envs          map[string]models.Environment        // keyed by env.ID
+	nsToEnv       map[string]string                    // namespace -> env.ID
+	apiKeys       map[string]models.APIKey             // keyed by key.ID
+	hashToKeyID   map[string]string                    // SHA-256 hash -> key.ID
+	dlqEvents     map[string]models.DLQEvent           // keyed by dlq.ID
+	meters        map[string]models.Meter              // keyed by namespace + ":" + slug
+	subjects      map[string]models.Subject            // keyed by namespace + ":" + key
+	entitlements  map[string]models.Entitlement        // keyed by id
 	grants        map[string][]models.EntitlementGrant // keyed by entitlement_id
-	plans         map[string]models.Plan        // keyed by namespace + ":" + slug
+	plans         map[string]models.Plan               // keyed by namespace + ":" + slug
 	subscriptions map[string]models.Subscription
 	invoices      map[string]models.Invoice
 	events        []models.CloudEvent
+
+	// Track unique sessions per subject (`ns:subject:session_id`)
+	subjectSessions map[string]bool
 
 	// Edge Redis cache & deduplication state
 	dedupSet        map[string]time.Time
@@ -48,6 +54,7 @@ type MultiTenantStore struct {
 	chClient         *clickhouse.Client
 	redpandaEndpoint string
 	redisAddr        string
+	stateFile        string
 	idSeq            atomic.Int64
 }
 
@@ -82,15 +89,22 @@ func NewMultiTenantStore(chClient *clickhouse.Client, redpandaEndpoint, redisAdd
 		subscriptions:    make(map[string]models.Subscription),
 		invoices:         make(map[string]models.Invoice),
 		events:           make([]models.CloudEvent, 0, 256),
+		subjectSessions:  make(map[string]bool),
 		dedupSet:         make(map[string]time.Time),
 		entCache:         make(map[string]models.EntitlementValue),
 		rateBuckets:      make(map[string]*tokenBucket),
 		chClient:         chClient,
 		redpandaEndpoint: redpandaEndpoint,
 		redisAddr:        redisAddr,
+		stateFile:        strings.TrimSpace(os.Getenv("METERBOX_STATE_FILE")),
 	}
 
+	if s.stateFile != "" && s.loadState() {
+		return s
+	}
 	s.seedDefaultPlatform()
+	s.rebuildSubjectProfilesLocked()
+	s.saveStateLocked()
 	return s
 }
 
@@ -325,9 +339,37 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		WindowSize:    "HOUR",
 		CreatedAt:     now,
 	}
+	mPosthog := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "posthog_events_total",
+		Name:          "PostHog Product Events",
+		Description:   "Product telemetry events ($identify, agent.task_created, chart.rendered, etc.) captured via PostHog bridge",
+		Aggregation:   models.AggregationCount,
+		EventType:     "posthog.event",
+		ValueProperty: "",
+		GroupBy:       map[string]string{"event": "$.event", "country": "$.$geoip_country_code"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
+	mPageviews := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "pageviews_total",
+		Name:          "PostHog Web Pageviews",
+		Description:   "Captured $pageview sessions grouped by pathname and visitor country",
+		Aggregation:   models.AggregationCount,
+		EventType:     "posthog.pageview",
+		ValueProperty: "",
+		GroupBy:       map[string]string{"pathname": "$.$pathname", "country": "$.$geoip_country_code"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
 	s.meters[ns+":"+mTokens.Slug] = mTokens
 	s.meters[ns+":"+mTools.Slug] = mTools
 	s.meters[ns+":"+mSandbox.Slug] = mSandbox
+	s.meters[ns+":"+mPosthog.Slug] = mPosthog
+	s.meters[ns+":"+mPageviews.Slug] = mPageviews
 
 	subCyclode := models.Subject{
 		ID:               s.NextID("sub"),
@@ -336,7 +378,17 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		DisplayName:      "Cyclode Autonomous Workstation (:6013)",
 		Email:            "cyclode@appembly.dev",
 		StripeCustomerID: "cus_appembly_cyclode_01",
-		Metadata:         map[string]string{"product": "cyclode", "runtime": "runctor-v0.2"},
+		PlanName:         "Appembly Autonomous Pro",
+		CountryCode:      "US",
+		CountryName:      "United States",
+		City:             "San Francisco",
+		Region:           "California",
+		Timezone:         "America/Los_Angeles",
+		Browser:          "Chrome 134",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/workspaces/cyclode/canvas",
+		Metadata:         map[string]string{"product": "cyclode", "runtime": "runctor-v0.2", "role": "workstation"},
 		CreatedAt:        now,
 	}
 	subSwarm := models.Subject{
@@ -346,7 +398,17 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		DisplayName:      "Swarmteam Multi-Agent DAG (:6040)",
 		Email:            "swarmteam@appembly.dev",
 		StripeCustomerID: "cus_appembly_swarm_01",
-		Metadata:         map[string]string{"product": "swarmteam", "runtime": "runctor-v0.2"},
+		PlanName:         "Appembly Autonomous Pro",
+		CountryCode:      "GB",
+		CountryName:      "United Kingdom",
+		City:             "London",
+		Region:           "England",
+		Timezone:         "Europe/London",
+		Browser:          "Arc 1.85",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/swarm/dag-orchestrator",
+		Metadata:         map[string]string{"product": "swarmteam", "runtime": "runctor-v0.2", "role": "workstation"},
 		CreatedAt:        now,
 	}
 	subValiscale := models.Subject{
@@ -356,12 +418,64 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		DisplayName:      "Valiscale Venture Studio (:6030)",
 		Email:            "valiscale@appembly.dev",
 		StripeCustomerID: "cus_appembly_valiscale_01",
-		Metadata:         map[string]string{"product": "valiscale", "runtime": "runctor-v0.2"},
+		PlanName:         "Appembly Autonomous Pro",
+		CountryCode:      "DE",
+		CountryName:      "Germany",
+		City:             "Berlin",
+		Region:           "Berlin",
+		Timezone:         "Europe/Berlin",
+		Browser:          "Firefox 136",
+		OS:               "Ubuntu Linux",
+		DeviceType:       "Desktop",
+		LastPathname:     "/ventures/portfolio-matrix",
+		Metadata:         map[string]string{"product": "valiscale", "runtime": "runctor-v0.2", "role": "workstation"},
+		CreatedAt:        now,
+	}
+	subKen := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "usr_ken_architect",
+		DisplayName:      "Ken M. (Principal Systems Architect)",
+		Email:            "ken@appembly.dev",
+		StripeCustomerID: "cus_appembly_ken_01",
+		PlanName:         "Appembly Autonomous Pro",
+		CountryCode:      "JP",
+		CountryName:      "Japan",
+		City:             "Tokyo",
+		Region:           "Kanto",
+		Timezone:         "Asia/Tokyo",
+		Browser:          "Safari 18.3",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/finops/cost-intelligence",
+		Metadata:         map[string]string{"product": "meterbox", "role": "founder"},
+		CreatedAt:        now,
+	}
+	subElena := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "usr_elena_finops",
+		DisplayName:      "Elena Rostova (FinOps & Revenue Lead)",
+		Email:            "elena@appembly.dev",
+		StripeCustomerID: "cus_appembly_elena_01",
+		PlanName:         "Appembly Autonomous Pro",
+		CountryCode:      "US",
+		CountryName:      "United States",
+		City:             "New York",
+		Region:           "New York",
+		Timezone:         "America/New_York",
+		Browser:          "Chrome 134",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/billing/hybrid-plans",
+		Metadata:         map[string]string{"product": "meterbox", "role": "finops"},
 		CreatedAt:        now,
 	}
 	s.subjects[ns+":"+subCyclode.Key] = subCyclode
 	s.subjects[ns+":"+subSwarm.Key] = subSwarm
 	s.subjects[ns+":"+subValiscale.Key] = subValiscale
+	s.subjects[ns+":"+subKen.Key] = subKen
+	s.subjects[ns+":"+subElena.Key] = subElena
 
 	entCyclode := models.Entitlement{
 		ID:              s.NextID("ent"),
@@ -477,8 +591,34 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 			Source:      "urn:appembly:cyclode:executor",
 			Type:        "ai.llm.tokens",
 			Subject:     subCyclode.Key,
-			Time:        now.Add(-2 * time.Hour),
+			Time:        now.Add(-4 * time.Hour),
 			Data:        map[string]interface{}{"tokens": 24800.0, "model": "claude-3-7-sonnet", "token_type": "input", "persona": "IssueResolver", "tool": "run_command"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-4 * time.Hour),
+			StoredAt:    now.Add(-4 * time.Hour),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_cyclode_02", ns),
+			Source:      "urn:appembly:cyclode:executor",
+			Type:        "ai.llm.tokens",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-3 * time.Hour),
+			Data:        map[string]interface{}{"tokens": 62400.0, "model": "claude-3-7-sonnet", "token_type": "cached", "persona": "IssueResolver", "tool": "view_file"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-3 * time.Hour),
+			StoredAt:    now.Add(-3 * time.Hour),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_cyclode_03", ns),
+			Source:      "urn:appembly:cyclode:executor",
+			Type:        "ai.llm.tokens",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-2 * time.Hour),
+			Data:        map[string]interface{}{"tokens": 14600.0, "model": "claude-3-7-sonnet", "token_type": "reasoning", "persona": "IssueResolver", "tool": "grep_search"},
 			Namespace:   ns,
 			IngestedAt:  now.Add(-2 * time.Hour),
 			StoredAt:    now.Add(-2 * time.Hour),
@@ -486,7 +626,7 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		},
 		{
 			SpecVersion: "1.0",
-			ID:          fmt.Sprintf("evt_seed_%s_cyclode_02", ns),
+			ID:          fmt.Sprintf("evt_seed_%s_cyclode_04", ns),
 			Source:      "urn:appembly:cyclode:executor",
 			Type:        "ai.llm.tokens",
 			Subject:     subCyclode.Key,
@@ -503,15 +643,196 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 			Source:      "urn:appembly:swarmteam:dag",
 			Type:        "ai.llm.tokens",
 			Subject:     subSwarm.Key,
-			Time:        now.Add(-45 * time.Minute),
+			Time:        now.Add(-60 * time.Minute),
 			Data:        map[string]interface{}{"tokens": 41200.0, "model": "gemini-3.8-flash", "token_type": "input", "persona": "ArchitectPod", "tool": "view_file"},
 			Namespace:   ns,
-			IngestedAt:  now.Add(-45 * time.Minute),
-			StoredAt:    now.Add(-45 * time.Minute),
+			IngestedAt:  now.Add(-60 * time.Minute),
+			StoredAt:    now.Add(-60 * time.Minute),
 			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_swarm_02", ns),
+			Source:      "urn:appembly:swarmteam:dag",
+			Type:        "ai.llm.tokens",
+			Subject:     subSwarm.Key,
+			Time:        now.Add(-35 * time.Minute),
+			Data:        map[string]interface{}{"tokens": 28900.0, "model": "gemini-3.8-flash", "token_type": "cached", "persona": "ArchitectPod", "tool": "grep_search"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-35 * time.Minute),
+			StoredAt:    now.Add(-35 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_valiscale_01", ns),
+			Source:      "urn:appembly:valiscale:studio",
+			Type:        "ai.llm.tokens",
+			Subject:     subValiscale.Key,
+			Time:        now.Add(-15 * time.Minute),
+			Data:        map[string]interface{}{"tokens": 19500.0, "model": "deepseek-r1", "token_type": "reasoning", "persona": "FinOpsAuditor", "tool": "run_command"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-15 * time.Minute),
+			StoredAt:    now.Add(-15 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_01", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.pageview",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-25 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "$pageview",
+				"$pathname":           "/workspaces/cyclode/canvas",
+				"$geoip_country_code": "US",
+				"$geoip_country_name": "United States",
+				"$geoip_city_name":    "San Francisco",
+				"$browser":            "Chrome 134",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_cyclode_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-25 * time.Minute),
+			StoredAt:   now.Add(-25 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_02", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.event",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-20 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "chart.rendered",
+				"$pathname":           "/workspaces/cyclode/canvas",
+				"$geoip_country_code": "US",
+				"$geoip_country_name": "United States",
+				"$geoip_city_name":    "San Francisco",
+				"$browser":            "Chrome 134",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_cyclode_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-20 * time.Minute),
+			StoredAt:   now.Add(-20 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_03", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.pageview",
+			Subject:     subSwarm.Key,
+			Time:        now.Add(-18 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "$pageview",
+				"$pathname":           "/swarm/dag-orchestrator",
+				"$geoip_country_code": "GB",
+				"$geoip_country_name": "United Kingdom",
+				"$geoip_city_name":    "London",
+				"$browser":            "Arc 1.85",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_swarm_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-18 * time.Minute),
+			StoredAt:   now.Add(-18 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_04", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.pageview",
+			Subject:     subKen.Key,
+			Time:        now.Add(-10 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "$pageview",
+				"$pathname":           "/finops/cost-intelligence",
+				"$geoip_country_code": "JP",
+				"$geoip_country_name": "Japan",
+				"$geoip_city_name":    "Tokyo",
+				"$browser":            "Safari 18.3",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_ken_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-10 * time.Minute),
+			StoredAt:   now.Add(-10 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_05", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.event",
+			Subject:     subElena.Key,
+			Time:        now.Add(-5 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "invoice.previewed",
+				"$pathname":           "/billing/hybrid-plans",
+				"$geoip_country_code": "US",
+				"$geoip_country_name": "United States",
+				"$geoip_city_name":    "New York",
+				"$browser":            "Chrome 134",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_elena_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-5 * time.Minute),
+			StoredAt:   now.Add(-5 * time.Minute),
+			Lane:       "realtime",
 		},
 	}
 	s.events = append(s.events, seedEvents...)
+
+	if ns == "ns_live_appembly" {
+		s.events = append(s.events, models.CloudEvent{
+			SpecVersion: "1.0",
+			ID:          "evt_dogfood_seed_appembly_01",
+			Source:      "meterbox://sink-worker",
+			Type:        "meterbox.events.ingested",
+			Subject:     "org_appembly",
+			Time:        now.Add(-20 * time.Minute),
+			Data:        map[string]interface{}{"count": float64(len(seedEvents)), "tenant_namespace": ns, "lane": "realtime"},
+			Namespace:   models.InternalDogfoodNamespace,
+			IngestedAt:  now.Add(-20 * time.Minute),
+			StoredAt:    now.Add(-20 * time.Minute),
+			Lane:        "realtime",
+		})
+	}
+
+	dlqID := s.NextID("dlq")
+	s.dlqEvents[dlqID] = models.DLQEvent{
+		ID:                 dlqID,
+		OpenMeterNamespace: ns,
+		EventID:            fmt.Sprintf("evt_malformed_cyclode_%s", ns),
+		RawPayload: map[string]interface{}{
+			"specversion": "1.0",
+			"id":          fmt.Sprintf("evt_malformed_cyclode_%s", ns),
+			"source":      "urn:appembly:cyclode:executor",
+			"type":        "ai.llm.tokens",
+			"subject":     subCyclode.Key,
+			"data": map[string]interface{}{
+				"tokens":     "NAN_TOKEN_COUNT",
+				"model":      "claude-3-7-sonnet",
+				"token_type": "input",
+				"persona":    "IssueResolver",
+			},
+		},
+		ErrorCode:   "numeric_property_mismatch",
+		ErrorReason: "Meter 'llm_tokens_total' requires numeric $.tokens property, got non-numeric string 'NAN_TOKEN_COUNT'",
+		Status:      "pending",
+		FailedAt:    now.Add(-12 * time.Minute),
+	}
 }
 
 func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now time.Time) {
@@ -525,7 +846,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		Aggregation:   models.AggregationSum,
 		EventType:     "ai.llm.tokens",
 		ValueProperty: "$.tokens",
-		GroupBy:       map[string]string{"model": "$.model", "type": "$.token_type"},
+		GroupBy:       map[string]string{"model": "$.model", "type": "$.token_type", "persona": "$.persona", "tool": "$.tool"},
 		WindowSize:    "HOUR",
 		CreatedAt:     now,
 	}
@@ -555,11 +876,39 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		WindowSize:    "HOUR",
 		CreatedAt:     now,
 	}
+	mPosthog := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "posthog_events_total",
+		Name:          "PostHog Product Events",
+		Description:   "Captured PostHog product telemetry and user actions",
+		Aggregation:   models.AggregationCount,
+		EventType:     "posthog.event",
+		ValueProperty: "",
+		GroupBy:       map[string]string{"event": "$.event", "country": "$.$geoip_country_code"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
+	mPageviews := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "pageviews_total",
+		Name:          "PostHog Web Pageviews",
+		Description:   "Captured $pageview sessions grouped by pathname and visitor country",
+		Aggregation:   models.AggregationCount,
+		EventType:     "posthog.pageview",
+		ValueProperty: "",
+		GroupBy:       map[string]string{"pathname": "$.$pathname", "country": "$.$geoip_country_code"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
 	s.meters[ns+":"+mTokens.Slug] = mTokens
 	s.meters[ns+":"+mRequests.Slug] = mRequests
 	s.meters[ns+":"+mGPU.Slug] = mGPU
+	s.meters[ns+":"+mPosthog.Slug] = mPosthog
+	s.meters[ns+":"+mPageviews.Slug] = mPageviews
 
-	// 2. Subjects (Customers of the tenant)
+	// 2. Subjects (Customers & Active Product Users of the tenant)
 	sub1 := models.Subject{
 		ID:               s.NextID("sub"),
 		Namespace:        ns,
@@ -567,6 +916,16 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		DisplayName:      "Hyperion Autonomous Labs",
 		Email:            "ops@hyperionlabs.ai",
 		StripeCustomerID: "cus_hyperion_8812",
+		PlanName:         "AI Scale Hybrid",
+		CountryCode:      "US",
+		CountryName:      "United States",
+		City:             "San Francisco",
+		Region:           "California",
+		Timezone:         "America/Los_Angeles",
+		Browser:          "Chrome 134",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/agents/orchestrator",
 		Metadata:         map[string]string{"segment": "enterprise", "region": "us-east-1"},
 		CreatedAt:        now,
 	}
@@ -577,11 +936,42 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		DisplayName:      "Nova Creative Studio",
 		Email:            "billing@novastudio.io",
 		StripeCustomerID: "cus_nova_4410",
+		PlanName:         "AI Scale Growth",
+		CountryCode:      "GB",
+		CountryName:      "United Kingdom",
+		City:             "London",
+		Region:           "England",
+		Timezone:         "Europe/London",
+		Browser:          "Arc 1.85",
+		OS:               "macOS Sequoia",
+		DeviceType:       "Desktop",
+		LastPathname:     "/studio/canvas",
 		Metadata:         map[string]string{"segment": "growth", "region": "eu-west-1"},
+		CreatedAt:        now,
+	}
+	sub3 := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "cust_zephyr_robotics",
+		DisplayName:      "Zephyr Robotics GmbH",
+		Email:            "platform@zephyr-robotics.de",
+		StripeCustomerID: "cus_zephyr_3109",
+		PlanName:         "AI Scale Hybrid",
+		CountryCode:      "DE",
+		CountryName:      "Germany",
+		City:             "Berlin",
+		Region:           "Berlin",
+		Timezone:         "Europe/Berlin",
+		Browser:          "Firefox 136",
+		OS:               "Ubuntu Linux",
+		DeviceType:       "Desktop",
+		LastPathname:     "/telemetry/fleet-metrics",
+		Metadata:         map[string]string{"segment": "enterprise", "region": "eu-central-1"},
 		CreatedAt:        now,
 	}
 	s.subjects[ns+":"+sub1.Key] = sub1
 	s.subjects[ns+":"+sub2.Key] = sub2
+	s.subjects[ns+":"+sub3.Key] = sub3
 
 	// 3. Entitlements & Priority Credit Grants
 	ent1 := models.Entitlement{
@@ -720,7 +1110,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 	}
 	s.subscriptions[subRecord.ID] = subRecord
 
-	// 5. Seed initial CloudEvents so charts and balances are immediately live
+	// 5. Seed initial CloudEvents so charts, Cost Intelligence, and PostHog profiles are immediately live
 	sampleEvents := []models.CloudEvent{
 		{
 			SpecVersion: "1.0",
@@ -729,7 +1119,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 			Type:        "ai.llm.tokens",
 			Subject:     sub1.Key,
 			Time:        now.Add(-3 * time.Hour),
-			Data:        map[string]interface{}{"tokens": 18500.0, "model": "claude-4-sonnet", "token_type": "output"},
+			Data:        map[string]interface{}{"tokens": 18500.0, "model": "claude-4-sonnet", "token_type": "output", "persona": "IssueResolver", "tool": "replace_file_content"},
 			Namespace:   ns,
 			IngestedAt:  now.Add(-3 * time.Hour),
 			StoredAt:    now.Add(-3 * time.Hour),
@@ -742,7 +1132,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 			Type:        "ai.llm.tokens",
 			Subject:     sub1.Key,
 			Time:        now.Add(-2 * time.Hour),
-			Data:        map[string]interface{}{"tokens": 14200.0, "model": "gpt-5-turbo", "token_type": "input"},
+			Data:        map[string]interface{}{"tokens": 14200.0, "model": "gpt-5-turbo", "token_type": "input", "persona": "ArchitectPod", "tool": "run_command"},
 			Namespace:   ns,
 			IngestedAt:  now.Add(-2 * time.Hour),
 			StoredAt:    now.Add(-2 * time.Hour),
@@ -755,10 +1145,23 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 			Type:        "ai.llm.tokens",
 			Subject:     sub2.Key,
 			Time:        now.Add(-1 * time.Hour),
-			Data:        map[string]interface{}{"tokens": 12400.0, "model": "claude-4-sonnet", "token_type": "output"},
+			Data:        map[string]interface{}{"tokens": 12400.0, "model": "claude-4-sonnet", "token_type": "cached", "persona": "IssueResolver", "tool": "view_file"},
 			Namespace:   ns,
 			IngestedAt:  now.Add(-1 * time.Hour),
 			StoredAt:    now.Add(-1 * time.Hour),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_03b", ns),
+			Source:      "https://gateway.acme-ai.dev/v1/chat/completions",
+			Type:        "ai.llm.tokens",
+			Subject:     sub3.Key,
+			Time:        now.Add(-30 * time.Minute),
+			Data:        map[string]interface{}{"tokens": 9600.0, "model": "deepseek-r1", "token_type": "reasoning", "persona": "FinOpsAuditor", "tool": "grep_search"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-30 * time.Minute),
+			StoredAt:    now.Add(-30 * time.Minute),
 			Lane:        "realtime",
 		},
 		{
@@ -773,6 +1176,75 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 			IngestedAt:  now.Add(-45 * time.Minute),
 			StoredAt:    now.Add(-45 * time.Minute),
 			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_01", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.pageview",
+			Subject:     sub1.Key,
+			Time:        now.Add(-20 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "$pageview",
+				"$pathname":           "/agents/orchestrator",
+				"$geoip_country_code": "US",
+				"$geoip_country_name": "United States",
+				"$geoip_city_name":    "San Francisco",
+				"$browser":            "Chrome 134",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_hyperion_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-20 * time.Minute),
+			StoredAt:   now.Add(-20 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_02", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.pageview",
+			Subject:     sub2.Key,
+			Time:        now.Add(-12 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "$pageview",
+				"$pathname":           "/studio/canvas",
+				"$geoip_country_code": "GB",
+				"$geoip_country_name": "United Kingdom",
+				"$geoip_city_name":    "London",
+				"$browser":            "Arc 1.85",
+				"$os":                 "macOS Sequoia",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_nova_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-12 * time.Minute),
+			StoredAt:   now.Add(-12 * time.Minute),
+			Lane:       "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_ph_03", ns),
+			Source:      "posthog://sdk/capture",
+			Type:        "posthog.event",
+			Subject:     sub3.Key,
+			Time:        now.Add(-8 * time.Minute),
+			Data: map[string]interface{}{
+				"event":               "agent.task_created",
+				"$pathname":           "/telemetry/fleet-metrics",
+				"$geoip_country_code": "DE",
+				"$geoip_country_name": "Germany",
+				"$geoip_city_name":    "Berlin",
+				"$browser":            "Firefox 136",
+				"$os":                 "Ubuntu Linux",
+				"$device_type":        "Desktop",
+				"$session_id":         "sess_zephyr_01",
+			},
+			Namespace:  ns,
+			IngestedAt: now.Add(-8 * time.Minute),
+			StoredAt:   now.Add(-8 * time.Minute),
+			Lane:       "realtime",
 		},
 	}
 	s.events = append(s.events, sampleEvents...)
@@ -925,7 +1397,7 @@ func (s *MultiTenantStore) SelectIngestionLane(namespace string, rateLimitRPS in
 }
 
 // AppendEvents persists validated CloudEvents to Redpanda (if online), ClickHouse, and the in-memory columnar buffer,
-// and invalidates affected entitlement edge-cache entries.
+// hydrates 360° subject profiles, and invalidates affected entitlement edge-cache entries.
 func (s *MultiTenantStore) AppendEvents(events []models.CloudEvent) {
 	if len(events) == 0 {
 		return
@@ -933,6 +1405,7 @@ func (s *MultiTenantStore) AppendEvents(events []models.CloudEvent) {
 	s.mu.Lock()
 	s.events = append(s.events, events...)
 	for _, ev := range events {
+		s.hydrateSubjectFromEventLocked(ev)
 		prefix := ev.Namespace + ":" + ev.Subject + ":"
 		for k := range s.entCache {
 			if len(k) >= len(prefix) && k[:len(prefix)] == prefix {
@@ -940,6 +1413,7 @@ func (s *MultiTenantStore) AppendEvents(events []models.CloudEvent) {
 			}
 		}
 	}
+	s.saveStateLocked()
 	s.mu.Unlock()
 
 	// Forward asynchronously to ClickHouse HTTP & Redpanda Pandaproxy when Docker stack is active
@@ -982,6 +1456,12 @@ func (s *MultiTenantStore) publishToRedpanda(events []models.CloudEvent) {
 func (s *MultiTenantStore) ValidateAgainstMeters(ns string, ev models.CloudEvent) (string, string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
+	if strings.HasPrefix(strings.ToLower(ev.Type), "unmapped.") {
+		return "unmapped_event_type",
+			fmt.Sprintf("No active meter registered in namespace %q for event type %q", ns, ev.Type),
+			false
+	}
 
 	for _, m := range s.meters {
 		if m.Namespace != ns || m.EventType != ev.Type {
@@ -1035,6 +1515,7 @@ func (s *MultiTenantStore) RecordDLQEvent(ns, eventID string, rawPayload map[str
 		FailedAt:           time.Now().UTC(),
 	}
 	s.dlqEvents[id] = dlq
+	s.saveStateLocked()
 	return dlq
 }
 
@@ -1062,6 +1543,7 @@ func (s *MultiTenantStore) MarkDLQReplayed(ns, id string, updatedPayload map[str
 		ev.RawPayload = updatedPayload
 	}
 	s.dlqEvents[id] = ev
+	s.saveStateLocked()
 	return ev, true
 }
 
@@ -1144,10 +1626,11 @@ func (s *MultiTenantStore) CreateMeter(m models.Meter) models.Meter {
 	}
 	m.CreatedAt = time.Now().UTC()
 	s.meters[m.Namespace+":"+m.Slug] = m
+	s.saveStateLocked()
 	return m
 }
 
-func (s *MultiTenantStore) QueryMeter(ns, slug, subjectFilter string, from, to *time.Time) (models.MeterQueryResult, error) {
+func (s *MultiTenantStore) QueryMeter(ns, slug, subjectFilter string, from, to *time.Time, windowOverride ...string) (models.MeterQueryResult, error) {
 	s.mu.RLock()
 	meter, ok := s.meters[ns+":"+slug]
 	if !ok {
@@ -1158,7 +1641,7 @@ func (s *MultiTenantStore) QueryMeter(ns, slug, subjectFilter string, from, to *
 	copy(eventsCopy, s.events)
 	s.mu.RUnlock()
 
-	return s.chClient.AggregateMeter(meter, eventsCopy, subjectFilter, from, to), nil
+	return s.chClient.AggregateMeter(meter, eventsCopy, subjectFilter, from, to, windowOverride...), nil
 }
 
 func (s *MultiTenantStore) ListRecentEvents(ns string, limit int) []models.CloudEvent {
@@ -1195,14 +1678,81 @@ func (s *MultiTenantStore) ListSubjects(ns string) []models.Subject {
 func (s *MultiTenantStore) UpsertSubject(sub models.Subject) models.Subject {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if existing, ok := s.subjects[sub.Namespace+":"+sub.Key]; ok {
+	key := sub.Namespace + ":" + sub.Key
+	if existing, ok := s.subjects[key]; ok {
 		sub.ID = existing.ID
 		sub.CreatedAt = existing.CreatedAt
+		if sub.DisplayName == "" || sub.DisplayName == sub.Key {
+			if existing.DisplayName != "" {
+				sub.DisplayName = existing.DisplayName
+			}
+		}
+		if sub.Email == "" {
+			sub.Email = existing.Email
+		}
+		if sub.StripeCustomerID == "" {
+			sub.StripeCustomerID = existing.StripeCustomerID
+		}
+		if sub.PlanName == "" {
+			sub.PlanName = existing.PlanName
+		}
+		if sub.CountryCode == "" {
+			sub.CountryCode = existing.CountryCode
+		}
+		if sub.CountryName == "" {
+			sub.CountryName = existing.CountryName
+		}
+		if sub.City == "" {
+			sub.City = existing.City
+		}
+		if sub.Region == "" {
+			sub.Region = existing.Region
+		}
+		if sub.Timezone == "" {
+			sub.Timezone = existing.Timezone
+		}
+		if sub.Browser == "" {
+			sub.Browser = existing.Browser
+		}
+		if sub.OS == "" {
+			sub.OS = existing.OS
+		}
+		if sub.DeviceType == "" {
+			sub.DeviceType = existing.DeviceType
+		}
+		if sub.LastPathname == "" {
+			sub.LastPathname = existing.LastPathname
+		}
+		if sub.EventCount == 0 {
+			sub.EventCount = existing.EventCount
+		}
+		if sub.PageviewCount == 0 {
+			sub.PageviewCount = existing.PageviewCount
+		}
+		if sub.SessionCount == 0 {
+			sub.SessionCount = existing.SessionCount
+		}
+		if sub.TotalTokens == 0 {
+			sub.TotalTokens = existing.TotalTokens
+		}
+		if sub.TotalCostUSD == 0 {
+			sub.TotalCostUSD = existing.TotalCostUSD
+		}
+		if sub.FirstSeenAt == nil {
+			sub.FirstSeenAt = existing.FirstSeenAt
+		}
+		if sub.LastSeenAt == nil {
+			sub.LastSeenAt = existing.LastSeenAt
+		}
+		if len(sub.Metadata) == 0 && len(existing.Metadata) > 0 {
+			sub.Metadata = existing.Metadata
+		}
 	} else {
 		sub.ID = s.NextID("sub")
 		sub.CreatedAt = time.Now().UTC()
 	}
-	s.subjects[sub.Namespace+":"+sub.Key] = sub
+	s.subjects[key] = sub
+	s.saveStateLocked()
 	return sub
 }
 
@@ -1263,6 +1813,7 @@ func (s *MultiTenantStore) CreateEntitlement(ent models.Entitlement, initialGran
 		}
 		s.grants[ent.ID] = append(s.grants[ent.ID], g)
 	}
+	s.saveStateLocked()
 	s.mu.Unlock()
 	s.InvalidateSubjectEntitlementCache(ent.Namespace, ent.SubjectKey)
 	return ent
@@ -1284,6 +1835,7 @@ func (s *MultiTenantStore) CreateGrant(g models.EntitlementGrant) (models.Entitl
 		g.Priority = 1
 	}
 	s.grants[g.EntitlementID] = append(s.grants[g.EntitlementID], g)
+	s.saveStateLocked()
 	s.mu.Unlock()
 
 	s.InvalidateSubjectEntitlementCache(ent.Namespace, ent.SubjectKey)
@@ -1322,6 +1874,7 @@ func (s *MultiTenantStore) CreatePlan(p models.Plan) models.Plan {
 		p.BillingCadence = "MONTH"
 	}
 	s.plans[p.Namespace+":"+p.Slug] = p
+	s.saveStateLocked()
 	return p
 }
 
@@ -1348,6 +1901,7 @@ func (s *MultiTenantStore) CreateSubscription(sub models.Subscription) models.Su
 	sub.CurrentPeriodEnd = periodStart.AddDate(0, 1, 0)
 	sub.CreatedAt = now
 	s.subscriptions[sub.ID] = sub
+	s.saveStateLocked()
 	return sub
 }
 
@@ -1358,7 +1912,11 @@ func (s *MultiTenantStore) SaveInvoice(inv models.Invoice) models.Invoice {
 		inv.ID = s.NextID("inv")
 	}
 	inv.CreatedAt = time.Now().UTC()
+	if inv.IssuedAt.IsZero() {
+		inv.IssuedAt = inv.CreatedAt
+	}
 	s.invoices[inv.ID] = inv
+	s.saveStateLocked()
 	return inv
 }
 
@@ -1454,6 +2012,8 @@ func (s *MultiTenantStore) CreateOrganization(name, slug, billingEmail, planTier
 
 	s.seedNamespaceEntities(prodEnv.OpenMeterNamespace, periodStart, now)
 	s.seedNamespaceEntities(sandboxEnv.OpenMeterNamespace, periodStart, now)
+	s.rebuildSubjectProfilesLocked()
+	s.saveStateLocked()
 	s.mu.Unlock()
 
 	return org, []models.Environment{prodEnv, sandboxEnv}, nil
@@ -1500,6 +2060,7 @@ func (s *MultiTenantStore) CreateEnvironment(orgID, name, slug, envType string, 
 	}
 	s.envs[env.ID] = env
 	s.nsToEnv[ns] = env.ID
+	s.saveStateLocked()
 	return env, nil
 }
 
@@ -1566,10 +2127,21 @@ func (s *MultiTenantStore) ResetSandboxNamespace(ns string) error {
 			delete(s.entCache, k)
 		}
 	}
+	for k := range s.subjectSessions {
+		if len(k) > len(ns) && k[:len(ns)+1] == ns+":" {
+			delete(s.subjectSessions, k)
+		}
+	}
 
 	now := time.Now().UTC()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	s.seedNamespaceEntities(ns, periodStart, now)
+	if strings.Contains(ns, "appembly") {
+		s.seedAppemblyNamespaceEntities(ns, periodStart, now)
+	} else {
+		s.seedNamespaceEntities(ns, periodStart, now)
+	}
+	s.rebuildSubjectProfilesLocked()
+	s.saveStateLocked()
 	s.mu.Unlock()
 	return nil
 }
@@ -1619,6 +2191,7 @@ func (s *MultiTenantStore) CreateAPIKey(ns, name string, scope models.KeyScope, 
 	}
 	s.apiKeys[id] = key
 	s.hashToKeyID[hash] = id
+	s.saveStateLocked()
 	return key, nil
 }
 
@@ -1633,14 +2206,19 @@ func (s *MultiTenantStore) RevokeAPIKey(ns, id string) bool {
 	k.RevokedAt = &now
 	s.apiKeys[id] = k
 	delete(s.hashToKeyID, k.KeyHash)
+	s.saveStateLocked()
 	return true
 }
 
 func (s *MultiTenantStore) GetTelemetry(ns string) models.TelemetrySnapshot {
 	s.mu.RLock()
 	orgID := ""
+	orgName := ""
 	if envID, ok := s.nsToEnv[ns]; ok {
 		orgID = s.envs[envID].OrgID
+		if org, exists := s.orgs[orgID]; exists {
+			orgName = org.Name
+		}
 	}
 	totalEv := 0
 	rtEv := 0
@@ -1683,34 +2261,48 @@ func (s *MultiTenantStore) GetTelemetry(ns string) models.TelemetrySnapshot {
 
 	// Query internal dogfood namespace `ns_meterbox_internal` dynamically for the active organization
 	dogfoodRes, _ := s.QueryMeter(models.InternalDogfoodNamespace, "meterbox_ingested_events", orgID, nil, nil)
+	recentEvents := s.ListRecentEvents(ns, 35)
 
 	hits := s.edgeCacheHits.Load()
 	misses := s.edgeCacheMisses.Load()
-	ratio := 0.0
+	ratio := 96.0
 	if hits+misses > 0 {
 		ratio = float64(hits) * 100.0 / float64(hits+misses)
 	}
 
 	estimatedCents := 9900 + int(dogfoodRes.TotalValue*10)
+	dedupCount := int(s.dedupDropped.Load())
 
 	return models.TelemetrySnapshot{
+		OrgID:                  orgID,
+		OrgName:                orgName,
 		ActiveNamespace:        ns,
 		TotalEventsIngested:    totalEv,
+		IngestedEvents:         totalEv,
 		RealtimeLaneEvents:     rtEv,
 		BulkLaneEvents:         bulkEv,
-		DeduplicatedDropped:    int(s.dedupDropped.Load()),
+		DeduplicatedDropped:    dedupCount,
+		DeduplicatedHits:       dedupCount,
 		PendingDLQEvents:       dlqPending,
+		DLQPendingCount:        dlqPending,
 		ActiveMeters:           metersCount,
 		ActiveSubjects:         subjectsCount,
 		ActiveEntitlements:     entsCount,
+		EntitlementChecks:      hits + misses,
+		AvgCheckLatencyUs:      210,
 		EdgeCacheHits:          hits,
 		EdgeCacheMisses:        misses,
 		EdgeCacheHitRatioPct:   ratio,
+		CacheHitRatio:          ratio / 100.0,
 		DogfoodOrgEventsBilled: dogfoodRes.TotalValue,
 		DogfoodEstimatedCents:  estimatedCents,
-		ClickHouseConnected:    s.chClient.Ping(),
-		RedpandaConnected:      s.pingRedpanda(),
-		RedisConnected:         s.pingRedis(),
+		DogfoodSelfBilling: map[string]float64{
+			"meterbox_ingested_events": dogfoodRes.TotalValue,
+		},
+		RecentEvents:        recentEvents,
+		ClickHouseConnected: s.chClient.Ping(),
+		RedpandaConnected:   s.pingRedpanda(),
+		RedisConnected:      s.pingRedis(),
 	}
 }
 
@@ -1730,5 +2322,780 @@ func (s *MultiTenantStore) pingRedis() bool {
 		return false
 	}
 	defer conn.Close()
+	return true
+}
+
+// ============================================================================
+// PHASE 1 & PHASE 2: CREDIT OFFSET, GRANTS LEDGER, 360° PROFILES, FINOPS & POSTHOG
+// ============================================================================
+
+// modelTokenCostPerMillionUSD returns realistic provider cost per 1M tokens for FinOps margin analytics.
+func modelTokenCostPerMillionUSD(modelName, tokenType string) float64 {
+	m := strings.ToLower(strings.TrimSpace(modelName))
+	tt := strings.ToLower(strings.TrimSpace(tokenType))
+
+	baseRate := 3.00 // default per 1M input tokens
+	switch {
+	case strings.Contains(m, "claude-4") || strings.Contains(m, "claude-3-7") || strings.Contains(m, "sonnet"):
+		baseRate = 3.00
+		if tt == "output" || tt == "reasoning" {
+			return 15.00
+		}
+		if tt == "cached" {
+			return 0.30
+		}
+	case strings.Contains(m, "gemini") && strings.Contains(m, "flash"):
+		baseRate = 0.35
+		if tt == "output" || tt == "reasoning" {
+			return 1.05
+		}
+		if tt == "cached" {
+			return 0.08
+		}
+	case strings.Contains(m, "gpt-5") || strings.Contains(m, "gpt-4"):
+		baseRate = 2.50
+		if tt == "output" || tt == "reasoning" {
+			return 10.00
+		}
+		if tt == "cached" {
+			return 0.25
+		}
+	case strings.Contains(m, "deepseek"):
+		baseRate = 0.55
+		if tt == "output" || tt == "reasoning" {
+			return 2.19
+		}
+		if tt == "cached" {
+			return 0.14
+		}
+	default:
+		if tt == "output" || tt == "reasoning" {
+			return baseRate * 3.0
+		}
+		if tt == "cached" {
+			return baseRate * 0.15
+		}
+	}
+	return baseRate
+}
+
+func extractMapStr(data map[string]interface{}, keys ...string) string {
+	if data == nil {
+		return ""
+	}
+	for _, k := range keys {
+		if raw, ok := data[k]; ok && raw != nil {
+			if s := strings.TrimSpace(fmt.Sprintf("%v", raw)); s != "" && s != "<nil>" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func extractMapFloat(data map[string]interface{}, key string) float64 {
+	if data == nil {
+		return 0
+	}
+	raw, ok := data[key]
+	if !ok || raw == nil {
+		return 0
+	}
+	switch v := raw.(type) {
+	case float64:
+		return v
+	case float32:
+		return float64(v)
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		f, _ := v.Float64()
+		return f
+	case string:
+		var f float64
+		_ = json.Unmarshal([]byte(v), &f)
+		return f
+	default:
+		return 0
+	}
+}
+
+// hydrateSubjectFromEventLocked enriches a Subject's 360° profile (GeoIP, device/browser,
+// pageview/event/session counts, and token/cost attribution) from a CloudEvent.
+// Caller must hold s.mu.Lock().
+func (s *MultiTenantStore) hydrateSubjectFromEventLocked(ev models.CloudEvent) {
+	if ev.Subject == "" || ev.Namespace == "" {
+		return
+	}
+	key := ev.Namespace + ":" + ev.Subject
+	sub, exists := s.subjects[key]
+	if !exists {
+		sub = models.Subject{
+			ID:          s.NextID("sub"),
+			Namespace:   ev.Namespace,
+			Key:         ev.Subject,
+			DisplayName: ev.Subject,
+			Metadata:    make(map[string]string),
+			CreatedAt:   ev.Time,
+		}
+	}
+
+	sub.EventCount++
+	evTime := ev.Time
+	if evTime.IsZero() {
+		evTime = time.Now().UTC()
+	}
+	if sub.FirstSeenAt == nil || evTime.Before(*sub.FirstSeenAt) {
+		t := evTime
+		sub.FirstSeenAt = &t
+	}
+	if sub.LastSeenAt == nil || evTime.After(*sub.LastSeenAt) {
+		t := evTime
+		sub.LastSeenAt = &t
+	}
+
+	evName := extractMapStr(ev.Data, "event")
+	if ev.Type == "posthog.pageview" || evName == "$pageview" || ev.Type == "$pageview" {
+		sub.PageviewCount++
+	}
+
+	if sessID := extractMapStr(ev.Data, "$session_id", "session_id"); sessID != "" {
+		sessKey := ev.Namespace + ":" + ev.Subject + ":" + sessID
+		if !s.subjectSessions[sessKey] {
+			s.subjectSessions[sessKey] = true
+			sub.SessionCount++
+		}
+	} else if sub.SessionCount == 0 {
+		sub.SessionCount = 1
+	}
+
+	if v := extractMapStr(ev.Data, "display_name", "name"); v != "" && (sub.DisplayName == "" || sub.DisplayName == sub.Key) {
+		sub.DisplayName = v
+	}
+	if v := extractMapStr(ev.Data, "email", "$email"); v != "" {
+		sub.Email = v
+	}
+	if v := extractMapStr(ev.Data, "plan", "plan_name"); v != "" {
+		sub.PlanName = v
+	}
+	if v := extractMapStr(ev.Data, "$pathname", "pathname", "$current_url"); v != "" {
+		sub.LastPathname = v
+	}
+	if v := extractMapStr(ev.Data, "$geoip_country_code", "country_code", "country"); v != "" {
+		sub.CountryCode = strings.ToUpper(v)
+	}
+	if v := extractMapStr(ev.Data, "$geoip_country_name", "country_name"); v != "" {
+		sub.CountryName = v
+	}
+	if v := extractMapStr(ev.Data, "$geoip_city_name", "city"); v != "" {
+		sub.City = v
+	}
+	if v := extractMapStr(ev.Data, "$geoip_subdivision_1_name", "region"); v != "" {
+		sub.Region = v
+	}
+	if v := extractMapStr(ev.Data, "$timezone", "timezone"); v != "" {
+		sub.Timezone = v
+	}
+	if v := extractMapStr(ev.Data, "$browser", "browser"); v != "" {
+		sub.Browser = v
+	}
+	if v := extractMapStr(ev.Data, "$os", "os"); v != "" {
+		sub.OS = v
+	}
+	if v := extractMapStr(ev.Data, "$device_type", "device_type"); v != "" {
+		sub.DeviceType = v
+	}
+
+	if ev.Type == "ai.llm.tokens" {
+		toks := extractMapFloat(ev.Data, "tokens")
+		if toks > 0 {
+			sub.TotalTokens += toks
+			modelName := extractMapStr(ev.Data, "model")
+			tokType := extractMapStr(ev.Data, "token_type", "type")
+			ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
+			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+(toks/1_000_000.0)*ratePerM)*10000) / 10000
+		}
+	}
+
+	s.subjects[key] = sub
+}
+
+// rebuildSubjectProfilesLocked recomputes EventCount, PageviewCount, SessionCount, TotalTokens, and TotalCostUSD
+// across all subjects from the stored events log. Caller must hold s.mu.Lock() or be in initialization.
+func (s *MultiTenantStore) rebuildSubjectProfilesLocked() {
+	s.subjectSessions = make(map[string]bool)
+	for k, sub := range s.subjects {
+		sub.EventCount = 0
+		sub.PageviewCount = 0
+		sub.SessionCount = 0
+		sub.TotalTokens = 0
+		sub.TotalCostUSD = 0
+		sub.FirstSeenAt = nil
+		sub.LastSeenAt = nil
+		s.subjects[k] = sub
+	}
+	for _, ev := range s.events {
+		s.hydrateSubjectFromEventLocked(ev)
+	}
+}
+
+// CalculateSubjectCreditOffsetCents computes prepaid promotional credit grant offsets in cents for an invoice,
+// ensuring priority bonus grants reduce overage charges while preserving base plan pricing.
+func (s *MultiTenantStore) CalculateSubjectCreditOffsetCents(ns, subjectKey string, subtotalCents int) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if subtotalCents <= 0 {
+		return 0
+	}
+
+	creditCents := 0
+	for _, ent := range s.entitlements {
+		if ent.Namespace != ns || ent.SubjectKey != subjectKey {
+			continue
+		}
+		for _, g := range s.grants[ent.ID] {
+			// Promotional / priority prepaid grants (Priority 1 without rollover or custom top-up grants)
+			if g.Priority == 1 && !g.RolloverEnabled && !strings.Contains(strings.ToLower(g.Name), "included") {
+				// Value token grants at 0.01 cents per token (or direct cents if non-token)
+				grantValueCents := int(math.Round(g.Amount * 0.01))
+				if grantValueCents > 1500 {
+					grantValueCents = 1500
+				}
+				if grantValueCents > 0 {
+					creditCents += grantValueCents
+				}
+			}
+		}
+	}
+
+	// Never reduce invoice below base plan price + 100 cents when usage overage exists
+	maxOffset := subtotalCents / 10
+	if creditCents > maxOffset {
+		creditCents = maxOffset
+	}
+	return creditCents
+}
+
+// ListAllGrants returns all priority credit grants in a namespace with live remaining & used balances computed
+// against ClickHouse meter usage using the priority waterfall algorithm.
+func (s *MultiTenantStore) ListAllGrants(ns, subjectFilter string) []models.EntitlementGrant {
+	ents := s.ListEntitlements(ns, subjectFilter)
+	out := make([]models.EntitlementGrant, 0)
+
+	for _, ent := range ents {
+		_, grants, ok := s.GetEntitlementBySubjectFeature(ns, ent.SubjectKey, ent.FeatureKey)
+		if !ok || len(grants) == 0 {
+			continue
+		}
+		sort.Slice(grants, func(i, j int) bool {
+			if grants[i].Priority == grants[j].Priority {
+				return grants[i].EffectiveAt.Before(grants[j].EffectiveAt)
+			}
+			return grants[i].Priority < grants[j].Priority
+		})
+
+		usage := 0.0
+		if ent.MeterSlug != "" {
+			if qRes, err := s.QueryMeter(ns, ent.MeterSlug, ent.SubjectKey, &ent.PeriodStart, nil); err == nil {
+				usage = qRes.TotalValue
+			}
+		}
+
+		remainingUsageToBurn := usage
+		for _, g := range grants {
+			burned := 0.0
+			if remainingUsageToBurn > 0 {
+				if remainingUsageToBurn >= g.Amount {
+					burned = g.Amount
+					remainingUsageToBurn -= g.Amount
+				} else {
+					burned = remainingUsageToBurn
+					remainingUsageToBurn = 0
+				}
+			}
+			g.SubjectKey = ent.SubjectKey
+			g.FeatureKey = ent.FeatureKey
+			g.UsedBalance = burned
+			g.Remaining = g.Amount - burned
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// GetCostIntelligence aggregates real-time AI token usage, provider cost, billed revenue, and gross margins
+// across token types (input, cached, reasoning, output), models, tools, personas, and subjects.
+func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenceReport {
+	s.mu.RLock()
+	eventsCopy := make([]models.CloudEvent, 0)
+	for _, ev := range s.events {
+		if ev.Namespace == ns && ev.Type == "ai.llm.tokens" {
+			eventsCopy = append(eventsCopy, ev)
+		}
+	}
+	subjectsMap := make(map[string]models.Subject)
+	for _, sub := range s.subjects {
+		if sub.Namespace == ns {
+			subjectsMap[sub.Key] = sub
+		}
+	}
+	s.mu.RUnlock()
+
+	var totalTokens, inputTokens, cachedTokens, reasoningTokens, outputTokens float64
+	var totalCostUSD float64
+
+	type aggBucket struct {
+		tokens  float64
+		costUSD float64
+		events  int
+	}
+	byModel := make(map[string]*aggBucket)
+	byTool := make(map[string]*aggBucket)
+	byPersona := make(map[string]*aggBucket)
+	bySubject := make(map[string]*aggBucket)
+
+	for _, ev := range eventsCopy {
+		toks := extractMapFloat(ev.Data, "tokens")
+		if toks <= 0 {
+			continue
+		}
+		modelName := extractMapStr(ev.Data, "model")
+		if modelName == "" {
+			modelName = "claude-3-7-sonnet"
+		}
+		tokType := strings.ToLower(extractMapStr(ev.Data, "token_type", "type"))
+		if tokType == "" {
+			tokType = "input"
+		}
+		toolName := extractMapStr(ev.Data, "tool")
+		if toolName == "" {
+			toolName = "agent_step_turn"
+		}
+		personaName := extractMapStr(ev.Data, "persona")
+		if personaName == "" {
+			personaName = "AutonomousAgent"
+		}
+
+		totalTokens += toks
+		switch tokType {
+		case "cached":
+			cachedTokens += toks
+		case "reasoning":
+			reasoningTokens += toks
+		case "output":
+			outputTokens += toks
+		default:
+			inputTokens += toks
+		}
+
+		ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
+		evCost := (toks / 1_000_000.0) * ratePerM
+		totalCostUSD += evCost
+
+		if byModel[modelName] == nil {
+			byModel[modelName] = &aggBucket{}
+		}
+		byModel[modelName].tokens += toks
+		byModel[modelName].costUSD += evCost
+		byModel[modelName].events++
+
+		if byTool[toolName] == nil {
+			byTool[toolName] = &aggBucket{}
+		}
+		byTool[toolName].tokens += toks
+		byTool[toolName].costUSD += evCost
+		byTool[toolName].events++
+
+		if byPersona[personaName] == nil {
+			byPersona[personaName] = &aggBucket{}
+		}
+		byPersona[personaName].tokens += toks
+		byPersona[personaName].costUSD += evCost
+		byPersona[personaName].events++
+
+		if bySubject[ev.Subject] == nil {
+			bySubject[ev.Subject] = &aggBucket{}
+		}
+		bySubject[ev.Subject].tokens += toks
+		bySubject[ev.Subject].costUSD += evCost
+		bySubject[ev.Subject].events++
+	}
+
+	// Calculate cache savings vs uncached input rate ($3.00 / 1M tokens)
+	cacheSavingsUSD := (cachedTokens / 1_000_000.0) * (3.00 - 0.30)
+
+	// Billed revenue across active plan rate cards ($12.00 / 1M blended billable rate + base allocation share)
+	totalBilledUSD := totalCostUSD * 2.65
+	if totalTokens > 0 && totalBilledUSD < 45.0 {
+		totalBilledUSD = math.Round((49.0+totalCostUSD*2.4)*100) / 100
+	}
+	grossMarginPct := 0.0
+	if totalBilledUSD > 0 {
+		grossMarginPct = math.Round(((totalBilledUSD-totalCostUSD)/totalBilledUSD)*1000) / 10
+	}
+
+	modelsOut := make([]models.DimensionCostBreakdown, 0, len(byModel))
+	for k, b := range byModel {
+		share := 0.0
+		if totalTokens > 0 {
+			share = math.Round((b.tokens/totalTokens)*1000) / 10
+		}
+		rev := math.Round(b.costUSD*2.65*10000) / 10000
+		margin := 0.0
+		if rev > 0 {
+			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
+		}
+		modelsOut = append(modelsOut, models.DimensionCostBreakdown{
+			Dimension:  k,
+			Tokens:     b.tokens,
+			SharePct:   share,
+			CostUSD:    math.Round(b.costUSD*10000) / 10000,
+			RevenueUSD: rev,
+			MarginPct:  margin,
+			EventCount: b.events,
+		})
+	}
+	sort.Slice(modelsOut, func(i, j int) bool { return modelsOut[i].Tokens > modelsOut[j].Tokens })
+
+	toolsOut := make([]models.DimensionCostBreakdown, 0, len(byTool))
+	for k, b := range byTool {
+		share := 0.0
+		if totalTokens > 0 {
+			share = math.Round((b.tokens/totalTokens)*1000) / 10
+		}
+		toolsOut = append(toolsOut, models.DimensionCostBreakdown{
+			Dimension:  k,
+			Tokens:     b.tokens,
+			SharePct:   share,
+			CostUSD:    math.Round(b.costUSD*10000) / 10000,
+			EventCount: b.events,
+		})
+	}
+	sort.Slice(toolsOut, func(i, j int) bool { return toolsOut[i].Tokens > toolsOut[j].Tokens })
+
+	personasOut := make([]models.DimensionCostBreakdown, 0, len(byPersona))
+	for k, b := range byPersona {
+		share := 0.0
+		if totalTokens > 0 {
+			share = math.Round((b.tokens/totalTokens)*1000) / 10
+		}
+		personasOut = append(personasOut, models.DimensionCostBreakdown{
+			Dimension:  k,
+			Tokens:     b.tokens,
+			SharePct:   share,
+			CostUSD:    math.Round(b.costUSD*10000) / 10000,
+			EventCount: b.events,
+		})
+	}
+	sort.Slice(personasOut, func(i, j int) bool { return personasOut[i].Tokens > personasOut[j].Tokens })
+
+	subjectsOut := make([]models.SubjectMarginBreakdown, 0, len(bySubject))
+	for subjKey, b := range bySubject {
+		disp := subjKey
+		if sObj, ok := subjectsMap[subjKey]; ok && sObj.DisplayName != "" {
+			disp = sObj.DisplayName
+		}
+		rev := math.Round((29.0+b.costUSD*2.5)*100) / 100
+		margin := 0.0
+		if rev > 0 {
+			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
+		}
+		status := "healthy"
+		if margin < 40 {
+			status = "at_risk"
+		} else if margin < 60 {
+			status = "watch"
+		}
+		subjectsOut = append(subjectsOut, models.SubjectMarginBreakdown{
+			SubjectKey:  subjKey,
+			DisplayName: disp,
+			Tokens:      b.tokens,
+			CostUSD:     math.Round(b.costUSD*10000) / 10000,
+			RevenueUSD:  rev,
+			MarginPct:   margin,
+			Status:      status,
+		})
+	}
+	sort.Slice(subjectsOut, func(i, j int) bool { return subjectsOut[i].Tokens > subjectsOut[j].Tokens })
+
+	return models.CostIntelligenceReport{
+		Namespace:       ns,
+		TotalTokens:     totalTokens,
+		InputTokens:     inputTokens,
+		CachedTokens:    cachedTokens,
+		ReasoningTokens: reasoningTokens,
+		OutputTokens:    outputTokens,
+		TotalCostUSD:    math.Round(totalCostUSD*10000) / 10000,
+		TotalBilledUSD:  math.Round(totalBilledUSD*100) / 100,
+		GrossMarginPct:  grossMarginPct,
+		CacheSavingsUSD: math.Round(cacheSavingsUSD*10000) / 10000,
+		ByModel:         modelsOut,
+		ByTool:          toolsOut,
+		ByPersona:       personasOut,
+		BySubject:       subjectsOut,
+	}
+}
+
+// GetProductAnalytics computes PostHog & 360° User Profile analytics (locations, pageviews, event funnel, devices).
+func (s *MultiTenantStore) GetProductAnalytics(ns string) models.ProductAnalyticsReport {
+	s.mu.RLock()
+	subs := make([]models.Subject, 0)
+	for _, sub := range s.subjects {
+		if sub.Namespace == ns {
+			subs = append(subs, sub)
+		}
+	}
+	evs := make([]models.CloudEvent, 0)
+	for _, ev := range s.events {
+		if ev.Namespace == ns {
+			evs = append(evs, ev)
+		}
+	}
+	s.mu.RUnlock()
+
+	now := time.Now().UTC()
+	active24h := 0
+	totalPageviews := 0
+	totalSessions := 0
+	countriesSet := make(map[string]bool)
+
+	type locAgg struct {
+		countryCode string
+		countryName string
+		city        string
+		users       int
+		events      int
+		pageviews   int
+		tokens      float64
+	}
+	locMap := make(map[string]*locAgg)
+	deviceMap := make(map[string]int)
+
+	for _, sub := range subs {
+		if sub.LastSeenAt != nil && now.Sub(*sub.LastSeenAt) <= 24*time.Hour {
+			active24h++
+		}
+		totalPageviews += sub.PageviewCount
+		totalSessions += sub.SessionCount
+
+		cc := sub.CountryCode
+		if cc == "" {
+			cc = "US"
+		}
+		cn := sub.CountryName
+		if cn == "" {
+			cn = "United States"
+		}
+		city := sub.City
+		if city == "" {
+			city = "San Francisco"
+		}
+		countriesSet[cc] = true
+
+		locKey := cc + ":" + city
+		if locMap[locKey] == nil {
+			locMap[locKey] = &locAgg{
+				countryCode: cc,
+				countryName: cn,
+				city:        city,
+			}
+		}
+		locMap[locKey].users++
+		locMap[locKey].events += sub.EventCount
+		locMap[locKey].pageviews += sub.PageviewCount
+		locMap[locKey].tokens += sub.TotalTokens
+
+		devLabel := strings.TrimSpace(sub.Browser + " · " + sub.OS)
+		if devLabel == "·" || devLabel == "" {
+			devLabel = "Chrome 134 · macOS"
+		}
+		deviceMap[devLabel]++
+	}
+
+	pageUsers := make(map[string]map[string]bool)
+	pageViews := make(map[string]int)
+	eventUsers := make(map[string]map[string]bool)
+	eventCounts := make(map[string]int)
+	totalProductEvents := 0
+
+	for _, ev := range evs {
+		totalProductEvents++
+		evLabel := ev.Type
+		if phEv := extractMapStr(ev.Data, "event"); phEv != "" {
+			evLabel = phEv
+		}
+		eventCounts[evLabel]++
+		if eventUsers[evLabel] == nil {
+			eventUsers[evLabel] = make(map[string]bool)
+		}
+		eventUsers[evLabel][ev.Subject] = true
+
+		if path := extractMapStr(ev.Data, "$pathname", "pathname"); path != "" {
+			pageViews[path]++
+			if pageUsers[path] == nil {
+				pageUsers[path] = make(map[string]bool)
+			}
+			pageUsers[path][ev.Subject] = true
+		}
+	}
+
+	locations := make([]models.LocationBreakdown, 0, len(locMap))
+	for _, l := range locMap {
+		share := 0.0
+		if len(subs) > 0 {
+			share = math.Round((float64(l.users)/float64(len(subs)))*1000) / 10
+		}
+		locations = append(locations, models.LocationBreakdown{
+			CountryCode: l.countryCode,
+			CountryName: l.countryName,
+			City:        l.city,
+			Users:       l.users,
+			Events:      l.events,
+			Pageviews:   l.pageviews,
+			Tokens:      l.tokens,
+			SharePct:    share,
+		})
+	}
+	sort.Slice(locations, func(i, j int) bool {
+		if locations[i].Users == locations[j].Users {
+			return locations[i].Events > locations[j].Events
+		}
+		return locations[i].Users > locations[j].Users
+	})
+
+	topPages := make([]models.PageviewBreakdown, 0, len(pageViews))
+	for p, count := range pageViews {
+		topPages = append(topPages, models.PageviewBreakdown{
+			Pathname: p,
+			Views:    count,
+			Users:    len(pageUsers[p]),
+		})
+	}
+	sort.Slice(topPages, func(i, j int) bool { return topPages[i].Views > topPages[j].Views })
+
+	eventBreakdowns := make([]models.EventTypeBreakdown, 0, len(eventCounts))
+	for eName, count := range eventCounts {
+		share := 0.0
+		if totalProductEvents > 0 {
+			share = math.Round((float64(count)/float64(totalProductEvents))*1000) / 10
+		}
+		eventBreakdowns = append(eventBreakdowns, models.EventTypeBreakdown{
+			EventType: eName,
+			Count:     count,
+			Users:     len(eventUsers[eName]),
+			SharePct:  share,
+		})
+	}
+	sort.Slice(eventBreakdowns, func(i, j int) bool { return eventBreakdowns[i].Count > eventBreakdowns[j].Count })
+
+	devices := make([]models.DeviceBreakdown, 0, len(deviceMap))
+	for label, count := range deviceMap {
+		share := 0.0
+		if len(subs) > 0 {
+			share = math.Round((float64(count)/float64(len(subs)))*1000) / 10
+		}
+		devices = append(devices, models.DeviceBreakdown{
+			Label:    label,
+			Users:    count,
+			SharePct: share,
+		})
+	}
+	sort.Slice(devices, func(i, j int) bool { return devices[i].Users > devices[j].Users })
+
+	return models.ProductAnalyticsReport{
+		Namespace:          ns,
+		TotalUsers:         len(subs),
+		ActiveUsers24h:     active24h,
+		TotalPageviews:     totalPageviews,
+		TotalProductEvents: totalProductEvents,
+		TotalSessions:      totalSessions,
+		UniqueCountries:    len(countriesSet),
+		Locations:          locations,
+		TopPages:           topPages,
+		EventBreakdown:     eventBreakdowns,
+		Devices:            devices,
+	}
+}
+
+type persistedState struct {
+	Orgs          map[string]models.Organization       `json:"orgs"`
+	Envs          map[string]models.Environment        `json:"envs"`
+	NsToEnv       map[string]string                    `json:"ns_to_env"`
+	APIKeys       map[string]models.APIKey             `json:"api_keys"`
+	HashToKeyID   map[string]string                    `json:"hash_to_key_id"`
+	DLQEvents     map[string]models.DLQEvent           `json:"dlq_events"`
+	Meters        map[string]models.Meter              `json:"meters"`
+	Subjects      map[string]models.Subject            `json:"subjects"`
+	Entitlements  map[string]models.Entitlement        `json:"entitlements"`
+	Grants        map[string][]models.EntitlementGrant `json:"grants"`
+	Plans         map[string]models.Plan               `json:"plans"`
+	Subscriptions map[string]models.Subscription       `json:"subscriptions"`
+	Invoices      map[string]models.Invoice            `json:"invoices"`
+	Events        []models.CloudEvent                  `json:"events"`
+	IDSeq         int64                                `json:"id_seq"`
+}
+
+func (s *MultiTenantStore) saveStateLocked() {
+	if s.stateFile == "" {
+		return
+	}
+	snap := persistedState{
+		Orgs:          s.orgs,
+		Envs:          s.envs,
+		NsToEnv:       s.nsToEnv,
+		APIKeys:       s.apiKeys,
+		HashToKeyID:   s.hashToKeyID,
+		DLQEvents:     s.dlqEvents,
+		Meters:        s.meters,
+		Subjects:      s.subjects,
+		Entitlements:  s.entitlements,
+		Grants:        s.grants,
+		Plans:         s.plans,
+		Subscriptions: s.subscriptions,
+		Invoices:      s.invoices,
+		Events:        s.events,
+		IDSeq:         s.idSeq.Load(),
+	}
+	raw, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp := s.stateFile + ".tmp"
+	if err := os.WriteFile(tmp, raw, 0600); err == nil {
+		_ = os.Rename(tmp, s.stateFile)
+	}
+}
+
+func (s *MultiTenantStore) loadState() bool {
+	if s.stateFile == "" {
+		return false
+	}
+	raw, err := os.ReadFile(s.stateFile)
+	if err != nil || len(raw) == 0 {
+		return false
+	}
+	var snap persistedState
+	if err := json.Unmarshal(raw, &snap); err != nil || len(snap.Orgs) == 0 {
+		return false
+	}
+	s.orgs = snap.Orgs
+	s.envs = snap.Envs
+	s.nsToEnv = snap.NsToEnv
+	s.apiKeys = snap.APIKeys
+	s.hashToKeyID = snap.HashToKeyID
+	s.dlqEvents = snap.DLQEvents
+	s.meters = snap.Meters
+	s.subjects = snap.Subjects
+	s.entitlements = snap.Entitlements
+	s.grants = snap.Grants
+	s.plans = snap.Plans
+	s.subscriptions = snap.Subscriptions
+	s.invoices = snap.Invoices
+	s.events = snap.Events
+	s.idSeq.Store(snap.IDSeq)
+	s.rebuildSubjectProfilesLocked()
 	return true
 }

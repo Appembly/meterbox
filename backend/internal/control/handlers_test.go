@@ -293,3 +293,73 @@ func TestAppemblyCyclodeStepIngestionAndPreFlightQuotaGate(t *testing.T) {
 	}
 }
 
+func TestPostHogCaptureUserProfilesAndConsolidatedSnapshot(t *testing.T) {
+	_, handler := setupTestServer()
+
+	ingKey := "mb_ing_live_appembly_cyclode_collector_01"
+
+	// 1. Capture a PostHog $pageview event from a new user profile in Singapore
+	phPayload := map[string]interface{}{
+		"event":       "$pageview",
+		"distinct_id": "usr_mei_singapore",
+		"properties": map[string]interface{}{
+			"display_name":        "Mei Lin (AI Product Lead)",
+			"email":               "mei@appembly.dev",
+			"$pathname":           "/analytics/posthog-profiles",
+			"$geoip_country_code": "SG",
+			"$geoip_country_name": "Singapore",
+			"$geoip_city_name":    "Singapore",
+			"$timezone":           "Asia/Singapore",
+			"$browser":            "Chrome 134",
+			"$os":                 "macOS Sequoia",
+			"$device_type":        "Desktop",
+			"$session_id":         "sess_sg_001",
+		},
+	}
+	rawPH, _ := json.Marshal(phPayload)
+	reqPH := httptest.NewRequest(http.MethodPost, "/api/v1/posthog/capture", bytes.NewReader(rawPH))
+	reqPH.Header.Set("Authorization", "Bearer "+ingKey)
+	recPH := httptest.NewRecorder()
+	handler.ServeHTTP(recPH, reqPH)
+	if recPH.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for PostHog capture, got %d: %s", recPH.Code, recPH.Body.String())
+	}
+
+	// 2. Fetch consolidated snapshot and verify 360° user profile, Cost Intelligence, Grants, and Product Analytics
+	reqSnap := httptest.NewRequest(http.MethodGet, "/api/control/v1/snapshot", nil)
+	reqSnap.Header.Set("X-OpenMeter-Namespace", "ns_live_appembly")
+	recSnap := httptest.NewRecorder()
+	handler.ServeHTTP(recSnap, reqSnap)
+	if recSnap.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK from GET /api/control/v1/snapshot, got %d: %s", recSnap.Code, recSnap.Body.String())
+	}
+
+	var snap models.NamespaceSnapshot
+	if err := json.Unmarshal(recSnap.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("failed to unmarshal NamespaceSnapshot: %v", err)
+	}
+
+	foundMei := false
+	for _, sub := range snap.Subjects {
+		if sub.Key == "usr_mei_singapore" {
+			foundMei = true
+			if sub.CountryCode != "SG" || sub.City != "Singapore" || sub.PageviewCount != 1 {
+				t.Fatalf("expected hydrated Singapore profile with PageviewCount=1, got %+v", sub)
+			}
+		}
+	}
+	if !foundMei {
+		t.Fatalf("expected usr_mei_singapore in snapshot subjects")
+	}
+
+	if snap.CostIntelligence.TotalTokens <= 0 || snap.CostIntelligence.CachedTokens <= 0 || snap.CostIntelligence.ReasoningTokens <= 0 {
+		t.Fatalf("expected non-zero real-time CostIntelligence token dimensions, got %+v", snap.CostIntelligence)
+	}
+	if snap.ProductAnalytics.TotalPageviews <= 0 || len(snap.ProductAnalytics.Locations) == 0 {
+		t.Fatalf("expected populated ProductAnalytics locations and pageviews, got %+v", snap.ProductAnalytics)
+	}
+	if len(snap.Grants) == 0 {
+		t.Fatalf("expected populated priority grants in snapshot")
+	}
+}
+

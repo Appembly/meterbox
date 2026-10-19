@@ -22,6 +22,9 @@ func main() {
 	chEndpoint := envOrDefault("CLICKHOUSE_HTTP_URL", "http://127.0.0.1:18123")
 	redpandaEndpoint := envOrDefault("REDPANDA_PROXY_URL", "http://127.0.0.1:18082")
 	redisAddr := envOrDefault("REDIS_ADDR", "127.0.0.1:16379")
+	if os.Getenv("METERBOX_STATE_FILE") == "" {
+		_ = os.Setenv("METERBOX_STATE_FILE", "/tmp/meterbox_state_v2.json")
+	}
 
 	chClient := clickhouse.NewClient(chEndpoint, "openmeter")
 	multiStore := store.NewMultiTenantStore(chClient, redpandaEndpoint, redisAddr)

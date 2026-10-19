@@ -144,8 +144,8 @@ func isRouteAllowedForScope(method, path string, tc *models.TenantContext) bool 
 	case models.ScopeAdmin:
 		return true
 	case models.ScopeIngest:
-		// Ingest keys can ONLY POST to /api/v1/events
-		return method == http.MethodPost && strings.HasPrefix(path, "/api/v1/events")
+		// Ingest keys can ONLY POST to /api/v1/events or /api/v1/posthog/*
+		return method == http.MethodPost && (strings.HasPrefix(path, "/api/v1/events") || strings.HasPrefix(path, "/api/v1/posthog/"))
 	case models.ScopeEntitlement:
 		// Entitlement check keys can only read entitlement values or mint portal tokens
 		if method == http.MethodGet && strings.Contains(path, "/entitlements/") {
