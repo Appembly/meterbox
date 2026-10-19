@@ -2840,8 +2840,8 @@ export default function MeterboxApp() {
 
                   return (
                     <CostIntelligenceCard
-                      scopeTitle={`${activeOrgName} · ${activeNamespace} Live Ledger`}
-                      report={{
+                      title={`${activeOrgName} · ${activeNamespace} Live Ledger`}
+                      telemetry={{
                         model_id: "claude-3-7-sonnet",
                         model_display_name: "Claude 3.7 Sonnet + Gemini 3.8 Flash",
                         provider: "appembly-runctor",
@@ -2906,7 +2906,7 @@ export default function MeterboxApp() {
                           },
                         ],
                       }}
-                      checkpointState={{
+                      checkpointInfo={{
                         step_index: Math.max(8, rawEvents.length),
                         last_event: "meterbox_cloudevent_committed",
                         last_tool: "POST /api/v1/events (SETNX dedup)",

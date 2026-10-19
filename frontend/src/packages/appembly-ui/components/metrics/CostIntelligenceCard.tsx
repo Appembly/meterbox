@@ -11,9 +11,17 @@ import type { CostTelemetryBreakdown } from '../../types';
 
 export interface CostIntelligenceCardProps {
   title?: string;
+  scopeTitle?: string;
   subtitle?: string;
-  telemetry: CostTelemetryBreakdown;
+  telemetry?: CostTelemetryBreakdown;
+  report?: CostTelemetryBreakdown;
   checkpointInfo?: {
+    step_index?: number;
+    last_event?: string;
+    last_tool?: string | null;
+    checkpointed_at?: string;
+  } | null;
+  checkpointState?: {
     step_index?: number;
     last_event?: string;
     last_tool?: string | null;
@@ -21,6 +29,36 @@ export interface CostIntelligenceCardProps {
   } | null;
   compact?: boolean;
 }
+
+const DEFAULT_TELEMETRY: CostTelemetryBreakdown = {
+  model_id: 'claude-3-7-sonnet',
+  model_display_name: 'Claude 3.7 Sonnet',
+  provider: 'anthropic',
+  tier: 'major',
+  pricing_per_1m: { input: 3.0, cached_input: 0.3, output: 15.0, reasoning: 15.0 },
+  tokens: { total: 0, prompt: 0, cached: 0, reasoning: 0, completion: 0 },
+  cost_usd: {
+    total: 0,
+    input: 0,
+    cached: 0,
+    reasoning: 0,
+    output: 0,
+    baseline_frontier: 0,
+    saved: 0,
+    savings_pct: 0,
+  },
+  efficiency: {
+    score: 95.0,
+    cache_hit_ratio_pct: 0,
+    tool_calls_total: 0,
+    tool_success_rate_pct: 100.0,
+    avg_tokens_per_tool: 0,
+    loc_changed: 0,
+    tokens_per_loc: null,
+    total_tool_duration_ms: 0,
+  },
+  tool_token_breakdown: [],
+};
 
 const formatUsd = (val: number): string => {
   if (!val || val <= 0) return '$0.0000';
@@ -40,13 +78,24 @@ const formatCompactNumber = (num: number): string => {
  * per-step/tool cost economics, context cache hit ratio, and tool-level token burn.
  */
 export const CostIntelligenceCard: React.FC<CostIntelligenceCardProps> = ({
-  title = 'Cost & Token Telemetry',
+  title,
+  scopeTitle,
   subtitle = 'Token consumption anatomy, prefix cache reuse, and tool-level execution burn.',
   telemetry,
+  report,
   checkpointInfo,
+  checkpointState,
   compact = false,
 }) => {
-  const { tokens, cost_usd, efficiency, tool_token_breakdown = [] } = telemetry;
+  const resolvedTitle = title || scopeTitle || 'Cost & Token Telemetry';
+  const resolvedTelemetry = telemetry || report || DEFAULT_TELEMETRY;
+  const resolvedCheckpoint = checkpointInfo ?? checkpointState ?? null;
+  const {
+    tokens = DEFAULT_TELEMETRY.tokens,
+    cost_usd = DEFAULT_TELEMETRY.cost_usd,
+    efficiency = DEFAULT_TELEMETRY.efficiency,
+    tool_token_breakdown = [],
+  } = resolvedTelemetry;
   const totalTok = Math.max(1, tokens.total);
 
   const promptPct = Math.round((tokens.prompt / totalTok) * 100);
@@ -56,7 +105,7 @@ export const CostIntelligenceCard: React.FC<CostIntelligenceCardProps> = ({
 
   const totalInputTok = tokens.prompt + tokens.cached;
   const totalOutputTok = tokens.reasoning + tokens.completion;
-  const stepCount = Math.max(1, efficiency.tool_calls_total || checkpointInfo?.step_index || 1);
+  const stepCount = Math.max(1, efficiency.tool_calls_total || resolvedCheckpoint?.step_index || 1);
   const avgCostPerStep = cost_usd.total / stepCount;
 
   return (
@@ -75,10 +124,10 @@ export const CostIntelligenceCard: React.FC<CostIntelligenceCardProps> = ({
                 compact ? 'text-xs' : 'text-sm'
               } font-bold text-[var(--ui-text-primary,var(--color-fg-bright,#F1F5F9))] leading-snug`}
             >
-              {title}
+              {resolvedTitle}
             </h3>
             <span className="px-2 py-0.5 rounded text-[10.5px] font-mono font-semibold bg-[var(--ui-bg-subtle,var(--color-darker,#21252B))] text-[var(--ui-text-secondary,var(--color-fg,#CBD5E1))] border border-[var(--ui-border,var(--color-border-subtle,#31363F))]">
-              {telemetry.model_display_name || telemetry.model_id}
+              {resolvedTelemetry.model_display_name || resolvedTelemetry.model_id}
             </span>
           </div>
           {!compact && (
@@ -90,9 +139,9 @@ export const CostIntelligenceCard: React.FC<CostIntelligenceCardProps> = ({
 
         {/* Pricing rate summary */}
         <div className="text-[10.5px] font-mono text-[var(--ui-text-muted,var(--color-muted,#5C6370))]">
-          In ${telemetry.pricing_per_1m?.input ?? 0.15}/1M · Cache $
-          {telemetry.pricing_per_1m?.cached_input ?? 0.0375}/1M · Out $
-          {telemetry.pricing_per_1m?.output ?? 0.6}/1M
+          In ${resolvedTelemetry.pricing_per_1m?.input ?? 0.15}/1M · Cache $
+          {resolvedTelemetry.pricing_per_1m?.cached_input ?? 0.0375}/1M · Out $
+          {resolvedTelemetry.pricing_per_1m?.output ?? 0.6}/1M
         </div>
       </div>
 
