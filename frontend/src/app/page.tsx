@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { CostIntelligenceCard } from "../packages/appembly-ui/components/metrics/CostIntelligenceCard";
 import { AppemblyLogo } from "../packages/appembly-ui/components/brand/AppemblyLogo";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6071";
@@ -2778,44 +2777,10 @@ export default function MeterboxApp() {
             )}
 
             {/* ===============================================================
-                2b. AI COST INTELLIGENCE (@appembly/ui CostIntelligenceCard)
+                2b. AI COST INTELLIGENCE & TOKEN ECONOMICS STUDIO
                 =============================================================== */}
             {activeView === "cost-intel" && (
               <>
-                <div className="ws-head">
-                  <div>
-                    <div className="eyebrow">
-                      <span className="eb-dot" />
-                      <span>Appembly Shared FinOps Telemetry</span>
-                      <span className="sep" />
-                      <span className="mono">{activeNamespace}</span>
-                    </div>
-                    <h1>AI Cost Intelligence &amp; Token Economics</h1>
-                    <p className="lede">
-                      Real-time token burn, prefix cache savings, tool invocation attribution, and
-                      crash-safe step checkpoint deduplication across{" "}
-                      <code>Cyclode (:6013)</code>, <code>Swarmteam (:6040)</code>, and{" "}
-                      <code>Valiscale (:6030)</code>.
-                    </p>
-                  </div>
-                  <div className="ws-actions">
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => setActiveView("entitlements")}
-                    >
-                      Quota Guardrails →
-                    </button>
-                    <button
-                      type="button"
-                      className="btn primary"
-                      onClick={() => setActiveView("events")}
-                    >
-                      Emit Step CloudEvent →
-                    </button>
-                  </div>
-                </div>
-
                 {(() => {
                   const rawEvents = telemetry?.recent_events ?? [];
                   const totalMeterTokens = Math.max(
@@ -2837,82 +2802,760 @@ export default function MeterboxApp() {
                     ((promptTok + cachedTok) / 1_000_000) * 3.0 +
                     ((reasonTok + compTok) / 1_000_000) * 15.0;
                   const savedCost = Math.max(0, baselineCost - totalCost);
+                  const savingsPct =
+                    baselineCost > 0 ? ((savedCost / baselineCost) * 100).toFixed(1) : "31.4";
+
+                  const totalToolCalls = Math.max(15, rawEvents.length * 3);
+                  const avgCostPerStep = totalCost / Math.max(1, totalToolCalls);
+                  const cacheHitPct = (
+                    (cachedTok / Math.max(1, promptTok + cachedTok)) *
+                    100
+                  ).toFixed(1);
+
+                  const cachedPctBar = Math.round((cachedTok / totalMeterTokens) * 100);
+                  const promptPctBar = Math.round((promptTok / totalMeterTokens) * 100);
+                  const reasonPctBar = Math.round((reasonTok / totalMeterTokens) * 100);
+                  const outPctBar = Math.max(
+                    4,
+                    100 - cachedPctBar - promptPctBar - reasonPctBar
+                  );
+
+                  const activeSubj =
+                    selectedSubjectKey || subjects[0]?.key || "ws_cyclode_default";
+
+                  const handleSimulateAgentStep = async (replaySameId = false) => {
+                    const stepId = replaySameId
+                      ? `cyclode:${activeNamespace}:step_checkpoint_demo`
+                      : `cyclode:task_${Date.now().toString(36)}:step_${rawEvents.length + 1}`;
+                    const batch = [
+                      {
+                        specversion: "1.0",
+                        id: stepId,
+                        source: "urn:appembly:cyclode:executor",
+                        type: "ai.llm.tokens",
+                        subject: activeSubj,
+                        time: new Date().toISOString(),
+                        data: {
+                          tokens: 4200,
+                          model: "claude-3-7-sonnet",
+                          token_type: "input",
+                          persona: "IssueResolver",
+                          tool: "run_command",
+                        },
+                      },
+                    ];
+                    const res = await fetch(`${API_BASE}/api/v1/events`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "X-OpenMeter-Namespace": activeNamespace,
+                      },
+                      body: JSON.stringify(batch),
+                    });
+                    if (res.ok) {
+                      const d = await res.json();
+                      await fetchEnvData();
+                      await fetchMeterQuery();
+                      await fetchEntitlementEvaluation();
+                      if (d.deduplicated > 0) {
+                        pushToast(
+                          `SETNX Idempotency Guard Triggered`,
+                          `Duplicate checkpoint "${stepId}" dropped (0 double-billing)`,
+                          "warn"
+                        );
+                      } else {
+                        pushToast(
+                          `+4,200 Agent Step Tokens Metered`,
+                          `Subject: ${activeSubj} · Event: ${stepId}`,
+                          "ok"
+                        );
+                      }
+                    }
+                  };
+
+                  const toolRows = [
+                    {
+                      name: "run_command",
+                      persona: "IssueResolver",
+                      calls: Math.max(6, Math.round(totalToolCalls * 0.4)),
+                      tokens: Math.round(totalMeterTokens * 0.42),
+                      avgMs: 356,
+                      passRate: "100%",
+                    },
+                    {
+                      name: "replace_file_content",
+                      persona: "IssueResolver",
+                      calls: Math.max(4, Math.round(totalToolCalls * 0.27)),
+                      tokens: Math.round(totalMeterTokens * 0.31),
+                      avgMs: 370,
+                      passRate: "100%",
+                    },
+                    {
+                      name: "view_file",
+                      persona: "ArchitectPod",
+                      calls: Math.max(5, Math.round(totalToolCalls * 0.33)),
+                      tokens: Math.round(totalMeterTokens * 0.27),
+                      avgMs: 240,
+                      passRate: "100%",
+                    },
+                  ];
+
+                  const modelRows = [
+                    {
+                      model: "claude-3-7-sonnet",
+                      tier: "Major",
+                      provider: "Anthropic",
+                      inputRate: "$3.00",
+                      cacheRate: "$0.30",
+                      outputRate: "$15.00",
+                      tokens: Math.round(totalMeterTokens * 0.56),
+                      cacheHit: "51.4%",
+                      cost: totalCost * 0.68,
+                    },
+                    {
+                      model: "gemini-3.8-flash",
+                      tier: "Minor",
+                      provider: "Google",
+                      inputRate: "$0.30",
+                      cacheRate: "$0.075",
+                      outputRate: "$1.20",
+                      tokens: Math.round(totalMeterTokens * 0.31),
+                      cacheHit: "44.0%",
+                      cost: totalCost * 0.19,
+                    },
+                    {
+                      model: "deepseek-v4-pro",
+                      tier: "Frontier",
+                      provider: "DeepSeek",
+                      inputRate: "$0.55",
+                      cacheRate: "$0.14",
+                      outputRate: "$2.19",
+                      tokens: Math.round(totalMeterTokens * 0.13),
+                      cacheHit: "39.8%",
+                      cost: totalCost * 0.13,
+                    },
+                  ];
 
                   return (
-                    <CostIntelligenceCard
-                      title={`${activeOrgName} · ${activeNamespace} Live Ledger`}
-                      telemetry={{
-                        model_id: "claude-3-7-sonnet",
-                        model_display_name: "Claude 3.7 Sonnet + Gemini 3.8 Flash",
-                        provider: "appembly-runctor",
-                        tier: "major",
-                        pricing_per_1m: {
-                          input: 3.0,
-                          cached_input: 0.3,
-                          output: 15.0,
-                          reasoning: 15.0,
-                        },
-                        tokens: {
-                          total: totalMeterTokens,
-                          prompt: promptTok,
-                          cached: cachedTok,
-                          reasoning: reasonTok,
-                          completion: compTok,
-                        },
-                        cost_usd: {
-                          total: Number(totalCost.toFixed(6)),
-                          input: Number(inCost.toFixed(6)),
-                          cached: Number(cacheCost.toFixed(6)),
-                          reasoning: Number(reasonCost.toFixed(6)),
-                          output: Number(outCost.toFixed(6)),
-                          baseline_frontier: Number(baselineCost.toFixed(6)),
-                          saved: Number(savedCost.toFixed(6)),
-                          savings_pct:
-                            baselineCost > 0
-                              ? Number(((savedCost / baselineCost) * 100).toFixed(1))
-                              : 31.4,
-                        },
-                        efficiency: {
-                          score: 94.6,
-                          cache_hit_ratio_pct: 47.2,
-                          tool_calls_total: Math.max(12, rawEvents.length * 3),
-                          tool_success_rate_pct: 98.4,
-                          avg_tokens_per_tool: 1840,
-                          loc_changed: 412,
-                          tokens_per_loc: Number((totalMeterTokens / 412).toFixed(1)),
-                          total_tool_duration_ms: 4820,
-                        },
-                        tool_token_breakdown: [
-                          {
-                            tool_name: "run_command",
-                            calls: 6,
-                            tokens: Math.round(totalMeterTokens * 0.42),
-                            errors: 0,
-                            duration_ms: 2140,
-                          },
-                          {
-                            tool_name: "replace_file_content",
-                            calls: 4,
-                            tokens: Math.round(totalMeterTokens * 0.31),
-                            errors: 0,
-                            duration_ms: 1480,
-                          },
-                          {
-                            tool_name: "view_file",
-                            calls: 5,
-                            tokens: Math.round(totalMeterTokens * 0.27),
-                            errors: 0,
-                            duration_ms: 1200,
-                          },
-                        ],
-                      }}
-                      checkpointInfo={{
-                        step_index: Math.max(8, rawEvents.length),
-                        last_event: "meterbox_cloudevent_committed",
-                        last_tool: "POST /api/v1/events (SETNX dedup)",
-                        checkpointed_at: new Date().toISOString(),
-                      }}
-                    />
+                    <>
+                      <div className="ws-head">
+                        <div>
+                          <div className="eyebrow">
+                            <span className="eb-dot" />
+                            <span>Appembly Shared FinOps Telemetry</span>
+                            <span className="sep" />
+                            <span className="mono">{activeNamespace}</span>
+                          </div>
+                          <h1>AI Cost Intelligence &amp; Token Economics</h1>
+                          <p className="lede">
+                            Real-time token anatomy, prefix cache savings, tool invocation burn, and
+                            crash-safe step checkpoint deduplication across{" "}
+                            <code>Cyclode (:6013)</code>, <code>Swarmteam (:6040)</code>, and{" "}
+                            <code>Valiscale (:6030)</code>.
+                          </p>
+                        </div>
+                        <div className="ws-actions">
+                          <button
+                            type="button"
+                            className="btn"
+                            onClick={() => handleSimulateAgentStep(true)}
+                            title="Send the exact same checkpoint ID twice to verify Redis SETNX deduplication"
+                          >
+                            Test Checkpoint Dedup (SETNX)
+                          </button>
+                          <button
+                            type="button"
+                            className="btn primary"
+                            onClick={() => handleSimulateAgentStep(false)}
+                          >
+                            + Simulate Live Agent Step (+4.2k tok)
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 4 Top KPI Summary Cards with Inline SVG Sparklines */}
+                      <div className="cards">
+                        <div className="card">
+                          <div className="card-head">
+                            <div className="eyebrow">Attributed Token Spend</div>
+                            <span className="chip ok mono">{activeNamespace}</span>
+                          </div>
+                          <div className="card-stat-row">
+                            <div className="stat">${totalCost.toFixed(4)}</div>
+                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
+                              <path
+                                d="M2 24L16 20L30 18L44 13L58 10L76 5"
+                                stroke="var(--primary)"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <p>
+                            {totalMeterTokens.toLocaleString()} total tokens across{" "}
+                            {subjects.length || 3} active subjects
+                          </p>
+                          <div className="meta">
+                            <span className="mono">
+                              In: ${(inCost + cacheCost).toFixed(4)}
+                            </span>
+                            <span className="mono">
+                              Out: ${(reasonCost + outCost).toFixed(4)}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="card">
+                          <div className="card-head">
+                            <div className="eyebrow">Avg Cost / Tool Step</div>
+                            <span className="chip mono">{totalToolCalls} steps</span>
+                          </div>
+                          <div className="card-stat-row">
+                            <div className="stat">${avgCostPerStep.toFixed(4)}</div>
+                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
+                              <path
+                                d="M2 18L18 16L32 19L48 14L62 15L76 11"
+                                stroke="var(--ok)"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <p>Checkpointed tool &amp; reasoning turns</p>
+                          <div className="meta">
+                            <span>Pass rate: 98.4%</span>
+                            <span className="mono">
+                              {Math.round(totalMeterTokens / totalToolCalls).toLocaleString()} tok/step
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="card">
+                          <div className="card-head">
+                            <div className="eyebrow">Prefix Cache &amp; Routing Savings</div>
+                            <span className="chip ok mono">-{savingsPct}%</span>
+                          </div>
+                          <div className="card-stat-row">
+                            <div className="stat" style={{ color: "var(--ok)" }}>
+                              ${savedCost.toFixed(4)}
+                            </div>
+                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
+                              <path
+                                d="M2 22L18 19L34 15L50 11L64 8L76 4"
+                                stroke="var(--ok)"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <p>Saved vs. uncached frontier baseline (${baselineCost.toFixed(4)})</p>
+                          <div className="meta">
+                            <span className="mono">Cache Hit: {cacheHitPct}%</span>
+                            <span className="mono">{cachedTok.toLocaleString()} cached tok</span>
+                          </div>
+                        </div>
+
+                        <div
+                          className="card clickable"
+                          onClick={() => setActiveView("entitlements")}
+                        >
+                          <div className="card-head">
+                            <div className="eyebrow">Remaining Token Quota</div>
+                            <span className="chip ok mono">
+                              {entitlementCheck?.cache_source || "HIT"} ·{" "}
+                              {entitlementCheck?.latency_us ?? telemetry?.avg_check_latency_us ?? 180} µs
+                            </span>
+                          </div>
+                          <div className="card-stat-row">
+                            <div className="stat">
+                              {(
+                                (entitlementCheck?.remaining ?? 5466780) / 1_000_000
+                              ).toFixed(2)}
+                              M
+                            </div>
+                            <svg className="sparkline" viewBox="0 0 78 28" fill="none">
+                              <path
+                                d="M2 8L18 9L34 11L50 12L64 14L76 16"
+                                stroke="var(--primary)"
+                                strokeWidth="2.2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+                          <p>Priority credit grant waterfall active</p>
+                          <div className="meta">
+                            <span className="mono">Subject: {activeSubj}</span>
+                            <span>{ telemetry?.deduplicated_hits ?? 0 } dedup hits</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Token Consumption Anatomy Stacked Bar + Breakdown Panel */}
+                      <div className="panel" style={{ marginBottom: 20 }}>
+                        <h3>
+                          <span className="title-left">
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                            >
+                              <rect x="3" y="4" width="18" height="16" rx="2" />
+                              <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            Token Consumption Anatomy &amp; Multi-Tier Model Economics
+                          </span>
+                          <span className="chip mono">
+                            412 LOC Modified · {(totalMeterTokens / 412).toFixed(1)} tok/LOC
+                          </span>
+                        </h3>
+
+                        {/* 4-Segment Stacked Bar */}
+                        <div
+                          style={{
+                            display: "flex",
+                            height: 12,
+                            width: "100%",
+                            borderRadius: 99,
+                            overflow: "hidden",
+                            background: "var(--surface-subtle)",
+                            border: "1px solid var(--border)",
+                            marginBottom: 14,
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: `${cachedPctBar}%`,
+                              background: "var(--ok)",
+                            }}
+                            title={`Cached Context: ${cachedTok.toLocaleString()} tok`}
+                          />
+                          <div
+                            style={{
+                              width: `${promptPctBar}%`,
+                              background: "var(--info)",
+                            }}
+                            title={`Prompt Input: ${promptTok.toLocaleString()} tok`}
+                          />
+                          <div
+                            style={{
+                              width: `${reasonPctBar}%`,
+                              background: "#8B5CF6",
+                            }}
+                            title={`Reasoning: ${reasonTok.toLocaleString()} tok`}
+                          />
+                          <div
+                            style={{
+                              width: `${outPctBar}%`,
+                              background: "var(--warn)",
+                            }}
+                            title={`Completion Output: ${compTok.toLocaleString()} tok`}
+                          />
+                        </div>
+
+                        {/* 4 Segment Legend Pills */}
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+                            gap: 12,
+                            marginBottom: 18,
+                          }}
+                        >
+                          <div
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: 10,
+                              background: "var(--surface-subtle)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                fontSize: 11.5,
+                                color: "var(--muted-foreground)",
+                              }}
+                            >
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: "var(--ok)",
+                                  }}
+                                />
+                                Cached Context ({cachedPctBar}%)
+                              </span>
+                              <span className="mono">$0.30/1M</span>
+                            </div>
+                            <div
+                              className="mono"
+                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
+                            >
+                              {cachedTok.toLocaleString()} tok{" "}
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color: "var(--muted-foreground)",
+                                }}
+                              >
+                                (${cacheCost.toFixed(4)})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: 10,
+                              background: "var(--surface-subtle)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                fontSize: 11.5,
+                                color: "var(--muted-foreground)",
+                              }}
+                            >
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: "var(--info)",
+                                  }}
+                                />
+                                Prompt Input ({promptPctBar}%)
+                              </span>
+                              <span className="mono">$3.00/1M</span>
+                            </div>
+                            <div
+                              className="mono"
+                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
+                            >
+                              {promptTok.toLocaleString()} tok{" "}
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color: "var(--muted-foreground)",
+                                }}
+                              >
+                                (${inCost.toFixed(4)})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: 10,
+                              background: "var(--surface-subtle)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                fontSize: 11.5,
+                                color: "var(--muted-foreground)",
+                              }}
+                            >
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: "#8B5CF6",
+                                  }}
+                                />
+                                Reasoning ({reasonPctBar}%)
+                              </span>
+                              <span className="mono">$15.00/1M</span>
+                            </div>
+                            <div
+                              className="mono"
+                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
+                            >
+                              {reasonTok.toLocaleString()} tok{" "}
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color: "var(--muted-foreground)",
+                                }}
+                              >
+                                (${reasonCost.toFixed(4)})
+                              </span>
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: 10,
+                              background: "var(--surface-subtle)",
+                              border: "1px solid var(--border)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                fontSize: 11.5,
+                                color: "var(--muted-foreground)",
+                              }}
+                            >
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                                <span
+                                  style={{
+                                    width: 8,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: "var(--warn)",
+                                  }}
+                                />
+                                Output ({outPctBar}%)
+                              </span>
+                              <span className="mono">$15.00/1M</span>
+                            </div>
+                            <div
+                              className="mono"
+                              style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}
+                            >
+                              {compTok.toLocaleString()} tok{" "}
+                              <span
+                                style={{
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  color: "var(--muted-foreground)",
+                                }}
+                              >
+                                (${outCost.toFixed(4)})
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Model Rate-Card & Routing Attribution Table */}
+                        <div className="table-wrap">
+                          <table className="cmp">
+                            <thead>
+                              <tr>
+                                <th>Model Identifier</th>
+                                <th>Routing Tier</th>
+                                <th>Input / Cached / Output (per 1M)</th>
+                                <th>Prefix Cache Hit</th>
+                                <th className="num">Metered Tokens</th>
+                                <th className="num">Attributed Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {modelRows.map((m) => (
+                                <tr key={m.model}>
+                                  <td className="mono" style={{ fontWeight: 700 }}>
+                                    {m.model}
+                                  </td>
+                                  <td>
+                                    <span className="chip mono">{m.tier}</span>
+                                  </td>
+                                  <td className="mono" style={{ fontSize: 12 }}>
+                                    {m.inputRate} / {m.cacheRate} / {m.outputRate}
+                                  </td>
+                                  <td>
+                                    <span className="chip ok mono">{m.cacheHit}</span>
+                                  </td>
+                                  <td className="num mono">{m.tokens.toLocaleString()}</td>
+                                  <td className="num mono" style={{ fontWeight: 700 }}>
+                                    ${m.cost.toFixed(4)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Two-Column Tool Token Breakdown & Subject/Checkpoint Attribution */}
+                      <div className="grid2">
+                        <div className="panel">
+                          <h3>
+                            <span className="title-left">
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                              </svg>
+                              Tool-Level Token Burn &amp; Latency
+                            </span>
+                            <span className="chip mono">{totalToolCalls} invocations</span>
+                          </h3>
+                          <div className="table-wrap">
+                            <table className="cmp">
+                              <thead>
+                                <tr>
+                                  <th>Tool Name</th>
+                                  <th>Calls</th>
+                                  <th>Avg Latency</th>
+                                  <th>Token Share</th>
+                                  <th className="num">Tokens (USD)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {toolRows.map((tr) => {
+                                  const sharePct = Math.round(
+                                    (tr.tokens / Math.max(1, totalMeterTokens)) * 100
+                                  );
+                                  const toolUsd =
+                                    (tr.tokens / Math.max(1, totalMeterTokens)) * totalCost;
+                                  return (
+                                    <tr key={tr.name}>
+                                      <td>
+                                        <code>{tr.name}</code>
+                                      </td>
+                                      <td className="mono">{tr.calls}×</td>
+                                      <td className="mono" style={{ fontSize: 12 }}>
+                                        {tr.avgMs} ms
+                                      </td>
+                                      <td style={{ width: 130 }}>
+                                        <div className="bar" style={{ margin: 0 }}>
+                                          <i style={{ width: `${sharePct}%` }} />
+                                        </div>
+                                      </td>
+                                      <td className="num mono" style={{ fontWeight: 600 }}>
+                                        {tr.tokens.toLocaleString()}{" "}
+                                        <span
+                                          style={{
+                                            color: "var(--muted-foreground)",
+                                            fontWeight: 400,
+                                          }}
+                                        >
+                                          (${toolUsd.toFixed(4)})
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        <div className="panel">
+                          <h3>
+                            <span className="title-left">
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                              >
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                              </svg>
+                              Workspace Attribution &amp; Checkpoint Dedup
+                            </span>
+                            <span className="chip ok mono">SETNX Active</span>
+                          </h3>
+                          <div className="table-wrap">
+                            <table className="cmp">
+                              <thead>
+                                <tr>
+                                  <th>Subject / Product</th>
+                                  <th>Checkpoint Guard</th>
+                                  <th className="num">Share</th>
+                                  <th className="num">Attributed Spend</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(subjects.length > 0
+                                  ? subjects
+                                  : [
+                                      {
+                                        id: "s1",
+                                        namespace: activeNamespace,
+                                        key: "ws_cyclode_default",
+                                        display_name: "Cyclode Workstation (:6013)",
+                                        created_at: "",
+                                      },
+                                      {
+                                        id: "s2",
+                                        namespace: activeNamespace,
+                                        key: "ws_swarmteam_pods",
+                                        display_name: "Swarmteam DAG (:6040)",
+                                        created_at: "",
+                                      },
+                                      {
+                                        id: "s3",
+                                        namespace: activeNamespace,
+                                        key: "ws_valiscale_studio",
+                                        display_name: "Valiscale Studio (:6030)",
+                                        created_at: "",
+                                      },
+                                    ]
+                                ).map((s, idx) => {
+                                  const weights = [0.54, 0.31, 0.15];
+                                  const w = weights[idx % weights.length];
+                                  const subTok = Math.round(totalMeterTokens * w);
+                                  const subCost = totalCost * w;
+                                  return (
+                                    <tr
+                                      key={s.key}
+                                      onClick={() => setSelectedSubjectKey(s.key)}
+                                      className={
+                                        selectedSubjectKey === s.key ? "selected-row" : ""
+                                      }
+                                      style={{ cursor: "pointer" }}
+                                    >
+                                      <td>
+                                        <div style={{ fontWeight: 700 }} className="mono">
+                                          {s.key}
+                                        </div>
+                                        <div
+                                          style={{
+                                            fontSize: 11.5,
+                                            color: "var(--muted-foreground)",
+                                          }}
+                                        >
+                                          {s.display_name}
+                                        </div>
+                                      </td>
+                                      <td>
+                                        <span className="chip ok mono">step_id dedup</span>
+                                      </td>
+                                      <td className="num mono">{subTok.toLocaleString()} tok</td>
+                                      <td className="num mono" style={{ fontWeight: 700 }}>
+                                        ${subCost.toFixed(4)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      </div>
+                    </>
                   );
                 })()}
               </>
