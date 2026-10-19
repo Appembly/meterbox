@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <rect x="4" y="4" width="92" height="92" rx="22" fill="#111618" />
+  <g stroke="#F6F7F5" stroke-width="5.2" stroke-linecap="butt" stroke-linejoin="miter" stroke-miterlimit="10">
+    <!-- Left ascending diagonal & upper triangle right leg -->
+    <polyline points="24,74 50,29 63,51.5" />
+    <!-- Right descending diagonal & lower triangle left leg -->
+    <polyline points="76,29 50,74 37,51.5" />
+    <!-- Central horizontal bar -->
+    <line x1="37" y1="51.5" x2="63" y2="51.5" />
+  </g>
+</svg>

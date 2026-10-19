@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+:root,
+[data-theme="light"] {
+  /* Appembly Official Brand Palette */
+  --appembly-graphite: #111618;
+  --appembly-offwhite: #F6F7F5;
+  --appembly-sage: #4E8067;
+  --appembly-sage-hover: #3F6B55;
+  --appembly-sage-soft: rgba(78, 128, 103, 0.12);
+  --appembly-silver: #A9AFAB;
+
+  /* Semantic Surface & Text Tokens (Light Mode — Off White #F6F7F5 Canvas) */
+  --ui-bg-canvas: #F6F7F5;
+  --ui-bg-sidebar: #F6F7F5;
+  --ui-bg-surface: #FFFFFF;
+  --ui-bg-subtle: #ECEEEB;
+  --ui-bg-hover: #EEF0ED;
+  --ui-border: #E2E5E2;
+  --ui-border-strong: #CFD4D0;
+  --ui-text-primary: #111618;
+  --ui-text-secondary: #525956;
+  --ui-text-muted: #7C8380;
+  --ui-accent: #4E8067;
+  --ui-accent-fg: #F6F7F5;
+
+  /* Aliases */
+  --appembly-bg: var(--ui-bg-canvas);
+  --appembly-surface: var(--ui-bg-surface);
+  --appembly-border: var(--ui-border);
+  --appembly-text: var(--ui-text-primary);
+  --appembly-text-muted: var(--ui-text-secondary);
+}
+
+[data-theme="dark"] {
+  /* Semantic Surface & Text Tokens (Dark Mode — Graphite #111618 Canvas) */
+  --ui-bg-canvas: #111618;
+  --ui-bg-sidebar: #0D1113;
+  --ui-bg-surface: #171E21;
+  --ui-bg-subtle: #1E272B;
+  --ui-bg-hover: #212B2F;
+  --ui-border: #263136;
+  --ui-border-strong: #344248;
+  --ui-text-primary: #F6F7F5;
+  --ui-text-secondary: #C5CAC7;
+  --ui-text-muted: #A9AFAB;
+  --ui-accent: #5C9679;
+  --ui-accent-fg: #111618;
+
+  /* Aliases */
+  --appembly-bg: var(--ui-bg-canvas);
+  --appembly-surface: var(--ui-bg-surface);
+  --appembly-border: var(--ui-border);
+  --appembly-text: var(--ui-text-primary);
+  --appembly-text-muted: var(--ui-text-secondary);
+}
+
+body {
+  background-color: var(--ui-bg-canvas);
+  color: var(--ui-text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Plus Jakarta Sans", "Segoe UI", Roboto, sans-serif;
+}
+
+/* Smooth subtle scrollbars */
+.appembly-scrollbar::-webkit-scrollbar,
+.apporay-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.appembly-scrollbar::-webkit-scrollbar-track,
+.apporay-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.appembly-scrollbar::-webkit-scrollbar-thumb,
+.apporay-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(169, 175, 171, 0.35);
+  border-radius: 9999px;
+}
+.appembly-scrollbar::-webkit-scrollbar-thumb:hover,
+.apporay-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(78, 128, 103, 0.55);
+}

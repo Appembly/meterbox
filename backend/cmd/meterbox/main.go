@@ -18,7 +18,7 @@ import (
 )
 
 func main() {
-	preferredAddr := envOrDefault("METERBOX_ADDR", ":8888")
+	preferredAddr := envOrDefault("METERBOX_ADDR", ":6071")
 	chEndpoint := envOrDefault("CLICKHOUSE_HTTP_URL", "http://127.0.0.1:18123")
 	redpandaEndpoint := envOrDefault("REDPANDA_PROXY_URL", "http://127.0.0.1:18082")
 	redisAddr := envOrDefault("REDIS_ADDR", "127.0.0.1:16379")
@@ -47,6 +47,16 @@ func main() {
 		}
 	}()
 
+	// Companion listener on :8888 for legacy/CLI callers when primary is :6071
+	if !strings.HasSuffix(boundAddr, ":8888") {
+		if legacyLn, err := net.Listen("tcp", ":8888"); err == nil {
+			go func() {
+				log.Printf("[Meterbox] Companion Edge Gateway listener active on :8888 (http://localhost:8888)")
+				_ = httpServer.Serve(legacyLn)
+			}()
+		}
+	}
+
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
@@ -57,7 +67,7 @@ func main() {
 }
 
 func listenWithFallback(preferred string) (net.Listener, string, error) {
-	candidates := []string{preferred, ":8888", ":8889", ":8090", ":8091", ":0"}
+	candidates := []string{preferred, ":6071", ":8888", ":8889", ":8090", ":8091", ":0"}
 	var lastErr error
 	for _, addr := range candidates {
 		ln, err := net.Listen("tcp", addr)

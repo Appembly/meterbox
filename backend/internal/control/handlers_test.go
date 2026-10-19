@@ -231,3 +231,65 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 		t.Fatalf("expected hybrid invoice total > base price (19900 cents) and non-empty Stripe ID, got %+v", inv)
 	}
 }
+
+func TestAppemblyCyclodeStepIngestionAndPreFlightQuotaGate(t *testing.T) {
+	_, handler := setupTestServer()
+
+	entKey := "mb_ent_live_appembly_cyclode_quota_01"
+	ingKey := "mb_ing_live_appembly_cyclode_collector_01"
+
+	// 1. Pre-flight quota check for Cyclode workstation (`ws_cyclode_default`)
+	reqQuota := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/ws_cyclode_default/entitlements/ai_token_allowance/value", nil)
+	reqQuota.Header.Set("Authorization", "Bearer "+entKey)
+	recQuota := httptest.NewRecorder()
+	handler.ServeHTTP(recQuota, reqQuota)
+	if recQuota.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for Cyclode pre-flight quota check, got %d: %s", recQuota.Code, recQuota.Body.String())
+	}
+	var beforeVal models.EntitlementValue
+	_ = json.Unmarshal(recQuota.Body.Bytes(), &beforeVal)
+	if !beforeVal.HasAccess || beforeVal.Namespace != "ns_live_appembly" {
+		t.Fatalf("expected HasAccess=true in ns_live_appembly, got %+v", beforeVal)
+	}
+
+	// 2. Emit a deterministic Cyclode step checkpoint CloudEvent twice (simulating crash auto-resume)
+	stepEv := map[string]interface{}{
+		"specversion": "1.0",
+		"id":          "cyclode:task_demo_01:step:3:tool_end",
+		"source":      "urn:appembly:cyclode:executor",
+		"type":        "ai.llm.tokens",
+		"subject":     "ws_cyclode_default",
+		"data": map[string]interface{}{
+			"tokens":     2400,
+			"model":      "claude-3-7-sonnet",
+			"token_type": "input",
+			"persona":    "IssueResolver",
+			"tool":       "run_command",
+		},
+	}
+	rawBatch, _ := json.Marshal([]interface{}{stepEv, stepEv})
+	reqIng := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader(rawBatch))
+	reqIng.Header.Set("Authorization", "Bearer "+ingKey)
+	recIng := httptest.NewRecorder()
+	handler.ServeHTTP(recIng, reqIng)
+	if recIng.Code != http.StatusAccepted {
+		t.Fatalf("expected 202 Accepted for Cyclode step ingest, got %d: %s", recIng.Code, recIng.Body.String())
+	}
+	var ingRes models.IngestResult
+	_ = json.Unmarshal(recIng.Body.Bytes(), &ingRes)
+	if ingRes.Accepted != 1 || ingRes.Deduplicated != 1 {
+		t.Fatalf("expected Accepted=1, Deduplicated=1 on checkpoint replay, got %+v", ingRes)
+	}
+
+	// 3. Re-evaluate quota and verify priority grant burndown by exactly 2400 tokens
+	reqQuotaAfter := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/ws_cyclode_default/entitlements/ai_token_allowance/value", nil)
+	reqQuotaAfter.Header.Set("Authorization", "Bearer "+entKey)
+	recQuotaAfter := httptest.NewRecorder()
+	handler.ServeHTTP(recQuotaAfter, reqQuotaAfter)
+	var afterVal models.EntitlementValue
+	_ = json.Unmarshal(recQuotaAfter.Body.Bytes(), &afterVal)
+	if afterVal.UsageInPeriod != beforeVal.UsageInPeriod+2400 {
+		t.Fatalf("expected usage to increase by 2400 (from %v to %v), got %v", beforeVal.UsageInPeriod, beforeVal.UsageInPeriod+2400, afterVal.UsageInPeriod)
+	}
+}
+

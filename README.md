@@ -95,6 +95,9 @@ Meterbox/
 ├── infra/
 │   ├── clickhouse/init-db.sql           # Multi-tenant ClickHouse MergeTree & Materialized View DDL
 │   └── postgres/init-db.sql             # Control Plane PostgreSQL schema with Row-Level Security (RLS)
+├── simulator/
+│   ├── mix.exs                          # Zero-dependency Elixir/OTP continuous workload & chaos simulator
+│   └── lib/meterbox_sim/                # CustomerWorker, EntitlementGuard, ChaosWorker & UsageAuditor
 ├── docker-compose.yml                   # Postgres 16, Redis 7.4, ClickHouse 24.8 & Redpanda v24.2
 └── Makefile                             # Developer workflow targets
 ```
@@ -103,9 +106,10 @@ Meterbox/
 
 ## Quickstart
 
-### 1. Run Automated Backend Test Suite
+### 1. Run Automated Backend & Simulator Test Suites
 ```bash
 make test
+make test-sim
 ```
 
 ### 2. Start Backing Infrastructure (Optional Docker Compose)
@@ -124,6 +128,12 @@ make dev-backend
 make dev-frontend
 ```
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 5. Run the Elixir/OTP Continuous Workload & Chaos Simulator
+With `:8888` running, start the OTP supervision tree (`MeterboxSim`) to continuously stream multi-tenant CloudEvents (`ai.llm.tokens`, `api.request`, `infra.gpu.seconds`), perform sub-5ms pre-flight entitlement checks with automatic credit grant top-ups, inject Redis `SETNX` duplicate probes + `bulk` lane bursts + DLQ auto-repairs, and print live ClickHouse rollup & Stripe billing audit reports:
+```bash
+make sim
+```
 
 ---
 

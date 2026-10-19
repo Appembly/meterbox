@@ -143,7 +143,65 @@ func (s *MultiTenantStore) seedDefaultPlatform() {
 	}
 	s.meters[dogfoodMeter.Namespace+":"+dogfoodMeter.Slug] = dogfoodMeter
 
-	// 2. Demo Customer Organization: Acme AI Corp
+	// 2. Primary Appembly Organization: Appembly Autonomous Suite
+	appemblyOrg := models.Organization{
+		ID:               "org_appembly",
+		Name:             "Appembly Autonomous Suite",
+		Slug:             "appembly",
+		PlanTier:         "enterprise",
+		StripeCustomerID: "cus_stripe_appembly_01",
+		BillingEmail:     "finops@appembly.dev",
+		CreatedAt:        now.Add(-2 * time.Second),
+	}
+	s.orgs[appemblyOrg.ID] = appemblyOrg
+
+	s.subjects[models.InternalDogfoodNamespace+":"+appemblyOrg.ID] = models.Subject{
+		ID:               "sub_dogfood_appembly",
+		Namespace:        models.InternalDogfoodNamespace,
+		Key:              appemblyOrg.ID,
+		DisplayName:      appemblyOrg.Name,
+		Email:            appemblyOrg.BillingEmail,
+		StripeCustomerID: appemblyOrg.StripeCustomerID,
+		Metadata:         map[string]string{"tier": appemblyOrg.PlanTier},
+		CreatedAt:        now,
+	}
+
+	appProdEnv := models.Environment{
+		ID:                 "env_live_appembly",
+		OrgID:              appemblyOrg.ID,
+		Name:               "Production",
+		Slug:               "production",
+		Type:               "production",
+		OpenMeterNamespace: "ns_live_appembly",
+		RateLimitRPS:       5000,
+		RetentionDays:      730,
+		CreatedAt:          now,
+	}
+	appSandboxEnv := models.Environment{
+		ID:                 "env_test_appembly",
+		OrgID:              appemblyOrg.ID,
+		Name:               "Sandbox",
+		Slug:               "sandbox",
+		Type:               "sandbox",
+		OpenMeterNamespace: "ns_test_appembly",
+		RateLimitRPS:       1000,
+		RetentionDays:      90,
+		CreatedAt:          now,
+	}
+	s.envs[appProdEnv.ID] = appProdEnv
+	s.nsToEnv[appProdEnv.OpenMeterNamespace] = appProdEnv.ID
+	s.envs[appSandboxEnv.ID] = appSandboxEnv
+	s.nsToEnv[appSandboxEnv.OpenMeterNamespace] = appSandboxEnv.ID
+
+	s.createDeterministicKey(appemblyOrg.ID, appProdEnv.ID, appProdEnv.OpenMeterNamespace, "Cyclode & Runctor Step Ingest Collector", models.ScopeIngest, "mb_ing_live_appembly_cyclode_collector_01")
+	s.createDeterministicKey(appemblyOrg.ID, appProdEnv.ID, appProdEnv.OpenMeterNamespace, "Cyclode Edge Pre-Flight Quota Gate", models.ScopeEntitlement, "mb_ent_live_appembly_cyclode_quota_01")
+	s.createDeterministicKey(appemblyOrg.ID, appProdEnv.ID, appProdEnv.OpenMeterNamespace, "Appembly Control Plane Admin Key", models.ScopeAdmin, "mb_sk_live_appembly_admin_key_01")
+	s.createDeterministicKey(appemblyOrg.ID, appSandboxEnv.ID, appSandboxEnv.OpenMeterNamespace, "Appembly Sandbox Admin Key", models.ScopeAdmin, "mb_sk_test_appembly_admin_key_01")
+
+	s.seedAppemblyNamespaceEntities("ns_live_appembly", periodStart, now)
+	s.seedAppemblyNamespaceEntities("ns_test_appembly", periodStart, now)
+
+	// 3. Demo Customer Organization: Acme AI Corp
 	acmeOrg := models.Organization{
 		ID:               "org_acme_ai",
 		Name:             "Acme AI Corp",
@@ -225,6 +283,235 @@ func (s *MultiTenantStore) createDeterministicKey(orgID, envID, ns, name string,
 	}
 	s.apiKeys[id] = k
 	s.hashToKeyID[hash] = id
+}
+
+func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart, now time.Time) {
+	mTokens := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "llm_tokens_total",
+		Name:          "LLM Tokens Consumed (Cyclode / Runctor)",
+		Description:   "Input, cached, reasoning, and output tokens across autonomous agent turns",
+		Aggregation:   models.AggregationSum,
+		EventType:     "ai.llm.tokens",
+		ValueProperty: "$.tokens",
+		GroupBy:       map[string]string{"model": "$.model", "type": "$.token_type", "persona": "$.persona", "tool": "$.tool"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
+	mTools := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "agent_tool_calls",
+		Name:          "Autonomous Tool Invocations",
+		Description:   "Checkpointed tool executions across Cyclode and Swarmteam pods",
+		Aggregation:   models.AggregationCount,
+		EventType:     "ai.agent.tool_call",
+		ValueProperty: "",
+		GroupBy:       map[string]string{"tool": "$.tool", "persona": "$.persona"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
+	mSandbox := models.Meter{
+		ID:            s.NextID("mtr"),
+		Namespace:     ns,
+		Slug:          "sandbox_compute_seconds",
+		Name:          "Sandbox Execution Seconds",
+		Description:   "Isolated Docker & Git-worktree execution duration in seconds",
+		Aggregation:   models.AggregationSum,
+		EventType:     "infra.sandbox.seconds",
+		ValueProperty: "$.duration_sec",
+		GroupBy:       map[string]string{"runtime": "$.runtime"},
+		WindowSize:    "HOUR",
+		CreatedAt:     now,
+	}
+	s.meters[ns+":"+mTokens.Slug] = mTokens
+	s.meters[ns+":"+mTools.Slug] = mTools
+	s.meters[ns+":"+mSandbox.Slug] = mSandbox
+
+	subCyclode := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "ws_cyclode_default",
+		DisplayName:      "Cyclode Autonomous Workstation (:6013)",
+		Email:            "cyclode@appembly.dev",
+		StripeCustomerID: "cus_appembly_cyclode_01",
+		Metadata:         map[string]string{"product": "cyclode", "runtime": "runctor-v0.2"},
+		CreatedAt:        now,
+	}
+	subSwarm := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "ws_swarmteam_pods",
+		DisplayName:      "Swarmteam Multi-Agent DAG (:6040)",
+		Email:            "swarmteam@appembly.dev",
+		StripeCustomerID: "cus_appembly_swarm_01",
+		Metadata:         map[string]string{"product": "swarmteam", "runtime": "runctor-v0.2"},
+		CreatedAt:        now,
+	}
+	subValiscale := models.Subject{
+		ID:               s.NextID("sub"),
+		Namespace:        ns,
+		Key:              "ws_valiscale_studio",
+		DisplayName:      "Valiscale Venture Studio (:6030)",
+		Email:            "valiscale@appembly.dev",
+		StripeCustomerID: "cus_appembly_valiscale_01",
+		Metadata:         map[string]string{"product": "valiscale", "runtime": "runctor-v0.2"},
+		CreatedAt:        now,
+	}
+	s.subjects[ns+":"+subCyclode.Key] = subCyclode
+	s.subjects[ns+":"+subSwarm.Key] = subSwarm
+	s.subjects[ns+":"+subValiscale.Key] = subValiscale
+
+	entCyclode := models.Entitlement{
+		ID:              s.NextID("ent"),
+		Namespace:       ns,
+		SubjectKey:      subCyclode.Key,
+		FeatureKey:      "ai_token_allowance",
+		FeatureName:     "Monthly Autonomous Token Allowance",
+		Type:            "metered",
+		MeterSlug:       "llm_tokens_total",
+		IssueAfterReset: 5000000,
+		IsSoftLimit:     true,
+		ResetPeriod:     "MONTH",
+		PeriodStart:     periodStart,
+		CreatedAt:       now,
+	}
+	entSwarm := models.Entitlement{
+		ID:              s.NextID("ent"),
+		Namespace:       ns,
+		SubjectKey:      subSwarm.Key,
+		FeatureKey:      "ai_token_allowance",
+		FeatureName:     "Monthly Autonomous Token Allowance",
+		Type:            "metered",
+		MeterSlug:       "llm_tokens_total",
+		IssueAfterReset: 10000000,
+		IsSoftLimit:     true,
+		ResetPeriod:     "MONTH",
+		PeriodStart:     periodStart,
+		CreatedAt:       now,
+	}
+	s.entitlements[entCyclode.ID] = entCyclode
+	s.entitlements[entSwarm.ID] = entSwarm
+
+	s.grants[entCyclode.ID] = []models.EntitlementGrant{
+		{
+			ID:              s.NextID("grt"),
+			Namespace:       ns,
+			EntitlementID:   entCyclode.ID,
+			Name:            "Appembly Priority Compute Grant",
+			Amount:          500000,
+			Priority:        1,
+			RolloverEnabled: false,
+			EffectiveAt:     periodStart,
+			CreatedAt:       now,
+		},
+		{
+			ID:              s.NextID("grt"),
+			Namespace:       ns,
+			EntitlementID:   entCyclode.ID,
+			Name:            "Included Workstation Monthly Pool",
+			Amount:          5000000,
+			Priority:        2,
+			RolloverEnabled: true,
+			EffectiveAt:     periodStart,
+			CreatedAt:       now,
+		},
+	}
+
+	tierCap := 5000000.0
+	appPlan := models.Plan{
+		ID:              s.NextID("pln"),
+		Namespace:       ns,
+		Slug:            "appembly_autonomous_pro",
+		Name:            "Appembly Autonomous Pro ($299/mo + Token & Sandbox Usage)",
+		Description:     "Includes 5M LLM tokens across Cyclode, Swarmteam & Valiscale with graduated overage",
+		Currency:        "USD",
+		BasePriceCents:  29900,
+		BillingCadence:  "MONTH",
+		IncludedCredits: 5000000,
+		RateCards: []models.RateCard{
+			{
+				FeatureKey:       "ai_token_allowance",
+				MeterSlug:        "llm_tokens_total",
+				Name:             "Autonomous Agent LLM Tokens",
+				PricingModel:     "graduated",
+				IncludedQuantity: 500000,
+				Tiers: []models.RateCardTier{
+					{UpToAmount: &tierCap, UnitPriceCents: 0.03, FlatFeeCents: 0},
+					{UpToAmount: nil, UnitPriceCents: 0.015, FlatFeeCents: 0},
+				},
+			},
+			{
+				FeatureKey:       "sandbox_compute",
+				MeterSlug:        "sandbox_compute_seconds",
+				Name:             "Isolated Docker Sandbox Seconds",
+				PricingModel:     "flat_per_unit",
+				IncludedQuantity: 3600,
+				Tiers: []models.RateCardTier{
+					{UpToAmount: nil, UnitPriceCents: 1.2, FlatFeeCents: 0},
+				},
+			},
+		},
+		CreatedAt: now,
+	}
+	s.plans[ns+":"+appPlan.Slug] = appPlan
+
+	subRec := models.Subscription{
+		ID:                   s.NextID("subscr"),
+		Namespace:            ns,
+		SubjectKey:           subCyclode.Key,
+		PlanSlug:             appPlan.Slug,
+		Status:               "active",
+		StripeSubscriptionID: "sub_stripe_cyclode_01",
+		CurrentPeriodStart:   periodStart,
+		CurrentPeriodEnd:     periodStart.AddDate(0, 1, 0),
+		CreatedAt:            now,
+	}
+	s.subscriptions[subRec.ID] = subRec
+
+	seedEvents := []models.CloudEvent{
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_cyclode_01", ns),
+			Source:      "urn:appembly:cyclode:executor",
+			Type:        "ai.llm.tokens",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-2 * time.Hour),
+			Data:        map[string]interface{}{"tokens": 24800.0, "model": "claude-3-7-sonnet", "token_type": "input", "persona": "IssueResolver", "tool": "run_command"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-2 * time.Hour),
+			StoredAt:    now.Add(-2 * time.Hour),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_cyclode_02", ns),
+			Source:      "urn:appembly:cyclode:executor",
+			Type:        "ai.llm.tokens",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-90 * time.Minute),
+			Data:        map[string]interface{}{"tokens": 8420.0, "model": "claude-3-7-sonnet", "token_type": "output", "persona": "IssueResolver", "tool": "replace_file_content"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-90 * time.Minute),
+			StoredAt:    now.Add(-90 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_swarm_01", ns),
+			Source:      "urn:appembly:swarmteam:dag",
+			Type:        "ai.llm.tokens",
+			Subject:     subSwarm.Key,
+			Time:        now.Add(-45 * time.Minute),
+			Data:        map[string]interface{}{"tokens": 41200.0, "model": "gemini-3.8-flash", "token_type": "input", "persona": "ArchitectPod", "tool": "view_file"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-45 * time.Minute),
+			StoredAt:    now.Add(-45 * time.Minute),
+			Lane:        "realtime",
+		},
+	}
+	s.events = append(s.events, seedEvents...)
 }
 
 func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now time.Time) {

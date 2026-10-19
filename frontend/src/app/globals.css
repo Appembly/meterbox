@@ -1,5 +1,8 @@
+@tailwind components;
+@tailwind utilities;
+
 /* ==========================================================================
-   Meterbox Design System — Smooth Modern Typography & Warm Industrial Palette
+   Meterbox Design System — Appembly Sage Green, Graphite & Off-White Palette
    Typography: Outfit (Display & Metrics) + DM Sans (Optical UI) + DM Mono (Code)
    ========================================================================== */
 :root {
@@ -7,70 +10,94 @@
   --font-display: "Outfit", "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  /* Warm Alabaster & Sandstone Surfaces */
-  --background: #faf8f5;
-  --sidebar: #f2efe9;
-  --content: #ffffff;
-  --card: #ffffff;
-  --surface-subtle: #f6f3ed;
-  --border: #e5e0d5;
-  --border-strong: #cfc8ba;
-  --foreground: #171513;
-  --muted-foreground: #665f56;
-  --placeholder: #999186;
+  /* Appembly Off-White & Calm Stone Surfaces */
+  --background: #F6F7F5;
+  --sidebar: #EFF1EE;
+  --content: #FFFFFF;
+  --card: #FFFFFF;
+  --surface-subtle: #F2F4F1;
+  --border: #DCE0DC;
+  --border-strong: #C5CBC5;
+  --foreground: #111618;
+  --muted-foreground: #525956;
+  --placeholder: #88908C;
 
-  /* Signal Terracotta & Forest Sage Accents */
-  --primary: #d94e28;
-  --primary-foreground: #ffffff;
-  --secondary: #ede9e0;
-  --secondary-foreground: #171513;
-  --accent: #fbede8;
+  /* Appembly Sage Green Primary Accents */
+  --primary: #4E8067;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E6EAE7;
+  --secondary-foreground: #111618;
+  --accent: #E8F1EC;
 
-  --ok: #1b7f52;
-  --warn: #c87a19;
-  --err: #c92a2a;
-  --info: #2b6cb0;
+  --ok: #1B7F52;
+  --warn: #C87A19;
+  --err: #C92A2A;
+  --info: #2B6CB0;
 
-  --shadow-sm: 0 1px 2px rgba(23, 21, 19, 0.04);
-  --shadow: 0 1px 3px rgba(23, 21, 19, 0.05), 0 8px 24px -12px rgba(23, 21, 19, 0.08);
-  --shadow-lg: 0 6px 16px rgba(23, 21, 19, 0.06), 0 18px 38px -16px rgba(23, 21, 19, 0.12);
-  --shadow-xl: 0 14px 36px rgba(23, 21, 19, 0.14), 0 28px 64px -20px rgba(23, 21, 19, 0.22);
+  /* @appembly/ui Token Bridge */
+  --ui-bg-canvas: var(--background);
+  --ui-bg-surface: var(--card);
+  --ui-bg-subtle: var(--surface-subtle);
+  --ui-bg-elevated: #FFFFFF;
+  --ui-border: var(--border);
+  --ui-border-strong: var(--border-strong);
+  --ui-text-primary: var(--foreground);
+  --ui-text-secondary: var(--muted-foreground);
+  --ui-text-muted: var(--placeholder);
+  --ui-accent: #4E8067;
+
+  --shadow-sm: 0 1px 2px rgba(17, 22, 24, 0.04);
+  --shadow: 0 1px 3px rgba(17, 22, 24, 0.05), 0 8px 24px -12px rgba(17, 22, 24, 0.08);
+  --shadow-lg: 0 6px 16px rgba(17, 22, 24, 0.06), 0 18px 38px -16px rgba(17, 22, 24, 0.12);
+  --shadow-xl: 0 14px 36px rgba(17, 22, 24, 0.14), 0 28px 64px -20px rgba(17, 22, 24, 0.22);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --spring: cubic-bezier(0.3, 1.5, 0.5, 1);
 
-  --code-bg: #f4f1ea;
-  --code-fg: #221f1c;
+  --code-bg: #F1F3F0;
+  --code-fg: #111618;
 }
 
 html.dark {
-  --background: #0d0c0b;
-  --sidebar: #12110f;
-  --content: #171614;
-  --card: #171614;
-  --surface-subtle: #131210;
-  --border: #282521;
-  --border-strong: #3a352f;
-  --foreground: #f4f1ea;
-  --muted-foreground: #9c9488;
-  --placeholder: #635c53;
+  --background: #0F1416;
+  --sidebar: #13191C;
+  --content: #171E22;
+  --card: #171E22;
+  --surface-subtle: #13191C;
+  --border: #252E33;
+  --border-strong: #344047;
+  --foreground: #F6F7F5;
+  --muted-foreground: #A9AFAB;
+  --placeholder: #6B7470;
 
-  --primary: #f0643b;
-  --primary-foreground: #ffffff;
-  --secondary: #211f1c;
-  --secondary-foreground: #f4f1ea;
-  --accent: #2b1914;
+  --primary: #5E987B;
+  --primary-foreground: #FFFFFF;
+  --secondary: #1E272C;
+  --secondary-foreground: #F6F7F5;
+  --accent: #1A2B23;
 
-  --ok: #34d399;
-  --warn: #fbbf24;
-  --err: #f87171;
-  --info: #60a5fa;
+  --ok: #34D399;
+  --warn: #FBBF24;
+  --err: #F87171;
+  --info: #60A5FA;
+
+  /* @appembly/ui Dark Token Bridge */
+  --ui-bg-canvas: var(--background);
+  --ui-bg-surface: var(--card);
+  --ui-bg-subtle: var(--surface-subtle);
+  --ui-bg-elevated: #1E272C;
+  --ui-border: var(--border);
+  --ui-border-strong: var(--border-strong);
+  --ui-text-primary: var(--foreground);
+  --ui-text-secondary: var(--muted-foreground);
+  --ui-text-muted: var(--placeholder);
+  --ui-accent: #72B091;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 12px 28px -14px rgba(0, 0, 0, 0.7);
   --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.55), 0 20px 44px -18px rgba(0, 0, 0, 0.8);
   --shadow-xl: 0 18px 42px rgba(0, 0, 0, 0.65), 0 32px 72px -18px rgba(0, 0, 0, 0.88);
-  --code-bg: #11100e;
-  --code-fg: #e5e0d5;
+  --code-bg: #111618;
+  --code-fg: #E6EAE7;
 }
 
 *, *::before, *::after { box-sizing: border-box; }

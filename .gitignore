@@ -14,6 +14,11 @@ backend/bin/
 *.test
 *.out
 
+# Elixir / Mix build output
+simulator/_build/
+simulator/deps/
+erl_crash.dump
+
 # Environment & local config
 .env
 .env.*

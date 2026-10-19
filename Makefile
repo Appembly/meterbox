@@ -1,4 +1,4 @@
-.PHONY: up down dev-backend dev-frontend test demo-traffic
+.PHONY: up down dev-backend dev-frontend test demo-traffic sim test-sim
 
 GO_BIN ?= /usr/local/go/bin/go
 
@@ -16,6 +16,12 @@ dev-frontend:
 
 test:
 	cd backend && $(GO_BIN) test -ldflags="-linkmode=external" -v ./...
+
+sim:
+	cd simulator && mix run --no-halt
+
+test-sim:
+	cd simulator && mix test
 
 demo-traffic:
 	curl -s -X POST http://localhost:8888/api/v1/events \
