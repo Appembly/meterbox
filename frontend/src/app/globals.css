@@ -1,11 +1,11 @@
 /* ==========================================================================
    Meterbox Design System — Appembly Sage Green, Graphite & Off-White Palette
-   Typography: Outfit (Display & Metrics) + DM Sans (Optical UI) + DM Mono (Code)
+   Typography: Inter (UI & Metrics) + JetBrains Mono (Code), self-hosted via next/font
    ========================================================================== */
 :root {
-  --font: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Outfit", "DM Sans", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Appembly Off-White & Calm Stone Surfaces */
   --background: #F6F7F5;
@@ -98,7 +98,7 @@ html.dark {
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+html, body { min-height: 100%; margin: 0; }
 body {
   background: var(--background);
   color: var(--foreground);
@@ -108,7 +108,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 a { color: inherit; text-decoration: none; }
 button, input, select, textarea {
@@ -140,6 +141,7 @@ code, pre, kbd, textarea.mono {
   height: 100vh;
   width: 100vw;
   position: relative;
+  overflow: hidden;
 }
 
 /* ---------------- Sidebar ---------------- */
