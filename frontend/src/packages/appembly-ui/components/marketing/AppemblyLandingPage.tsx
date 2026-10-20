@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Check,
   Cpu,
-  Gauge,
   Loader2,
   Lock,
   Mail,
@@ -20,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useAppemblyTheme } from '../../context/ThemeContext';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
+import { MeterboxIcon } from '../brand/MeterboxIcon';
 import './landing.css';
 
 export interface AppemblyLandingPageProps {
@@ -98,7 +98,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Rollups, dead-letter replay and Stripe invoicing',
     ],
     accentColor: '#10B981',
-    icon: <Gauge className="w-[18px] h-[18px]" />,
+    icon: <MeterboxIcon className="w-[18px] h-[18px]" />,
   },
   {
     id: 'valiscale',
@@ -196,7 +196,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'A live metering pipeline — from scoped keys to deduplication, rollups and invoicing — designed so usage is never dropped or billed twice.',
     image: SHOT_METERBOX,
     accent: '#10B981',
-    icon: <Gauge className="w-4 h-4" />,
+    icon: <MeterboxIcon className="w-4 h-4" />,
     bullets: [
       'CloudEvents ingestion with idempotent deduplication',
       'Edge quota checks and prepaid credit burndown',
@@ -234,13 +234,6 @@ const AVAILABILITY = [
   { value: BETA_PRODUCTS.length, label: 'Products in private beta', detail: BETA_PRODUCTS.map((p) => p.name).join(' · ') },
   { value: SOON_PRODUCTS.length, label: 'Products in development', detail: SOON_PRODUCTS.map((p) => p.name).join(' · ') },
   { value: FOUNDATION.length, label: 'Shared foundation layers', detail: FOUNDATION.map((f) => f.name).join(' · ') },
-];
-
-const PRINCIPLES = [
-  { title: 'Connected', desc: 'Shared identity, context and telemetry across every product.' },
-  { title: 'Modular', desc: 'Adopt any application standalone or compose the full ecosystem.' },
-  { title: 'Scalable', desc: 'From first concept validation to multi-agent production workloads.' },
-  { title: 'Timeless', desc: 'Calm geometry and high-contrast clarity built to endure.' },
 ];
 
 const ACCESS_STEPS = [
@@ -1173,7 +1166,7 @@ const Platform: React.FC = () => (
 );
 
 const Availability: React.FC = () => (
-  <section className="py-24 lg:py-28 border-b border-[var(--ui-border)]">
+  <section className="py-24 lg:py-28">
     <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-12">
         {AVAILABILITY.map((s, i) => (
@@ -1190,92 +1183,34 @@ const Availability: React.FC = () => (
   </section>
 );
 
-const Principles: React.FC = () => {
-  const [ref, inView] = useInView<HTMLDivElement>(0.3);
-  return (
-    <section id="principles" className="py-28 lg:py-36 scroll-mt-20">
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 grid grid-cols-1 lg:grid-cols-12 gap-14 items-center">
-        <div className="lg:col-span-5">
-          <div
-            ref={ref}
-            className={`relative aspect-square max-w-[440px] mx-auto rounded-[32px] border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] flex items-center justify-center overflow-hidden ${
-              inView ? 'is-visible' : ''
-            }`}
-          >
-            <div className="absolute inset-0 ap-lattice opacity-70" />
-            <svg viewBox="0 0 100 100" className="relative w-[72%] h-[72%]" aria-hidden="true">
-              <g className="ap-grid-fade" stroke="var(--ui-accent)" strokeWidth="0.35" strokeDasharray="1.5 1.5" fill="none" opacity="0.7">
-                <line x1="50" y1="6" x2="50" y2="94" />
-                <line x1="6" y1="50" x2="94" y2="50" />
-                <line x1="12" y1="23" x2="88" y2="23" />
-                <line x1="12" y1="77" x2="88" y2="77" />
-                <circle cx="50" cy="50" r="36" />
-                <circle cx="50" cy="50" r="15" />
-              </g>
-              <g className="ap-draw" fill="none" stroke="var(--ui-text-primary)" strokeWidth="6.2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline pathLength={1} points="20,77 50,23 80,77" style={{ '--ap-delay': '0ms' } as React.CSSProperties} />
-                <polyline pathLength={1} points="20,23 50,77 80,23" style={{ '--ap-delay': '250ms' } as React.CSSProperties} />
-                <line pathLength={1} x1="35" y1="50" x2="65" y2="50" style={{ '--ap-delay': '700ms' } as React.CSSProperties} />
-              </g>
-            </svg>
-            <div className="absolute bottom-5 inset-x-0 flex justify-center gap-2">
-              {[
-                { hex: '#111618', name: 'Graphite' },
-                { hex: '#F6F7F5', name: 'Off White' },
-                { hex: '#4E8067', name: 'Sage' },
-                { hex: '#A9AFAB', name: 'Silver' },
-              ].map((c) => (
-                <span
-                  key={c.hex}
-                  title={`${c.name} ${c.hex}`}
-                  className="w-5 h-5 rounded-full border border-[var(--ui-border-strong)]"
-                  style={{ backgroundColor: c.hex }}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="lg:col-span-7">
-          <Reveal>
-            <SectionEyebrow>Built on simple geometry</SectionEyebrow>
-            <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
-              Two triangles. One bridge.
-            </h2>
-            <p className="mt-6 text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[560px]">
-              Our mark is two interlocking 60° triangles meeting at a shared bridge — modular
-              applications and autonomous agents assembling into a unified whole. The same idea
-              guides everything we ship.
-            </p>
-          </Reveal>
-          <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-8">
-            {PRINCIPLES.map((p, i) => (
-              <Reveal key={p.title} delay={100 + i * 80}>
-                <div className="flex items-start gap-4">
-                  <span className="mt-1 text-[12px] font-mono text-[var(--ui-text-muted)]">0{i + 1}</span>
-                  <div>
-                    <div className="text-[17px] font-semibold text-[var(--ui-text-primary)]">{p.title}</div>
-                    <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{p.desc}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
 type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
+type FormIntent = 'access' | 'contact';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const CONTACT_TOPICS = [
+  'General inquiry',
+  'Product & architecture question',
+  'Partnership or enterprise pilot',
+  'Press & media',
+];
 
 const AccessSection: React.FC<{
   interest: string[];
   setInterest: React.Dispatch<React.SetStateAction<string[]>>;
   endpoint?: string;
   contactEmail: string;
-}> = ({ interest, setInterest, endpoint = '/api/waitlist', contactEmail }) => {
+  defaultIntent?: FormIntent;
+  standalone?: boolean;
+}> = ({
+  interest,
+  setInterest,
+  endpoint = '/api/waitlist',
+  contactEmail,
+  defaultIntent = 'access',
+  standalone = false,
+}) => {
+  const [intent, setIntent] = useState<FormIntent>(defaultIntent);
+  const [topic, setTopic] = useState<string>(CONTACT_TOPICS[0]);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
@@ -1285,19 +1220,28 @@ const AccessSection: React.FC<{
   const [deliveryMode, setDeliveryMode] = useState<'api' | 'mailto'>('api');
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setIntent(defaultIntent);
+  }, [defaultIntent]);
+
   const toggle = (id: string) =>
     setInterest((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
 
   const triggerMailtoFallback = (
-    payload: { name: string; company: string; email: string; message: string },
+    payload: { name: string; company: string; email: string; message: string; topic?: string; intent: FormIntent },
     productNames: string[]
   ) => {
-    const subject = `Access request — ${productNames.length ? productNames.map((n) => n.split(' (')[0]).join(', ') : 'Appembly'}`;
+    const subject =
+      payload.intent === 'contact'
+        ? `[Appembly Contact] ${payload.topic || 'General inquiry'} — ${payload.company || payload.name || payload.email}`
+        : `Access request — ${productNames.length ? productNames.map((n) => n.split(' (')[0]).join(', ') : 'Appembly'}`;
     const body = [
       `Name: ${payload.name || '-'}`,
       `Company: ${payload.company || '-'}`,
       `Email: ${payload.email}`,
-      `Interested in: ${productNames.join(', ') || '-'}`,
+      payload.intent === 'contact'
+        ? `Topic: ${payload.topic || 'General inquiry'}`
+        : `Interested in: ${productNames.join(', ') || '-'}`,
       '',
       payload.message,
     ].join('\n');
@@ -1318,18 +1262,24 @@ const AccessSection: React.FC<{
       setError('Please enter a valid work email.');
       return;
     }
-    const products = interest.length ? interest : [];
+    if (intent === 'contact' && !message.trim()) {
+      setError('Please include a short message so we know how to help.');
+      return;
+    }
+    const products = intent === 'access' && interest.length ? interest : [];
     const productNames = PRODUCT_SUITE.filter((p) => products.includes(p.id)).map(
       (p) => `${p.name} (${p.status === 'beta' ? 'private beta' : 'waitlist'})`
     );
     const payload = {
+      intent,
+      topic: intent === 'contact' ? topic : undefined,
       email: email.trim(),
       name: name.trim(),
       company: company.trim(),
       products,
       message: message.trim(),
       website: honeypot,
-      source: 'appembly.com',
+      source: typeof window !== 'undefined' ? window.location.hostname || 'appembly.com' : 'appembly.com',
       submittedAt: new Date().toISOString(),
     };
 
@@ -1366,10 +1316,12 @@ const AccessSection: React.FC<{
   const inputCls =
     'w-full h-11 px-3.5 rounded-xl bg-[#111618] border border-[#263136] text-[14px] text-[#F6F7F5] placeholder:text-[#7C8380] focus:outline-none focus:border-[#4E8067] focus:ring-2 focus:ring-[#4E8067]/30 transition-colors';
 
+  const isContact = intent === 'contact';
+
   return (
-    <section id="access" className="px-4 sm:px-6 pb-24 scroll-mt-24">
+    <section id="access" className={`px-4 sm:px-6 ${standalone ? 'py-10 sm:py-16' : 'pb-24'} scroll-mt-24`}>
       <Reveal>
-        <div className="relative max-w-[1320px] mx-auto rounded-[32px] bg-[#111618] text-[#F6F7F5] overflow-hidden px-6 sm:px-12 lg:px-16 py-16 sm:py-20">
+        <div className="relative max-w-[1320px] mx-auto rounded-[32px] bg-[#111618] text-[#F6F7F5] overflow-hidden px-6 sm:px-12 lg:px-16 py-14 sm:py-20">
           <div className="pointer-events-none absolute inset-0 ap-lattice ap-lattice-inverse" />
           <div
             className="pointer-events-none absolute -top-40 left-1/4 w-[800px] h-[500px] rounded-full blur-3xl opacity-50 ap-glow"
@@ -1382,83 +1334,184 @@ const AccessSection: React.FC<{
               <div className="w-12 h-12 rounded-2xl bg-[#4E8067] flex items-center justify-center shadow-[0_12px_40px_-8px_rgba(78,128,103,0.7)]">
                 <AppemblyLogo variant="mark" size={28} strokeColor="#F6F7F5" />
               </div>
-              <h2 className="mt-8 text-[36px] sm:text-[48px] font-semibold tracking-[-0.04em] leading-[1.04]">
-                Start with one.
-                <br />
-                <span className="text-[#72B091]">Connect them all.</span>
-              </h2>
-              <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
-                Appembly products are invitation-only while we onboard early teams. Request access
-                to the private beta, or join the waitlist for what’s coming next.
-              </p>
-              <ol className="mt-10 space-y-6">
-                {ACCESS_STEPS.map((s, i) => (
-                  <li key={s.title} className="flex gap-4">
-                    <span className="w-7 h-7 rounded-full border border-[#344248] text-[12px] font-semibold text-[#72B091] flex items-center justify-center shrink-0">
-                      {i + 1}
-                    </span>
-                    <div>
-                      <div className="text-[15px] font-semibold">{s.title}</div>
-                      <p className="mt-1 text-[13.5px] leading-relaxed text-[#A9AFAB]">{s.desc}</p>
+              {isContact ? (
+                <>
+                  <h2 className="mt-8 text-[36px] sm:text-[48px] font-semibold tracking-[-0.04em] leading-[1.04]">
+                    Talk with the
+                    <br />
+                    <span className="text-[#72B091]">Appembly team.</span>
+                  </h2>
+                  <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
+                    Questions about our AI-native applications, autonomous agents, enterprise
+                    pilots, or partnerships? Send us a note and we’ll reply directly.
+                  </p>
+                  <div className="mt-10 space-y-5 text-[14px]">
+                    <div className="rounded-2xl border border-[#263136] bg-[#171E21]/60 p-4">
+                      <div className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#72B091]">
+                        Direct inquiries
+                      </div>
+                      <div className="mt-1 font-medium text-[#F6F7F5]">{contactEmail}</div>
+                      <div className="mt-0.5 text-[12.5px] text-[#A9AFAB]">
+                        Typical response within 1–2 business days
+                      </div>
                     </div>
-                  </li>
-                ))}
-              </ol>
+                    <div className="rounded-2xl border border-[#263136] bg-[#171E21]/60 p-4">
+                      <div className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#72B091]">
+                        Private beta cohorts
+                      </div>
+                      <div className="mt-1 font-medium text-[#F6F7F5]">Cyclode &amp; Meterbox</div>
+                      <div className="mt-0.5 text-[12.5px] text-[#A9AFAB]">
+                        Need early product access? Switch to the Request Access tab on the right.
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-8 text-[36px] sm:text-[48px] font-semibold tracking-[-0.04em] leading-[1.04]">
+                    Start with one.
+                    <br />
+                    <span className="text-[#72B091]">Connect them all.</span>
+                  </h2>
+                  <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
+                    Appembly products are invitation-only while we onboard early teams. Request access
+                    to the private beta, or join the waitlist for what’s coming next.
+                  </p>
+                  <ol className="mt-10 space-y-6">
+                    {ACCESS_STEPS.map((s, i) => (
+                      <li key={s.title} className="flex gap-4">
+                        <span className="w-7 h-7 rounded-full border border-[#344248] text-[12px] font-semibold text-[#72B091] flex items-center justify-center shrink-0">
+                          {i + 1}
+                        </span>
+                        <div>
+                          <div className="text-[15px] font-semibold">{s.title}</div>
+                          <p className="mt-1 text-[13.5px] leading-relaxed text-[#A9AFAB]">{s.desc}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </>
+              )}
             </div>
 
             {/* Form */}
             <div className="lg:col-span-7">
               <div className="rounded-3xl border border-[#263136] bg-[#171E21]/80 backdrop-blur p-6 sm:p-8">
+                {/* Mode switcher: Request access vs Contact us */}
+                <div className="inline-flex p-1 rounded-xl bg-[#111618] border border-[#263136] mb-6">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIntent('access');
+                      setState('idle');
+                      setError(null);
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer ${
+                      !isContact ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
+                    }`}
+                  >
+                    Request access
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIntent('contact');
+                      setState('idle');
+                      setError(null);
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                      isContact ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
+                    }`}
+                  >
+                    <Mail className="w-3.5 h-3.5" />
+                    Contact us
+                  </button>
+                </div>
+
                 {state === 'success' ? (
                   <div className="ap-enter py-10 text-center" role="status">
                     <div className="mx-auto w-14 h-14 rounded-full bg-[#4E8067]/20 text-[#72B091] flex items-center justify-center">
                       <Check className="w-7 h-7" />
                     </div>
-                    <div className="mt-6 text-[22px] font-semibold tracking-tight">You’re on the list.</div>
+                    <div className="mt-6 text-[22px] font-semibold tracking-tight">
+                      {isContact ? 'Message received.' : 'You’re on the list.'}
+                    </div>
                     <p className="mt-2 text-[14.5px] text-[#A9AFAB] max-w-[380px] mx-auto">
                       {deliveryMode === 'api'
-                        ? 'Thanks — we’ll be in touch as soon as a seat opens for you.'
-                        : 'Your email app should have opened with your request. Send it and we’ll be in touch.'}
+                        ? isContact
+                          ? 'Thanks for reaching out — our team will reply to your email shortly.'
+                          : 'Thanks — we’ll be in touch as soon as a seat opens for you.'
+                        : 'Your email app should have opened with your message. Send it and we’ll be in touch.'}
                     </p>
                     <button
                       type="button"
                       onClick={() => setState('idle')}
                       className="mt-6 text-[13px] font-semibold text-[#72B091] hover:text-[#F6F7F5] cursor-pointer"
                     >
-                      Submit another request
+                      {isContact ? 'Send another message' : 'Submit another request'}
                     </button>
                   </div>
                 ) : (
                   <form onSubmit={onSubmit} noValidate className="space-y-6">
-                    <fieldset>
-                      <legend className="text-[13px] font-semibold text-[#C5CAC7]">What are you interested in?</legend>
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {PRODUCT_SUITE.map((p) => {
-                          const checked = interest.includes(p.id);
-                          return (
-                            <label
-                              key={p.id}
-                              className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
-                                checked ? 'border-[#4E8067] bg-[#4E8067]/12' : 'border-[#263136] hover:border-[#344248]'
-                              }`}
-                            >
-                              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(p.id)} />
-                              <span
-                                className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 ${
-                                  checked ? 'bg-[#4E8067] border-[#4E8067]' : 'border-[#344248]'
+                    {isContact ? (
+                      <fieldset>
+                        <legend className="text-[13px] font-semibold text-[#C5CAC7]">Topic</legend>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {CONTACT_TOPICS.map((t) => {
+                            const active = topic === t;
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setTopic(t)}
+                                className={`text-left flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                                  active ? 'border-[#4E8067] bg-[#4E8067]/12 text-[#F6F7F5]' : 'border-[#263136] text-[#A9AFAB] hover:border-[#344248]'
                                 }`}
                               >
-                                {checked && <Check className="w-3 h-3 text-white" />}
-                              </span>
-                              <span className="text-[14px] font-medium flex-1">{p.name}</span>
-                              <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${p.status === 'beta' ? 'text-[#72B091]' : 'text-[#7C8380]'}`}>
-                                {p.status === 'beta' ? 'Beta' : 'Waitlist'}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
+                                <span
+                                  className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${
+                                    active ? 'border-[#4E8067] bg-[#4E8067]' : 'border-[#344248]'
+                                  }`}
+                                >
+                                  {active && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </span>
+                                <span className="text-[13.5px] font-medium">{t}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    ) : (
+                      <fieldset>
+                        <legend className="text-[13px] font-semibold text-[#C5CAC7]">What are you interested in?</legend>
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {PRODUCT_SUITE.map((p) => {
+                            const checked = interest.includes(p.id);
+                            return (
+                              <label
+                                key={p.id}
+                                className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                                  checked ? 'border-[#4E8067] bg-[#4E8067]/12' : 'border-[#263136] hover:border-[#344248]'
+                                }`}
+                              >
+                                <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(p.id)} />
+                                <span
+                                  className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 ${
+                                    checked ? 'bg-[#4E8067] border-[#4E8067]' : 'border-[#344248]'
+                                  }`}
+                                >
+                                  {checked && <Check className="w-3 h-3 text-white" />}
+                                </span>
+                                <span className="text-[14px] font-medium flex-1">{p.name}</span>
+                                <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${p.status === 'beta' ? 'text-[#72B091]' : 'text-[#7C8380]'}`}>
+                                  {p.status === 'beta' ? 'Beta' : 'Waitlist'}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </fieldset>
+                    )}
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <label className="block sm:col-span-2">
@@ -1484,12 +1537,25 @@ const AccessSection: React.FC<{
                         <input type="text" autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme Inc." className={`${inputCls} mt-2`} />
                       </label>
                       <label className="block sm:col-span-2">
-                        <span className="text-[13px] font-semibold text-[#C5CAC7]">What would you use it for?</span>
+                        <span className="text-[13px] font-semibold text-[#C5CAC7]">
+                          {isContact ? (
+                            <>
+                              Message <span className="text-[#72B091]">*</span>
+                            </>
+                          ) : (
+                            'What would you use it for?'
+                          )}
+                        </span>
                         <textarea
                           rows={3}
+                          required={isContact}
                           value={message}
                           onChange={(e) => setMessage(e.target.value)}
-                          placeholder="A sentence or two about your team and use case (optional)"
+                          placeholder={
+                            isContact
+                              ? 'How can we help your team?'
+                              : 'A sentence or two about your team and use case (optional)'
+                          }
                           className={`${inputCls} mt-2 h-auto py-3 resize-none`}
                         />
                       </label>
@@ -1508,7 +1574,7 @@ const AccessSection: React.FC<{
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
                       <p className="text-[12px] leading-relaxed text-[#7C8380] max-w-[340px]">
-                        We’ll only use your details to contact you about access. No newsletters, no sharing.
+                        We’ll only use your details to reply to your inquiry. No newsletters, no sharing.
                       </p>
                       <button
                         type="submit"
@@ -1521,7 +1587,7 @@ const AccessSection: React.FC<{
                           </>
                         ) : (
                           <>
-                            Request access
+                            {isContact ? 'Send message' : 'Request access'}
                             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                           </>
                         )}
@@ -1538,7 +1604,30 @@ const AccessSection: React.FC<{
   );
 };
 
-const Footer: React.FC<{ contactEmail: string; onRequestAccess: RequestAccess }> = ({ contactEmail, onRequestAccess }) => (
+function getContactPortalUrl(mode: FormIntent = 'contact'): string {
+  const query = mode === 'access' ? '?mode=access' : '?mode=contact';
+  if (typeof window === 'undefined') {
+    return `https://contact.appembly.com/${query}`;
+  }
+  const host = window.location.hostname;
+  if (host === 'appembly.com' || host === 'www.appembly.com') {
+    return `https://contact.appembly.com/${query}`;
+  }
+  return `/contact${query}`;
+}
+
+function getMainSiteUrl(): string {
+  if (typeof window === 'undefined') return 'https://www.appembly.com';
+  const host = window.location.hostname;
+  if (host.endsWith('.appembly.com') || host === 'appembly.com') return 'https://www.appembly.com';
+  return '/';
+}
+
+const Footer: React.FC<{
+  contactEmail: string;
+  onRequestAccess: RequestAccess;
+  onOpenContactPortal: (mode: FormIntent) => void;
+}> = ({ onRequestAccess, onOpenContactPortal }) => (
   <footer className="border-t border-[var(--ui-border)]">
     <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-16 grid grid-cols-2 md:grid-cols-12 gap-10">
       <div className="col-span-2 md:col-span-5 space-y-4">
@@ -1583,17 +1672,30 @@ const Footer: React.FC<{ contactEmail: string; onRequestAccess: RequestAccess }>
         <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Company</div>
         <ul className="mt-4 space-y-2.5">
           <li>
-            <a href="#access" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+            <a
+              href={getContactPortalUrl('access')}
+              onClick={(e) => {
+                if (typeof window !== 'undefined' && !window.location.hostname.endsWith('appembly.com')) {
+                  e.preventDefault();
+                  onOpenContactPortal('access');
+                }
+              }}
+              className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors"
+            >
               Request access
             </a>
           </li>
           <li>
-            <a href="#principles" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
-              Principles
-            </a>
-          </li>
-          <li>
-            <a href={`mailto:${contactEmail}`} className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+            <a
+              href={getContactPortalUrl('contact')}
+              onClick={(e) => {
+                if (typeof window !== 'undefined' && !window.location.hostname.endsWith('appembly.com')) {
+                  e.preventDefault();
+                  onOpenContactPortal('contact');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors"
+            >
               <Mail className="w-3.5 h-3.5" /> Contact
             </a>
           </li>
@@ -1609,6 +1711,51 @@ const Footer: React.FC<{ contactEmail: string; onRequestAccess: RequestAccess }>
   </footer>
 );
 
+const ContactPortalHeader: React.FC<{ onBackToMain?: () => void }> = ({ onBackToMain }) => {
+  const { theme, toggleTheme } = useAppemblyTheme();
+  const mainUrl = getMainSiteUrl();
+  return (
+    <header className="border-b border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/80 backdrop-blur">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 h-16 flex items-center justify-between">
+        <a
+          href={mainUrl}
+          onClick={(e) => {
+            if (onBackToMain && mainUrl === '/') {
+              e.preventDefault();
+              onBackToMain();
+            }
+          }}
+          className="inline-flex items-center gap-2.5"
+        >
+          <AppemblyLogo variant="lockup" size={28} productName="Appembly" tagline="Contact & Access" />
+        </a>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label="Toggle color theme"
+            className="w-9 h-9 rounded-xl border border-[var(--ui-border)] flex items-center justify-center text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors cursor-pointer"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <a
+            href={mainUrl}
+            onClick={(e) => {
+              if (onBackToMain && mainUrl === '/') {
+                e.preventDefault();
+                onBackToMain();
+              }
+            }}
+            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-[var(--ui-border-strong)] text-[13px] font-semibold text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors"
+          >
+            ← Back to appembly.com
+          </a>
+        </div>
+      </div>
+    </header>
+  );
+};
+
 /* -------------------------------------------------------------------------- */
 /*                                    Page                                    */
 /* -------------------------------------------------------------------------- */
@@ -1618,6 +1765,50 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
   contactEmail = DEFAULT_CONTACT_EMAIL,
 }) => {
   const [interest, setInterest] = useState<string[]>([]);
+  const [portalView, setPortalView] = useState<{ active: boolean; intent: FormIntent }>(() => {
+    if (typeof window === 'undefined') return { active: false, intent: 'contact' };
+    const host = window.location.hostname;
+    const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    const modeParam = params.get('mode') === 'access' ? 'access' : 'contact';
+    if (host.startsWith('contact.') || path === '/contact' || path === '/contact/') {
+      return { active: true, intent: modeParam };
+    }
+    return { active: false, intent: 'access' };
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onPopState = () => {
+      const host = window.location.hostname;
+      const path = window.location.pathname;
+      const params = new URLSearchParams(window.location.search);
+      const modeParam: FormIntent = params.get('mode') === 'access' ? 'access' : 'contact';
+      setPortalView({
+        active: host.startsWith('contact.') || path === '/contact' || path === '/contact/',
+        intent: modeParam,
+      });
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
+  const openContactPortal = useCallback((mode: FormIntent) => {
+    if (typeof window !== 'undefined') {
+      const nextPath = mode === 'access' ? '/contact?mode=access' : '/contact';
+      window.history.pushState({}, '', nextPath);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setPortalView({ active: true, intent: mode });
+  }, []);
+
+  const closeContactPortal = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', '/');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    setPortalView({ active: false, intent: 'access' });
+  }, []);
 
   /** Pre-selects a product (if given) and scrolls to the access form. */
   const requestAccess = useCallback<RequestAccess>((productId) => {
@@ -1631,6 +1822,31 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
     }
   }, []);
 
+  // Dedicated `contact.appembly.com` (or `/contact`) portal — renders ONLY the Contact & Access view
+  if (portalView.active) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[var(--ui-bg-canvas)] text-[var(--ui-text-primary)] antialiased transition-colors duration-300 selection:bg-[#4E8067] selection:text-[#F6F7F5] overflow-x-clip">
+        <ContactPortalHeader onBackToMain={closeContactPortal} />
+        <main className="flex-1 flex flex-col justify-center">
+          <AccessSection
+            interest={interest}
+            setInterest={setInterest}
+            endpoint={accessRequestEndpoint}
+            contactEmail={contactEmail}
+            defaultIntent={portalView.intent}
+            standalone
+          />
+        </main>
+        <footer className="border-t border-[var(--ui-border)]">
+          <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[12.5px] text-[var(--ui-text-muted)]">
+            <span>© {new Date().getFullYear()} Appembly · Contact &amp; Early Access Portal</span>
+            <span>Direct email: {contactEmail}</span>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--ui-bg-canvas)] text-[var(--ui-text-primary)] antialiased transition-colors duration-300 selection:bg-[#4E8067] selection:text-[#F6F7F5] overflow-x-clip">
       <Header onRequestAccess={requestAccess} />
@@ -1641,7 +1857,6 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
         <ProductGrid onRequestAccess={requestAccess} />
         <Platform />
         <Availability />
-        <Principles />
         <AccessSection
           interest={interest}
           setInterest={setInterest}
@@ -1649,7 +1864,11 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
           contactEmail={contactEmail}
         />
       </main>
-      <Footer contactEmail={contactEmail} onRequestAccess={requestAccess} />
+      <Footer
+        contactEmail={contactEmail}
+        onRequestAccess={requestAccess}
+        onOpenContactPortal={openContactPortal}
+      />
     </div>
   );
 };

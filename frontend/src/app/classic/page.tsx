@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { AppemblyLogo } from "../../packages/appembly-ui/components/brand/AppemblyLogo";
+import { MeterboxIcon } from "../../packages/appembly-ui/components/brand/MeterboxIcon";
 import {
   API_BASE,
   Organization,
@@ -1406,7 +1406,7 @@ export default function MeterboxApp() {
       <aside className={`sidebar ${mobileSidebarOpen ? "open" : ""}`}>
         <div className="brand" onClick={() => selectNavView("overview")}>
           <div className="logo">
-            <AppemblyLogo variant="mark" size={22} strokeColor="#FFFFFF" />
+            <MeterboxIcon size={20} strokeWidth={2.1} style={{ color: "#FFFFFF" }} />
             <span className="logo-pulse" />
           </div>
           <div>

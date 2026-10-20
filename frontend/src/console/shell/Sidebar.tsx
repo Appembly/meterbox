@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, ChevronsUpDown, Moon, Search, Sun } from "lucide-react";
-import { AppemblyLogo } from "../../packages/appembly-ui/components/brand/AppemblyLogo";
+import { MeterboxIcon } from "../../packages/appembly-ui/components/brand/MeterboxIcon";
 import { useConsole } from "../ConsoleProvider";
 import { NAV, NavItem, classicHref } from "../nav";
 import { relativeTime } from "../lib/format";
@@ -36,8 +36,8 @@ export const Sidebar: React.FC<{ onOpenPalette: () => void; onNavigate?: () => v
     <aside className="flex flex-col h-full bg-[var(--sidebar)] border-r border-[var(--border)]">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 h-14 shrink-0">
-        <span className="w-8 h-8 rounded-[9px] bg-[var(--primary)] flex items-center justify-center shadow-sm">
-          <AppemblyLogo variant="mark" size={20} strokeColor="#F6F7F5" />
+        <span className="w-8 h-8 rounded-[9px] bg-[var(--primary)] text-[#F6F7F5] flex items-center justify-center shadow-sm">
+          <MeterboxIcon size={18} strokeWidth={2.1} />
         </span>
         <div className="leading-tight">
           <div className="text-[14.5px] font-semibold tracking-[-0.015em]">Meterbox</div>
