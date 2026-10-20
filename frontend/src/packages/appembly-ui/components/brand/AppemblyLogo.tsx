@@ -34,17 +34,16 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
     <g
       stroke={stroke}
       strokeWidth={strokeWidth}
-      strokeLinecap="butt"
-      strokeLinejoin="miter"
-      strokeMiterlimit={10}
+      strokeLinecap="round"
+      strokeLinejoin="round"
       fill="none"
     >
-      {/* Left ascending diagonal from bottom-left (23,74.5) -> top apex (50,27.7) -> mid-right vertex (63.5,51.1) */}
-      <polyline points="23,74.5 50,27.7 63.5,51.1" />
-      {/* Right descending diagonal from top-right (77,27.7) -> bottom apex (50,74.5) -> mid-left vertex (36.5,51.1) */}
-      <polyline points="77,27.7 50,74.5 36.5,51.1" />
-      {/* Central horizontal bar connecting mid-left (36.5,51.1) and mid-right (63.5,51.1) */}
-      <line x1="36.5" y1="51.1" x2="63.5" y2="51.1" />
+      {/* Upward symmetrical triangle (A): bottom-left (20,77) -> top apex (50,23) -> bottom-right (80,77) */}
+      <polyline points="20,77 50,23 80,77" />
+      {/* Downward symmetrical triangle (V): top-left (20,23) -> bottom apex (50,77) -> top-right (80,23) */}
+      <polyline points="20,23 50,77 80,23" />
+      {/* Central horizontal bridge connecting left intersection (35,50) and right intersection (65,50) */}
+      <line x1="35" y1="50" x2="65" y2="50" />
     </g>
   );
 

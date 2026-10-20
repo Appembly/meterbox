@@ -1,50 +1,69 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
-  ArrowUpRight,
-  CheckCircle2,
-  Compass,
+  Check,
   Cpu,
-  GitBranch,
-  Layers,
+  Gauge,
+  Loader2,
+  Lock,
+  Mail,
+  Menu,
   Moon,
-  Play,
   Radio,
   Rocket,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   Sun,
   Terminal,
   Workflow,
+  X,
 } from 'lucide-react';
 import { useAppemblyTheme } from '../../context/ThemeContext';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
-import { KpiSummaryCard } from '../metrics/KpiSummaryCard';
-import { MultiSeriesChart } from '../metrics/MultiSeriesChart';
-import { ProjectTaskTimeline } from '../swarm/ProjectTaskTimeline';
-import type { ChartSeries, KpiMetricItem, TimelineTaskItem } from '../../types';
+import './landing.css';
 
 export interface AppemblyLandingPageProps {
+  /**
+   * @deprecated The mock studio demo is no longer surfaced on the public landing page
+   * (it presents unreleased products with sample data). Kept for API compatibility.
+   */
   onOpenStudio?: (productId?: string) => void;
+  /**
+   * Endpoint that accepts a JSON `POST` for access / waitlist requests
+   * (e.g. Formspree, Basin, or your own API). When omitted, the form falls back to `mailto:`.
+   */
+  accessRequestEndpoint?: string;
+  /** Contact address shown in the footer and used for the `mailto:` fallback. */
+  contactEmail?: string;
 }
+
+/* -------------------------------------------------------------------------- */
+/*                                   Content                                  */
+/* -------------------------------------------------------------------------- */
+
+const DEFAULT_CONTACT_EMAIL = 'hello@appembly.com';
+const SHOT_CYCLODE = '/showcase/cyclode-workstation.png';
+const SHOT_METERBOX = '/showcase/meterbox-control-plane.png';
+const SHOT_WIDTH = 1024;
+const SHOT_HEIGHT = 585;
+
+/**
+ * Single source of truth for product availability.
+ * - `beta`: built and onboarding teams by invitation (request access)
+ * - `soon`: in development (join the waitlist)
+ * Never add public URLs or repository links here until they are actually public.
+ */
+type ProductStatus = 'beta' | 'soon';
 
 interface ProductSuiteItem {
   id: string;
   name: string;
-  category: 'product' | 'engineering' | 'customer';
+  status: ProductStatus;
   categoryLabel: string;
   tagline: string;
   description: string;
-  audience: string;
+  capabilities: string[];
   accentColor: string;
-  port: string;
-  liveUrl?: string;
-  repoUrl: string;
-  status: string;
-  highlights: string[];
-  metricLabel: string;
-  metricValue: string;
   icon: React.ReactNode;
 }
 
@@ -52,1014 +71,1585 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
   {
     id: 'cyclode',
     name: 'Cyclode',
-    category: 'engineering',
+    status: 'beta',
     categoryLabel: 'Autonomous Engineering',
-    tagline: 'Your autonomous software engineering workstation.',
+    tagline: 'An autonomous software engineering workstation.',
     description:
-      'Turns architectural specs and repositories into verified pull requests, isolated preview sandboxes, and self-healing CI pipelines.',
-    audience: 'Developers & Engineering Teams',
+      'Plan, implement and verify changes across whole repositories with an agent whose every step is visible and reviewable.',
+    capabilities: [
+      'Full-repository context and multi-file changes',
+      'Web & Docs reader that can operate live pages',
+      'Sandboxed previews, terminal and diffs side by side',
+    ],
     accentColor: '#4E8067',
-    port: ':6013',
-    liveUrl: 'http://localhost:6013',
-    repoUrl: 'https://github.com/Appembly/cyclode',
-    status: 'Live Workstation',
-    highlights: [
-      'Full-repository context & multi-file refactoring',
-      'Isolated Docker preview sandboxes & live browser verification',
-      'Powered by Runctor cyclode_coding capability pack',
-    ],
-    metricLabel: 'Autonomous PR Pass Rate',
-    metricValue: '96.4%',
-    icon: <Terminal className="w-5 h-5" />,
-  },
-  {
-    id: 'valiscale',
-    name: 'Valiscale',
-    category: 'product',
-    categoryLabel: 'Product & Venture Studio',
-    tagline: 'From raw concept to validated project and scaled launch.',
-    description:
-      'Evaluates market viability, generates structured PRDs, orchestrates Swarmteam task timelines, and tracks post-launch growth trajectories.',
-    audience: 'Founders, PMs & Venture Studios',
-    accentColor: '#3B82F6',
-    port: ':6030',
-    repoUrl: 'https://github.com/Appembly/valiscale',
-    status: 'Interactive Studio',
-    highlights: [
-      'Structured Concept → Project → Scale lifecycle pipeline',
-      'Interactive Gantt & topological DAG wave timelines',
-      'Multi-series readiness & validation scorecards',
-    ],
-    metricLabel: 'Concept Validation Score',
-    metricValue: '91 / 100',
-    icon: <Rocket className="w-5 h-5" />,
-  },
-  {
-    id: 'wotneed',
-    name: 'Wotneed',
-    category: 'customer',
-    categoryLabel: 'Conversational Commerce',
-    tagline: 'Consultative AI commerce concierge & demand intelligence.',
-    description:
-      'Guides shoppers from high-level intent to the exact right product bundle while capturing unmet buyer demand directly from live conversations.',
-    audience: 'Brands, Merchants & Shoppers',
-    accentColor: '#F59E0B',
-    port: ':6050',
-    repoUrl: 'https://github.com/Appembly/wotneed',
-    status: 'Commerce Engine',
-    highlights: [
-      'Diagnostic buyer needs discovery & real-time SKU comparison',
-      'Automated cart bundle assembly with margin guardrails',
-      'Zero-hallucination catalog grounding via Runctor gates',
-    ],
-    metricLabel: 'Assisted Checkout Lift',
-    metricValue: '+34.8%',
-    icon: <ShoppingBag className="w-5 h-5" />,
-  },
-  {
-    id: 'gatharoom',
-    name: 'Gatharoom',
-    category: 'customer',
-    categoryLabel: 'Live Market Research',
-    tagline: 'Livestreamed AI-moderated customer focus groups.',
-    description:
-      'Hosts structured live customer research rooms with adaptive probing, instant sentiment heatmaps, and willingness-to-pay synthesis.',
-    audience: 'Researchers, Marketers & Product Leads',
-    accentColor: '#8B5CF6',
-    port: ':6060',
-    repoUrl: 'https://github.com/Appembly/gatharoom',
-    status: 'Research Rooms',
-    highlights: [
-      'AI-facilitated focus groups & live participant micro-polls',
-      'Timestamped objection, praise & willingness-to-pay clustering',
-      'Direct insight handoff into Valiscale product concepts',
-    ],
-    metricLabel: 'Synthesis Confidence',
-    metricValue: '98.2%',
-    icon: <Radio className="w-5 h-5" />,
-  },
-  {
-    id: 'swarmteam',
-    name: 'Swarmteam',
-    category: 'engineering',
-    categoryLabel: 'Multi-Agent Execution',
-    tagline: 'Parallel multi-agent DAG scheduler & git-worktree pods.',
-    description:
-      'Decomposes complex roadmaps into dependency-safe execution waves where specialized architect, builder, and QA agents work in parallel.',
-    audience: 'Platform & AI Engineering Teams',
-    accentColor: '#06B6D4',
-    port: ':6040',
-    repoUrl: 'https://github.com/Appembly/swarmteam',
-    status: 'DAG Orchestrator',
-    highlights: [
-      'Topological DAG wave scheduling & critical-path analysis',
-      'Isolated git-worktree execution per autonomous agent pod',
-      'Automated contract & regression gate verification before merge',
-    ],
-    metricLabel: 'Parallel Wave Speedup',
-    metricValue: '3.8×',
-    icon: <Workflow className="w-5 h-5" />,
+    icon: <Terminal className="w-[18px] h-[18px]" />,
   },
   {
     id: 'meterbox',
     name: 'Meterbox',
-    category: 'engineering',
+    status: 'beta',
     categoryLabel: 'AI FinOps & Usage Metering',
-    tagline: 'Sub-5ms edge entitlements, CloudEvents metering & hybrid AI billing.',
+    tagline: 'Usage metering, quotas and billing for AI products.',
     description:
-      'Ingests real-time LLM token & compute CloudEvents with Redis SETNX deduplication, ClickHouse OLAP rollups, priority credit grant waterfalls, and automated Stripe invoicing.',
-    audience: 'AI Platform, FinOps & SaaS Teams',
-    accentColor: '#10B981',
-    port: ':6070',
-    liveUrl: 'http://localhost:6070',
-    repoUrl: 'https://github.com/Appembly/meterbox',
-    status: 'FinOps Control Plane',
-    highlights: [
-      'Exact-once CloudEvents v1.0 ingestion & 1-click DLQ replay',
-      'Sub-5ms pre-flight quota gates & priority credit burndown',
-      'ClickHouse columnar rollups & graduated hybrid Stripe billing',
+      'Ingest token and compute events exactly once, enforce entitlements at the edge, and turn usage into invoices.',
+    capabilities: [
+      'CloudEvents ingestion with idempotent deduplication',
+      'Edge quota checks and prepaid credit burndown',
+      'Rollups, dead-letter replay and Stripe invoicing',
     ],
-    metricLabel: 'Edge Quota Latency',
-    metricValue: '0.28ms',
-    icon: <Compass className="w-5 h-5" />,
+    accentColor: '#10B981',
+    icon: <Gauge className="w-[18px] h-[18px]" />,
+  },
+  {
+    id: 'valiscale',
+    name: 'Valiscale',
+    status: 'soon',
+    categoryLabel: 'Product & Venture Studio',
+    tagline: 'From raw concept to validated project and launch.',
+    description:
+      'Assess market viability, generate structured PRDs, and track a product from idea to growth.',
+    capabilities: [],
+    accentColor: '#3B82F6',
+    icon: <Rocket className="w-[18px] h-[18px]" />,
+  },
+  {
+    id: 'swarmteam',
+    name: 'Swarmteam',
+    status: 'soon',
+    categoryLabel: 'Multi-Agent Execution',
+    tagline: 'Parallel agent teams for large roadmaps.',
+    description:
+      'Break work into dependency-safe waves where specialised agents build and verify in parallel.',
+    capabilities: [],
+    accentColor: '#06B6D4',
+    icon: <Workflow className="w-[18px] h-[18px]" />,
+  },
+  {
+    id: 'wotneed',
+    name: 'Wotneed',
+    status: 'soon',
+    categoryLabel: 'Conversational Commerce',
+    tagline: 'A consultative AI shopping concierge.',
+    description:
+      'Guide shoppers from intent to the right product, and capture unmet demand from real conversations.',
+    capabilities: [],
+    accentColor: '#F59E0B',
+    icon: <ShoppingBag className="w-[18px] h-[18px]" />,
+  },
+  {
+    id: 'gatharoom',
+    name: 'Gatharoom',
+    status: 'soon',
+    categoryLabel: 'Live Market Research',
+    tagline: 'AI-moderated live customer focus groups.',
+    description:
+      'Run structured research sessions with adaptive follow-ups and synthesised insights.',
+    capabilities: [],
+    accentColor: '#8B5CF6',
+    icon: <Radio className="w-[18px] h-[18px]" />,
   },
 ];
 
-const FOUNDATION_PILLARS = [
+const BETA_PRODUCTS = PRODUCT_SUITE.filter((p) => p.status === 'beta');
+const SOON_PRODUCTS = PRODUCT_SUITE.filter((p) => p.status === 'soon');
+
+interface ShowcaseItem {
+  id: string;
+  name: string;
+  kicker: string;
+  headline: string;
+  description: string;
+  image: string;
+  accent: string;
+  icon: React.ReactNode;
+  bullets: string[];
+  highlights: { title: string; detail: string }[];
+}
+
+const SHOWCASE: ShowcaseItem[] = [
   {
-    id: 'sauthen',
-    name: 'Sauthen',
-    subtitle: 'One Account Everywhere',
-    port: ':6020',
-    repoUrl: 'https://github.com/Appembly/sauthen',
+    id: 'cyclode',
+    name: 'Cyclode',
+    kicker: 'Autonomous engineering workstation',
+    headline: 'Plan, code, read and verify — in one calm workspace.',
     description:
-      'Sign in once across every Appembly application. Unified OAuth2/OIDC identity, multi-organization workspaces, and cryptographically scoped token delegation for both humans and autonomous agents.',
-    badge: 'Identity & Trust',
-    icon: <ShieldCheck className="w-5 h-5 text-[#72B091]" />,
+      'Chat with an agent that understands your whole repository, while docs, terminal, previews and diffs sit right beside the conversation.',
+    image: SHOT_CYCLODE,
+    accent: '#4E8067',
+    icon: <Terminal className="w-4 h-4" />,
+    bullets: [
+      'Step-by-step reasoning and auditable actions',
+      'Web & Docs reader that can operate live pages',
+      'Sandboxed previews, terminal and diffs side by side',
+    ],
+    highlights: [
+      { title: 'Auditable', detail: 'Every action logged' },
+      { title: 'Cost-aware', detail: 'Live token telemetry' },
+    ],
   },
+  {
+    id: 'meterbox',
+    name: 'Meterbox',
+    kicker: 'AI FinOps control plane',
+    headline: 'Every token metered. Every quota enforced at the edge.',
+    description:
+      'A live metering pipeline — from scoped keys to deduplication, rollups and invoicing — designed so usage is never dropped or billed twice.',
+    image: SHOT_METERBOX,
+    accent: '#10B981',
+    icon: <Gauge className="w-4 h-4" />,
+    bullets: [
+      'CloudEvents ingestion with idempotent deduplication',
+      'Edge quota checks and prepaid credit burndown',
+      'Dead-letter queue with inspect, repair and replay',
+    ],
+    highlights: [
+      { title: 'Exactly-once', detail: 'Idempotent ingestion' },
+      { title: 'Edge-first', detail: 'Quota checks before usage' },
+    ],
+  },
+];
+
+const FOUNDATION = [
   {
     id: 'runctor',
     name: 'Runctor',
-    subtitle: 'One Shared Intelligence',
-    port: 'v0.2.0',
-    repoUrl: 'https://github.com/Appembly/runctor',
+    subtitle: 'One shared intelligence',
+    status: 'In use',
     description:
-      'Our universal agentic runtime dynamically injects domain tools, curated skills, personas, and deterministic evaluation gates so context flows seamlessly across every Appembly product.',
-    badge: 'Agentic Runtime',
-    icon: <Cpu className="w-5 h-5 text-[#72B091]" />,
+      'Our agentic runtime injects domain tools, skills, personas and evaluation gates into every product. It powers Cyclode today.',
+    icon: <Cpu className="w-5 h-5" />,
   },
   {
-    id: 'ui',
-    name: 'Appembly UI',
-    subtitle: 'One Calm Design Language',
-    port: ':6005',
-    repoUrl: 'https://github.com/Appembly/ui',
+    id: 'sauthen',
+    name: 'Sauthen',
+    subtitle: 'One account everywhere',
+    status: 'In development',
     description:
-      'Every Appembly product shares the same tactile geometry, collapsible single-rail navigation, high-contrast typography, and zero-clutter ergonomics in Graphite, Off-White, and Sage Green.',
-    badge: 'Design System',
-    icon: <Layers className="w-5 h-5 text-[#72B091]" />,
+      'Unified identity across every Appembly app, with organisation workspaces and scoped delegation for people and agents.',
+    icon: <ShieldCheck className="w-5 h-5" />,
   },
 ];
 
-const PREVIEW_METRICS: KpiMetricItem[] = [
-  {
-    id: 'concepts',
-    label: 'Validated Concepts',
-    scopeLabel: 'Viability Score across 5 active ventures',
-    value: '91.4 / 100',
-    accentColor: 'sage',
-    delta: '+6.8%',
-    deltaTrend: 'up',
-  },
-  {
-    id: 'velocity',
-    label: 'Swarmteam Wave Velocity',
-    scopeLabel: '4 parallel agent pods · 100% gate pass',
-    value: '18 Tasks/d',
-    accentColor: 'emerald',
-    delta: '+34%',
-    deltaTrend: 'up',
-  },
-  {
-    id: 'demand',
-    label: 'Wotneed Buyer Conversion',
-    scopeLabel: 'Consultative concierge checkouts',
-    value: '34.8%',
-    accentColor: 'amber',
-    delta: '+11.2%',
-    deltaTrend: 'up',
-  },
-  {
-    id: 'research',
-    label: 'Gatharoom Synthesis',
-    scopeLabel: 'Captured across 12 live customer rooms',
-    value: '420 Signals',
-    accentColor: 'indigo',
-    delta: '+19.4%',
-    deltaTrend: 'up',
-  },
+const AVAILABILITY = [
+  { value: BETA_PRODUCTS.length, label: 'Products in private beta', detail: BETA_PRODUCTS.map((p) => p.name).join(' · ') },
+  { value: SOON_PRODUCTS.length, label: 'Products in development', detail: SOON_PRODUCTS.map((p) => p.name).join(' · ') },
+  { value: FOUNDATION.length, label: 'Shared foundation layers', detail: FOUNDATION.map((f) => f.name).join(' · ') },
 ];
 
-const PREVIEW_TIMELINE_TASKS: TimelineTaskItem[] = [
-  {
-    id: 'TASK-101',
-    title: 'Gatharoom Focus Group Synthesis & WTP Clustering',
-    wave: 1,
-    persona: 'gatharoom_moderator',
-    status: 'completed',
-    progress: 100,
-    startHour: 0,
-    durationHours: 3,
-    dependsOn: [],
-    evalGateStatus: 'passed',
-  },
-  {
-    id: 'TASK-102',
-    title: 'Valiscale PRD & Architecture Blueprint Generation',
-    wave: 1,
-    persona: 'valiscale_concept',
-    status: 'completed',
-    progress: 100,
-    startHour: 3,
-    durationHours: 3,
-    dependsOn: ['TASK-101'],
-    evalGateStatus: 'passed',
-  },
-  {
-    id: 'TASK-201',
-    title: 'Cyclode Autonomous Backend & Sauthen RBAC Wiring',
-    wave: 2,
-    persona: 'cyclode_coding',
-    status: 'running',
-    progress: 78,
-    startHour: 6,
-    durationHours: 5,
-    dependsOn: ['TASK-102'],
-    evalGateStatus: 'passed',
-    worktreeBranch: 'swarm/wave2-backend',
-  },
-  {
-    id: 'TASK-202',
-    title: 'Wotneed Conversational Concierge & SKU Graph',
-    wave: 2,
-    persona: 'wotneed_ecommerce',
-    status: 'running',
-    progress: 65,
-    startHour: 6,
-    durationHours: 6,
-    dependsOn: ['TASK-102'],
-    evalGateStatus: 'pending',
-    worktreeBranch: 'swarm/wave2-commerce',
-  },
-  {
-    id: 'TASK-301',
-    title: 'Production Canary Rollout & Eval Gate Verification',
-    wave: 3,
-    persona: 'swarmteam_orchestrator',
-    status: 'queued',
-    progress: 0,
-    startHour: 12,
-    durationHours: 4,
-    dependsOn: ['TASK-201', 'TASK-202'],
-    evalGateStatus: 'pending',
-  },
+const PRINCIPLES = [
+  { title: 'Connected', desc: 'Shared identity, context and telemetry across every product.' },
+  { title: 'Modular', desc: 'Adopt any application standalone or compose the full ecosystem.' },
+  { title: 'Scalable', desc: 'From first concept validation to multi-agent production workloads.' },
+  { title: 'Timeless', desc: 'Calm geometry and high-contrast clarity built to endure.' },
 ];
 
-const PREVIEW_CHART_LABELS = ['Wk 1', 'Wk 2', 'Wk 3', 'Wk 4', 'Wk 5', 'Wk 6'];
-
-const PREVIEW_CHART_SERIES: ChartSeries[] = [
-  { id: 'valiscale', label: 'Valiscale Readiness Index', color: '#4E8067', values: [12, 16, 20, 24, 27, 29] },
-  { id: 'cyclode', label: 'Cyclode Autonomous PR Velocity', color: '#3B82F6', values: [9, 14, 18, 22, 25, 28] },
-  { id: 'wotneed', label: 'Wotneed Concierge Conversion', color: '#F59E0B', dashed: true, values: [8, 11, 15, 19, 23, 26] },
+const ACCESS_STEPS = [
+  { title: 'Tell us what you’re building', desc: 'Pick the products you’re interested in and share a little context.' },
+  { title: 'We onboard in small cohorts', desc: 'Private beta seats open in waves so every team gets real support.' },
+  { title: 'Get a private invite', desc: 'Beta products arrive first; waitlisted products as soon as they’re ready.' },
 ];
 
-export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({ onOpenStudio }) => {
-  const { theme, toggleTheme } = useAppemblyTheme();
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'product' | 'engineering' | 'customer'>('all');
-  const [showConstructionGrid, setShowConstructionGrid] = useState(true);
-  const [selectedTask, setSelectedTask] = useState<TimelineTaskItem | null>(PREVIEW_TIMELINE_TASKS[2]);
+const NAV_LINKS = [
+  { href: '#showcase', label: 'Showcase' },
+  { href: '#products', label: 'Products' },
+  { href: '#platform', label: 'Platform' },
+  { href: '#access', label: 'Access' },
+];
 
-  const filteredProducts =
-    selectedCategory === 'all'
-      ? PRODUCT_SUITE
-      : PRODUCT_SUITE.filter((item) => item.category === selectedCategory);
+/* -------------------------------------------------------------------------- */
+/*                                Motion hooks                                */
+/* -------------------------------------------------------------------------- */
+
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return reduced;
+}
+
+/** Fires once when the element first scrolls into view. */
+function useInView<T extends Element>(threshold = 0.18, rootMargin = '0px 0px -8% 0px') {
+  const ref = useRef<T | null>(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || inView) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { threshold, rootMargin }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [inView, threshold, rootMargin]);
+  return [ref, inView] as const;
+}
+
+const Reveal: React.FC<{
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+  id?: string;
+}> = ({ children, delay = 0, className = '', id }) => {
+  const [ref, inView] = useInView<HTMLDivElement>();
+  return (
+    <div
+      ref={ref}
+      id={id}
+      className={`ap-reveal ${inView ? 'is-visible' : ''} ${className}`}
+      style={{ '--ap-delay': `${delay}ms` } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  );
+};
+
+const CountUp: React.FC<{ value: number }> = ({ value }) => {
+  const [ref, inView] = useInView<HTMLSpanElement>(0.4);
+  const reduced = usePrefersReducedMotion();
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (!inView) return;
+    if (reduced) {
+      setDisplay(value);
+      return;
+    }
+    let raf = 0;
+    const duration = 1200;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      setDisplay(Math.round(value * (1 - Math.pow(1 - t, 4))));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [inView, reduced, value]);
 
   return (
-    <div className="min-h-screen bg-[var(--ui-bg-canvas)] text-[var(--ui-text-primary)] transition-colors duration-200 selection:bg-[#4E8067] selection:text-[#F6F7F5]">
-      {/* Sticky Floating Navigation Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-[var(--ui-bg-canvas)]/85 border-b border-[var(--ui-border)]">
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10 h-20 flex items-center justify-between gap-6">
-          {/* Left Brand Lockup */}
-          <div className="flex items-center gap-4 shrink-0">
-            <a href="#top" className="flex items-center gap-3">
-              <AppemblyLogo variant="lockup" size={34} productName="Appembly" />
+    <span ref={ref} className="tabular-nums">
+      {display}
+    </span>
+  );
+};
+
+/** Sets CSS custom properties for the cursor-following spotlight effect. */
+const handleSpotlightMove = (e: React.MouseEvent<HTMLElement>) => {
+  const rect = e.currentTarget.getBoundingClientRect();
+  e.currentTarget.style.setProperty('--ap-mx', `${e.clientX - rect.left}px`);
+  e.currentTarget.style.setProperty('--ap-my', `${e.clientY - rect.top}px`);
+};
+
+/* -------------------------------------------------------------------------- */
+/*                               Visual helpers                               */
+/* -------------------------------------------------------------------------- */
+
+/** Product window chrome. Shows the product name — never a fake public URL. */
+const ProductFrame: React.FC<{
+  children: React.ReactNode;
+  label: string;
+  className?: string;
+}> = ({ children, label, className = '' }) => (
+  <div
+    className={`rounded-[18px] overflow-hidden border bg-[var(--ui-bg-surface)] border-[var(--ui-border)] shadow-[0_40px_120px_-30px_rgba(17,22,24,0.45),0_12px_32px_-12px_rgba(17,22,24,0.25)] ${className}`}
+  >
+    <div className="h-9 flex items-center gap-3 px-4 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)]">
+      <div className="flex gap-1.5">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]/80" />
+        <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]/80" />
+        <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]/80" />
+      </div>
+      <div className="mx-auto max-w-[260px] w-full h-5 rounded-md text-[10.5px] font-medium flex items-center justify-center gap-1.5 truncate px-2 bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]">
+        <Lock className="w-2.5 h-2.5 shrink-0" />
+        {label}
+      </div>
+      <div className="w-[42px]" />
+    </div>
+    {children}
+  </div>
+);
+
+const ProductShot: React.FC<{ src: string; alt: string; eager?: boolean; className?: string }> = ({
+  src,
+  alt,
+  eager = false,
+  className = 'block w-full h-auto',
+}) => (
+  <img
+    src={src}
+    alt={alt}
+    width={SHOT_WIDTH}
+    height={SHOT_HEIGHT}
+    loading={eager ? 'eager' : 'lazy'}
+    decoding="async"
+    className={className}
+  />
+);
+
+const StatusBadge: React.FC<{ status: ProductStatus; tone?: 'light' | 'dark' }> = ({
+  status,
+  tone = 'light',
+}) =>
+  status === 'beta' ? (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap ${
+        tone === 'dark' ? 'bg-[#4E8067]/20 text-[#72B091]' : 'bg-[var(--ui-accent)]/12 text-[var(--ui-accent)]'
+      }`}
+    >
+      <span className="ap-pulse w-1.5 h-1.5 rounded-full bg-current" />
+      Private beta
+    </span>
+  ) : (
+    <span
+      className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border border-dashed ${
+        tone === 'dark' ? 'border-[#344248] text-[#A9AFAB]' : 'border-[var(--ui-border-strong)] text-[var(--ui-text-muted)]'
+      }`}
+    >
+      Coming soon
+    </span>
+  );
+
+const SectionEyebrow: React.FC<{ children: React.ReactNode; tone?: 'light' | 'dark' }> = ({
+  children,
+  tone = 'light',
+}) => (
+  <div
+    className={`inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.16em] ${
+      tone === 'dark' ? 'text-[#72B091]' : 'text-[var(--ui-accent)]'
+    }`}
+  >
+    <span className="w-5 h-px bg-current opacity-60" />
+    {children}
+  </div>
+);
+
+const HeadlineWords: React.FC<{ text: string; startDelay?: number; className?: string }> = ({
+  text,
+  startDelay = 0,
+  className = '',
+}) => (
+  <>
+    {text.split(' ').map((word, i) => (
+      <span key={`${word}-${i}`} className={`ap-word ${className}`}>
+        <span style={{ '--ap-delay': `${startDelay + i * 80}ms` } as React.CSSProperties}>
+          {word}
+        </span>
+        {'\u00A0'}
+      </span>
+    ))}
+  </>
+);
+
+type RequestAccess = (productId?: string) => void;
+
+/* -------------------------------------------------------------------------- */
+/*                                   Sections                                 */
+/* -------------------------------------------------------------------------- */
+
+const Header: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => {
+  const { theme, toggleTheme } = useAppemblyTheme();
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  return (
+    <header className="fixed top-0 inset-x-0 z-50 px-4 sm:px-6">
+      <div
+        className={`ap-header-inner mx-auto flex items-center justify-between gap-6 h-16 px-4 sm:px-5 border ${
+          scrolled
+            ? 'max-w-[1080px] mt-3 rounded-2xl bg-[var(--ui-bg-surface)] backdrop-blur-xl border-[var(--ui-border)] shadow-[0_8px_32px_-12px_rgba(17,22,24,0.18)]'
+            : 'max-w-[1320px] mt-0 rounded-none bg-transparent border-transparent'
+        }`}
+      >
+        <a href="#top" className="flex items-center shrink-0" aria-label="Appembly home">
+          <AppemblyLogo variant="lockup" size={30} productName="Appembly" />
+        </a>
+
+        <nav className="hidden md:flex items-center gap-1" aria-label="Primary">
+          {NAV_LINKS.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="px-3.5 py-2 rounded-lg text-[13.5px] font-medium text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-hover)] transition-colors"
+            >
+              {item.label}
             </a>
-            <span className="hidden xl:inline-block h-4 w-px bg-[var(--ui-border-strong)]" />
-            <span className="hidden xl:inline-block text-[13px] font-medium text-[#4E8067] whitespace-nowrap">
-              Connected software. Greater possibilities.
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="w-9 h-9 rounded-lg text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-hover)] flex items-center justify-center transition-colors cursor-pointer"
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRequestAccess()}
+            className="hidden sm:inline-flex group items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold bg-[var(--ui-text-primary)] text-[var(--ui-bg-canvas)] hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            Request access
+            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            className="md:hidden w-9 h-9 rounded-lg flex items-center justify-center text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-hover)] cursor-pointer"
+            aria-label="Toggle menu"
+            aria-expanded={menuOpen}
+          >
+            {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
+      </div>
+
+      {menuOpen && (
+        <div className="md:hidden ap-enter mx-auto mt-2 max-w-[1080px] rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/95 backdrop-blur-xl p-2 shadow-lg">
+          {NAV_LINKS.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={() => setMenuOpen(false)}
+              className="block px-4 py-3 rounded-xl text-[15px] font-medium text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-hover)]"
+            >
+              {item.label}
+            </a>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setMenuOpen(false);
+              onRequestAccess();
+            }}
+            className="w-full mt-1 px-4 py-3 rounded-xl text-[15px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] cursor-pointer"
+          >
+            Request access
+          </button>
+        </div>
+      )}
+    </header>
+  );
+};
+
+const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => {
+  const stageRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll-linked tilt: the product stage starts slightly reclined and settles flat as you scroll.
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const rect = el.getBoundingClientRect();
+      const vh = window.innerHeight || 1;
+      const tilt = Math.max(0, Math.min(1, (rect.top - vh * 0.12) / (vh * 0.6)));
+      el.style.setProperty('--ap-tilt', tilt.toFixed(3));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  return (
+    <section id="top" className="relative overflow-hidden pt-36 sm:pt-44 pb-8">
+      <div className="pointer-events-none absolute inset-0 ap-lattice" />
+      <div
+        className="pointer-events-none absolute -top-48 left-1/2 -translate-x-1/2 w-[1100px] h-[700px] rounded-full opacity-60 blur-3xl ap-glow"
+        style={{
+          background:
+            'radial-gradient(closest-side, rgba(78,128,103,0.28), rgba(78,128,103,0.08) 60%, transparent)',
+        }}
+      />
+
+      <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
+        <div className="max-w-[920px] mx-auto text-center">
+          <a
+            href="#access"
+            className="ap-enter group inline-flex items-center gap-2.5 pl-2 pr-3.5 py-1.5 rounded-full border border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[12.5px] font-medium text-[var(--ui-text-secondary)] hover:border-[var(--ui-accent)]/50 transition-colors"
+            style={{ '--ap-delay': '0ms' } as React.CSSProperties}
+          >
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--ui-accent)]/12 text-[var(--ui-accent)] font-semibold">
+              <span className="ap-pulse w-1.5 h-1.5 rounded-full bg-current" />
+              Private beta
             </span>
-          </div>
+            <span>
+              Cyclode &amp; Meterbox<span className="hidden sm:inline"> are onboarding early teams</span>
+            </span>
+            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+          </a>
 
-          {/* Center Single-Line Navigation Pill */}
-          <nav className="hidden lg:flex items-center gap-1 px-2 py-1.5 rounded-full bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] shadow-2xs">
-            {[
-              { href: '#products', label: 'Products' },
-              { href: '#interactive-studio', label: 'Interactive Studio' },
-              { href: '#connected-suite', label: 'Connected Foundation' },
-              { href: '#geometry', label: 'Geometry & Brand' },
-            ].map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                className="px-4 py-1.5 rounded-full text-[13px] font-medium text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-subtle)]/70 transition-colors whitespace-nowrap"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          <h1 className="mt-8 text-[44px] sm:text-[64px] lg:text-[84px] font-semibold tracking-[-0.045em] leading-[0.98] text-[var(--ui-text-primary)]">
+            <HeadlineWords text="Assembling AI-native" startDelay={120} />
+            <br />
+            <HeadlineWords text="apps and agents." startDelay={360} className="text-[var(--ui-accent)]" />
+          </h1>
 
-          {/* Right Action Controls */}
-          <div className="flex items-center gap-3 shrink-0">
+          <p
+            className="ap-enter mt-7 text-[17px] sm:text-[19px] leading-[1.6] text-[var(--ui-text-secondary)] max-w-[640px] mx-auto"
+            style={{ '--ap-delay': '700ms' } as React.CSSProperties}
+          >
+            Appembly builds modular applications and autonomous agents designed to work powerfully
+            on their own — and effortlessly together across engineering, FinOps, research and
+            commerce.
+          </p>
+
+          <div
+            className="ap-enter mt-10 flex flex-wrap items-center justify-center gap-3"
+            style={{ '--ap-delay': '850ms' } as React.CSSProperties}
+          >
             <button
               type="button"
-              onClick={toggleTheme}
-              className="w-10 h-10 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] hover:bg-[var(--ui-bg-hover)] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] flex items-center justify-center transition-colors cursor-pointer shadow-2xs"
-              title="Toggle Graphite / Off-White Theme"
+              onClick={() => onRequestAccess()}
+              className="group inline-flex items-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] shadow-[0_8px_24px_-8px_rgba(78,128,103,0.6)] transition-all cursor-pointer"
             >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              Request early access
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
-
-            {onOpenStudio && (
-              <button
-                type="button"
-                onClick={() => onOpenStudio('valiscale')}
-                className="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)] text-[var(--ui-text-primary)] hover:border-[#4E8067] hover:text-[#4E8067] transition-all cursor-pointer whitespace-nowrap shadow-2xs"
-              >
-                <Compass className="w-4 h-4 text-[#4E8067]" />
-                <span>Valiscale Studio</span>
-              </button>
-            )}
-
             <a
-              href="http://localhost:6013"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold bg-[#111618] dark:bg-[#4E8067] text-[#F6F7F5] hover:opacity-90 transition-opacity whitespace-nowrap shadow-xs"
+              href="#products"
+              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors"
             >
-              <span>Launch Cyclode</span>
-              <ArrowUpRight className="w-4 h-4" />
+              Explore the suite
             </a>
           </div>
         </div>
-      </header>
 
-      {/* 1. Architectural Hero Section */}
-      <section id="top" className="relative overflow-hidden pt-16 pb-24 lg:pt-24 lg:pb-32">
-        {/* Subtle Ambient Geometric Background Glow */}
+        {/* Product stage */}
         <div
-          className="pointer-events-none absolute -top-40 right-1/4 w-[640px] h-[640px] rounded-full opacity-20 blur-3xl"
-          style={{
-            background: 'radial-gradient(circle, rgba(78,128,103,0.45) 0%, rgba(78,128,103,0) 70%)',
-          }}
-        />
-
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 lg:gap-12 items-center">
-            {/* Left Column: Company Narrative & Value Proposition */}
-            <div className="lg:col-span-6 space-y-8">
-              <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-[#4E8067]/10 border border-[#4E8067]/25 text-[#4E8067] text-[12px] font-semibold tracking-wide uppercase">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Appembly · Assembling Apps &amp; Agents</span>
-              </div>
-
-              <div className="space-y-5">
-                <h1 className="text-4xl sm:text-5xl lg:text-[60px] font-bold tracking-[-0.03em] leading-[1.05] text-[var(--ui-text-primary)]">
-                  Connected software.{' '}
-                  <span className="text-[#4E8067] block sm:inline">Greater possibilities.</span>
-                </h1>
-
-                <p className="text-[17px] sm:text-[18px] text-[var(--ui-text-secondary)] leading-[1.65] max-w-xl font-normal">
-                  Appembly is a software company building modular applications and autonomous
-                  agents — crafted to work powerfully on their own, and effortlessly together across
-                  product discovery, software engineering, customer research, and commerce.
-                </p>
-              </div>
-
-              {/* Primary Hero CTAs */}
-              <div className="flex flex-wrap items-center gap-4 pt-1">
-                <a
-                  href="#products"
-                  className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-xl text-[14px] font-semibold bg-[#4E8067] text-[#F6F7F5] hover:bg-[#3F6B55] transition-all shadow-sm"
-                >
-                  <span>Explore the Product Suite</span>
-                  <ArrowRight className="w-4 h-4" />
-                </a>
-
-                {onOpenStudio && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenStudio('valiscale')}
-                    className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-xl text-[14px] font-semibold bg-[var(--ui-bg-surface)] border border-[var(--ui-border-strong)] text-[var(--ui-text-primary)] hover:border-[#4E8067] transition-all cursor-pointer shadow-2xs"
-                  >
-                    <Play className="w-4 h-4 text-[#4E8067] fill-[#4E8067]" />
-                    <span>Interactive Studio Demo</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Brand Domain Pills Strip */}
-              <div className="pt-4 border-t border-[var(--ui-border)] flex flex-wrap items-center gap-2.5">
-                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)] mr-2">
-                  Ecosystem Domains
-                </span>
-                {['Web', 'Mobile', 'Products', 'Docs', 'Infra'].map((pill) => (
-                  <span
-                    key={pill}
-                    className="px-3.5 py-1 rounded-lg text-[12.5px] font-medium bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] text-[var(--ui-text-secondary)]"
-                  >
-                    {pill}
-                  </span>
-                ))}
-              </div>
+          className="ap-enter-stage relative mt-20 sm:mt-24 mx-auto max-w-[1160px]"
+          style={{ '--ap-delay': '1000ms', perspective: '2200px' } as React.CSSProperties}
+        >
+          <div ref={stageRef} className="relative" style={{ '--ap-tilt': 1 } as React.CSSProperties}>
+            <div className="ap-stage-back hidden md:block absolute -right-6 lg:-right-16 -top-14 w-[58%] opacity-90">
+              <ProductFrame label="Meterbox · Private beta" className="rotate-[2deg]">
+                <ProductShot src={SHOT_METERBOX} alt="Meterbox FinOps control plane" eager />
+              </ProductFrame>
             </div>
 
-            {/* Right Column: Spacious Architectural Suite Board */}
-            <div className="lg:col-span-6">
-              <div className="rounded-3xl bg-[#111618] text-[#F6F7F5] p-7 sm:p-9 border border-[#263136] shadow-2xl space-y-7 relative overflow-hidden">
-                {/* Subtle Top Right Geometric Watermark */}
-                <div className="flex items-start justify-between gap-4 border-b border-[#222C30] pb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-13 h-13 rounded-2xl bg-[#4E8067] flex items-center justify-center shadow-md shrink-0">
-                      <AppemblyLogo variant="mark" size={30} strokeColor="#F6F7F5" />
-                    </div>
-                    <div>
-                      <div className="text-[17px] font-semibold tracking-tight text-[#F6F7F5]">
-                        Appembly Connected Suite
-                      </div>
-                      <div className="text-[13px] text-[#A9AFAB] mt-0.5">
-                        5 Standalone Applications · 1 Shared Foundation
-                      </div>
-                    </div>
-                  </div>
-                  <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-[#4E8067]/20 text-[#72B091] border border-[#4E8067]/35 shrink-0">
-                    Active Suite
-                  </span>
-                </div>
+            <div className="ap-stage relative">
+              <ProductFrame label="Cyclode · Private beta" className="relative">
+                <ProductShot src={SHOT_CYCLODE} alt="Cyclode autonomous engineering workstation" eager />
+              </ProductFrame>
+            </div>
+          </div>
 
-                {/* Spacious 2-Column Product Matrix + Full-Width Featured Workstation */}
-                <div className="space-y-3">
-                  {PRODUCT_SUITE.map((prod) => (
-                    <div
-                      key={prod.id}
-                      className="group rounded-2xl bg-[#171E21] hover:bg-[#1D262A] border border-[#263136] p-4 transition-all flex items-center justify-between gap-4"
+          <div className="pointer-events-none absolute inset-x-0 -bottom-2 h-12 sm:h-40 bg-gradient-to-t from-[var(--ui-bg-canvas)] to-transparent" />
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const ProductMarquee: React.FC = () => {
+  const items = [
+    ...PRODUCT_SUITE.map((p) => ({ name: p.name, color: p.accentColor, soon: p.status === 'soon' })),
+    ...FOUNDATION.map((f) => ({ name: f.name, color: '#72B091', soon: false })),
+  ];
+  const loop = [...items, ...items];
+  return (
+    <section aria-label="Appembly ecosystem" className="py-10 border-y border-[var(--ui-border)]">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 flex flex-col md:flex-row md:items-center gap-6">
+        <div className="text-[12.5px] font-medium text-[var(--ui-text-muted)] shrink-0 md:w-56">
+          One ecosystem. Six products.
+          <br className="hidden md:block" /> One shared foundation.
+        </div>
+        <div className="ap-marquee overflow-hidden flex-1" aria-hidden="true">
+          <div className="ap-marquee-track">
+            {loop.map((item, i) => (
+              <div
+                key={`${item.name}-${i}`}
+                className={`flex items-center gap-2.5 px-8 text-[20px] font-semibold tracking-[-0.02em] whitespace-nowrap ${
+                  item.soon ? 'text-[var(--ui-text-muted)]' : 'text-[var(--ui-text-secondary)]'
+                }`}
+              >
+                <span className="w-2 h-2 rotate-45 rounded-[2px]" style={{ backgroundColor: item.color }} />
+                {item.name}
+                {item.soon && (
+                  <span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--ui-text-muted)]">
+                    Soon
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => {
+  const reduced = usePrefersReducedMotion();
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [autoplay, setAutoplay] = useState(true);
+  const active = SHOWCASE[activeIdx];
+
+  const select = useCallback((idx: number) => {
+    setActiveIdx(idx);
+    setAutoplay(false);
+  }, []);
+
+  const advance = useCallback(() => {
+    setActiveIdx((i) => (i + 1) % SHOWCASE.length);
+  }, []);
+
+  return (
+    <section id="showcase" className="py-28 lg:py-36 scroll-mt-20">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
+        <Reveal className="max-w-[760px]">
+          <SectionEyebrow>Now in private beta</SectionEyebrow>
+          <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
+            Real products, built for real work.
+          </h2>
+          <p className="mt-5 text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[620px]">
+            Cyclode and Meterbox are running today with early teams. Both share the same calm
+            interface and live telemetry — so moving between them feels like one product.
+          </p>
+        </Reveal>
+
+        <div className="ap-showcase mt-14 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
+          <Reveal className="lg:col-span-4 space-y-3" delay={80}>
+            <div role="tablist" aria-label="Products in private beta" className="space-y-3">
+              {SHOWCASE.map((item, idx) => {
+                const isActive = idx === activeIdx;
+                return (
+                  <div
+                    key={item.id}
+                    className={`rounded-2xl border p-5 transition-all duration-500 relative overflow-hidden ${
+                      isActive
+                        ? 'bg-[var(--ui-bg-surface)] border-[var(--ui-border-strong)] shadow-[0_12px_40px_-20px_rgba(17,22,24,0.35)]'
+                        : 'bg-transparent border-transparent hover:bg-[var(--ui-bg-surface)]/60'
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      onClick={() => select(idx)}
+                      className="w-full flex items-center gap-3 text-left cursor-pointer"
                     >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <span
-                          className="w-1.5 h-9 rounded-full shrink-0"
-                          style={{ backgroundColor: prod.accentColor }}
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2.5">
-                            <span className="text-[14px] font-semibold text-[#F6F7F5]">
-                              {prod.name}
-                            </span>
-                            <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[#111618] text-[#A9AFAB] border border-[#263136]">
-                              {prod.port}
-                            </span>
+                      <span
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0"
+                        style={{ backgroundColor: item.accent }}
+                      >
+                        {item.icon}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-[15px] font-semibold text-[var(--ui-text-primary)]">{item.name}</div>
+                        <div className="text-[12.5px] text-[var(--ui-text-muted)]">{item.kicker}</div>
+                      </div>
+                    </button>
+
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-700 ${
+                        isActive ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                      aria-hidden={!isActive}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="pt-5 space-y-4">
+                          <div className="text-[19px] font-semibold tracking-[-0.02em] leading-snug text-[var(--ui-text-primary)]">
+                            {item.headline}
                           </div>
-                          <p className="text-[12.5px] text-[#A9AFAB] mt-0.5 line-clamp-1">
-                            {prod.tagline}
-                          </p>
+                          <p className="text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{item.description}</p>
+                          <ul className="space-y-2.5">
+                            {item.bullets.map((b) => (
+                              <li key={b} className="flex items-start gap-2.5 text-[13.5px] text-[var(--ui-text-secondary)]">
+                                <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: item.accent }} />
+                                {b}
+                              </li>
+                            ))}
+                          </ul>
+                          <div className="grid grid-cols-2 gap-3 pt-2">
+                            {item.highlights.map((h) => (
+                              <div key={h.title} className="rounded-xl bg-[var(--ui-bg-subtle)] px-3.5 py-3">
+                                <div className="text-[15px] font-semibold tracking-tight text-[var(--ui-text-primary)]">
+                                  {h.title}
+                                </div>
+                                <div className="text-[11.5px] text-[var(--ui-text-muted)]">{h.detail}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            tabIndex={isActive ? 0 : -1}
+                            onClick={() => onRequestAccess(item.id)}
+                            className="group inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] transition-colors cursor-pointer"
+                          >
+                            Request access to {item.name}
+                            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+                          </button>
                         </div>
                       </div>
+                    </div>
 
-                      <span className="hidden sm:inline-flex shrink-0 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-[#111618] text-[#C5CAC7] border border-[#263136]">
-                        {prod.categoryLabel}
+                    {isActive && autoplay && !reduced && (
+                      <span className="absolute left-5 right-5 bottom-0 h-[2px] rounded-full bg-[var(--ui-border)] overflow-hidden">
+                        <span
+                          key={`${item.id}-${activeIdx}`}
+                          className="ap-progress-bar block h-full w-full"
+                          style={{ backgroundColor: item.accent, '--ap-duration': '8s' } as React.CSSProperties}
+                          onAnimationEnd={advance}
+                        />
                       </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Reveal>
+
+          <Reveal className="lg:col-span-8" delay={160}>
+            <div className="relative">
+              <div
+                className="pointer-events-none absolute -inset-10 rounded-[40px] blur-3xl opacity-40 transition-colors duration-1000"
+                style={{ background: `radial-gradient(closest-side, ${active.accent}55, transparent)` }}
+              />
+              <ProductFrame label={`${active.name} · Private beta`} className="relative">
+                <div className="relative aspect-[1024/585] bg-[var(--ui-bg-subtle)]">
+                  {SHOWCASE.map((item, idx) => (
+                    <div key={item.id} data-active={idx === activeIdx ? 'true' : 'false'} className="ap-shot absolute inset-0">
+                      <ProductShot
+                        src={item.image}
+                        alt={`${item.name} — ${item.kicker}`}
+                        className="w-full h-full object-cover object-top"
+                      />
                     </div>
                   ))}
                 </div>
+              </ProductFrame>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+};
 
-                {/* Bottom Shared Foundation Bar */}
-                <div className="pt-4 border-t border-[#222C30] flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#A9AFAB]">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#4E8067]" />
-                    <span>Shared Core: Sauthen SSO · Runctor v0.2 · @appembly/ui</span>
-                  </div>
-                  <span className="font-mono text-[11px] text-[#72B091]">appembly.com</span>
+const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => (
+  <section id="products" className="py-28 lg:py-36 bg-[var(--ui-bg-subtle)]/50 border-y border-[var(--ui-border)] scroll-mt-20">
+    <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+        <Reveal className="max-w-[720px]">
+          <SectionEyebrow>The product suite</SectionEyebrow>
+          <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
+            Powerful alone.
+            <br />
+            <span className="text-[var(--ui-text-muted)]">Effortless together.</span>
+          </h2>
+        </Reveal>
+        <Reveal delay={100} className="max-w-[420px]">
+          <p className="text-[16px] leading-[1.65] text-[var(--ui-text-secondary)]">
+            Start with one app to solve an immediate workflow. As the suite grows, research,
+            validation, engineering and commerce will share context automatically.
+          </p>
+        </Reveal>
+      </div>
+
+      {/* Private beta */}
+      <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {BETA_PRODUCTS.map((product, idx) => (
+          <Reveal key={product.id} delay={idx * 90}>
+            <article
+              onMouseMove={handleSpotlightMove}
+              className="ap-spotlight ap-lift group h-full rounded-3xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-8 flex flex-col hover:border-[var(--ui-border-strong)] hover:shadow-[0_24px_60px_-28px_rgba(17,22,24,0.35)]"
+              style={{ '--ap-spot': `${product.accentColor}22` } as React.CSSProperties}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
+                  style={{ backgroundColor: product.accentColor }}
+                >
+                  {product.icon}
+                </span>
+                <StatusBadge status={product.status} />
+              </div>
+              <div className="mt-7">
+                <div className="text-[12px] font-medium" style={{ color: product.accentColor }}>
+                  {product.categoryLabel}
+                </div>
+                <h3 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em] text-[var(--ui-text-primary)]">
+                  {product.name}
+                </h3>
+                <p className="mt-2 text-[16px] font-medium leading-snug text-[var(--ui-text-primary)]/85">{product.tagline}</p>
+                <p className="mt-3 text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{product.description}</p>
+              </div>
+              <ul className="mt-6 space-y-2.5">
+                {product.capabilities.map((c) => (
+                  <li key={c} className="flex items-start gap-2.5 text-[13.5px] text-[var(--ui-text-secondary)]">
+                    <Check className="w-4 h-4 mt-0.5 shrink-0" style={{ color: product.accentColor }} />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-auto pt-8">
+                <div className="pt-5 border-t border-[var(--ui-border)] flex items-center justify-between gap-4">
+                  <span className="text-[12.5px] text-[var(--ui-text-muted)]">Invitation-only</span>
+                  <button
+                    type="button"
+                    onClick={() => onRequestAccess(product.id)}
+                    className="inline-flex items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold bg-[var(--ui-text-primary)] text-[var(--ui-bg-canvas)] hover:opacity-90 transition-opacity cursor-pointer"
+                  >
+                    Request access <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-            </div>
+            </article>
+          </Reveal>
+        ))}
+      </div>
+
+      {/* Coming soon */}
+      <Reveal className="mt-20 flex items-center gap-4">
+        <h3 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)] whitespace-nowrap">
+          Coming soon
+        </h3>
+        <span className="h-px flex-1 bg-[var(--ui-border)]" />
+      </Reveal>
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {SOON_PRODUCTS.map((product, idx) => (
+          <Reveal key={product.id} delay={idx * 80}>
+            <article className="ap-lift group h-full rounded-3xl border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/60 p-6 flex flex-col hover:bg-[var(--ui-bg-surface)]">
+              <div className="flex items-center justify-between">
+                <span
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                  style={{ backgroundColor: `${product.accentColor}1F`, color: product.accentColor }}
+                >
+                  {product.icon}
+                </span>
+                <StatusBadge status={product.status} />
+              </div>
+              <div className="mt-6 text-[12px] font-medium" style={{ color: product.accentColor }}>
+                {product.categoryLabel}
+              </div>
+              <h4 className="mt-1 text-[19px] font-semibold tracking-[-0.02em] text-[var(--ui-text-primary)]">{product.name}</h4>
+              <p className="mt-2 text-[13.5px] leading-relaxed text-[var(--ui-text-secondary)]">{product.tagline}</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[var(--ui-text-muted)]">{product.description}</p>
+              <button
+                type="button"
+                onClick={() => onRequestAccess(product.id)}
+                className="mt-auto pt-6 self-start inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] transition-colors cursor-pointer"
+              >
+                Join the waitlist <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </article>
+          </Reveal>
+        ))}
+      </div>
+    </div>
+  </section>
+);
+
+/** Animated hub diagram: Appembly core → shared foundation → six products (beta products animate). */
+const PlatformDiagram: React.FC = () => {
+  const [ref, inView] = useInView<HTMLDivElement>(0.25);
+  const cx = 320;
+  const cy = 240;
+  const products = PRODUCT_SUITE.map((p, i) => {
+    const angle = (-90 + i * 60) * (Math.PI / 180);
+    return { ...p, x: cx + Math.cos(angle) * 236, y: cy + Math.sin(angle) * 178 };
+  });
+  // Foundation nodes sit at 0°/180° — symmetrically between the product flow lines (every 60° from -90°).
+  const foundation = FOUNDATION.map((f, i) => {
+    const angle = (i * (360 / FOUNDATION.length)) * (Math.PI / 180);
+    return { ...f, x: cx + Math.cos(angle) * 108, y: cy + Math.sin(angle) * 92 };
+  });
+
+  return (
+    <div ref={ref} className={inView ? 'is-visible' : ''}>
+      <svg viewBox="0 0 640 480" className="w-full h-auto" role="img" aria-label="Appembly platform architecture: a shared core and foundation connecting six products">
+        <defs>
+          <radialGradient id="ap-core-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#4E8067" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#4E8067" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+
+        <g className="ap-spin-slow">
+          <ellipse cx={cx} cy={cy} rx={236} ry={178} fill="none" stroke="#263136" strokeDasharray="2 6" />
+        </g>
+        <ellipse cx={cx} cy={cy} rx={108} ry={92} fill="none" stroke="#263136" />
+        <circle cx={cx} cy={cy} r={110} fill="url(#ap-core-glow)" />
+
+        {products.map((p, i) => {
+          const live = p.status === 'beta';
+          return (
+            <g key={`line-${p.id}`}>
+              <line
+                x1={cx}
+                y1={cy}
+                x2={p.x}
+                y2={p.y}
+                stroke={live ? '#263136' : '#2A3539'}
+                strokeWidth={1}
+                strokeDasharray={live ? undefined : '2 5'}
+              />
+              {live && (
+                <>
+                  <line x1={cx} y1={cy} x2={p.x} y2={p.y} stroke={p.accentColor} strokeOpacity={0.75} strokeWidth={1.4} className="ap-flow" />
+                  <circle r={3} fill={p.accentColor}>
+                    <animateMotion dur="3.2s" begin={`${i * 0.6}s`} repeatCount="indefinite" path={`M${cx},${cy} L${p.x},${p.y}`} />
+                    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.15;0.8;1" dur="3.2s" begin={`${i * 0.6}s`} repeatCount="indefinite" />
+                  </circle>
+                </>
+              )}
+            </g>
+          );
+        })}
+
+        {foundation.map((f, i) => {
+          const live = f.status === 'In use';
+          return (
+            <g key={f.id} className="ap-node" style={{ '--ap-delay': `${200 + i * 120}ms` } as React.CSSProperties}>
+              <rect
+                x={f.x - 48}
+                y={f.y - 14}
+                width={96}
+                height={28}
+                rx={14}
+                fill="#171E21"
+                stroke={live ? '#4E8067' : '#344248'}
+                strokeOpacity={live ? 0.75 : 1}
+                strokeDasharray={live ? undefined : '3 3'}
+              />
+              <text x={f.x} y={f.y + 4} textAnchor="middle" fontSize={11.5} fontWeight={600} fill={live ? '#C5CAC7' : '#7C8380'}>
+                {f.name}
+              </text>
+            </g>
+          );
+        })}
+
+        <g className="ap-node" style={{ '--ap-delay': '0ms' } as React.CSSProperties}>
+          <circle cx={cx} cy={cy} r={38} fill="#4E8067" />
+          <g
+            transform={`translate(${cx - 24}, ${cy - 24}) scale(0.48)`}
+            stroke="#F6F7F5"
+            strokeWidth={6}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="20,77 50,23 80,77" />
+            <polyline points="20,23 50,77 80,23" />
+            <line x1="35" y1="50" x2="65" y2="50" />
+          </g>
+        </g>
+
+        {products.map((p, i) => {
+          const w = 112;
+          const h = 36;
+          const live = p.status === 'beta';
+          return (
+            <g key={p.id} className="ap-node" style={{ '--ap-delay': `${500 + i * 90}ms` } as React.CSSProperties}>
+              <rect
+                x={p.x - w / 2}
+                y={p.y - h / 2}
+                width={w}
+                height={h}
+                rx={18}
+                fill="#171E21"
+                stroke={live ? p.accentColor : '#344248'}
+                strokeOpacity={live ? 0.6 : 1}
+                strokeDasharray={live ? undefined : '3 3'}
+              />
+              <circle cx={p.x - w / 2 + 18} cy={p.y} r={5} fill={p.accentColor} opacity={live ? 1 : 0.45} />
+              <text x={p.x - w / 2 + 31} y={p.y + 4.5} fontSize={13} fontWeight={600} fill={live ? '#F6F7F5' : '#7C8380'}>
+                {p.name}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-5 text-[12px] text-[#A9AFAB]">
+        <span className="inline-flex items-center gap-2">
+          <span className="w-5 h-[2px] rounded bg-[#72B091]" /> In private beta / in use
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-5 h-0 border-t-2 border-dashed border-[#344248]" /> In development
+        </span>
+      </div>
+    </div>
+  );
+};
+
+const Platform: React.FC = () => (
+  <section id="platform" className="relative py-28 lg:py-36 bg-[#111618] text-[#F6F7F5] overflow-hidden scroll-mt-20">
+    <div className="pointer-events-none absolute inset-0 ap-lattice ap-lattice-inverse" />
+    <div
+      className="pointer-events-none absolute -bottom-40 -left-40 w-[700px] h-[700px] rounded-full blur-3xl opacity-40 ap-glow"
+      style={{ background: 'radial-gradient(closest-side, rgba(78,128,103,0.45), transparent)' }}
+    />
+
+    <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 items-center">
+        <div className="lg:col-span-5">
+          <Reveal>
+            <SectionEyebrow tone="dark">The connected platform</SectionEyebrow>
+            <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04]">
+              One foundation.
+              <br />
+              <span className="text-[#72B091]">Every product.</span>
+            </h2>
+            <p className="mt-6 text-[17px] leading-[1.65] text-[#A9AFAB] max-w-[480px]">
+              Most suites are stitched together after the fact. Every Appembly app is built from
+              day one on shared layers — so identity, intelligence and experience never fragment.
+            </p>
+          </Reveal>
+
+          <div className="mt-10 space-y-3">
+            {FOUNDATION.map((f, i) => (
+              <Reveal key={f.id} delay={120 + i * 100}>
+                <div
+                  onMouseMove={handleSpotlightMove}
+                  className="ap-spotlight flex items-start gap-4 rounded-2xl border border-[#263136] bg-[#171E21]/70 p-5 hover:border-[#4E8067]/60 transition-colors"
+                  style={{ '--ap-spot': 'rgba(114,176,145,0.14)' } as React.CSSProperties}
+                >
+                  <span className="w-10 h-10 rounded-xl bg-[#111618] border border-[#263136] text-[#72B091] flex items-center justify-center shrink-0">
+                    {f.icon}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <div className="text-[16px] font-semibold">
+                        {f.name}
+                        <span className="ml-2 text-[13px] font-medium text-[#72B091]">{f.subtitle}</span>
+                      </div>
+                      <span
+                        className={`text-[10.5px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                          f.status === 'In use' ? 'bg-[#4E8067]/20 text-[#72B091]' : 'border border-dashed border-[#344248] text-[#A9AFAB]'
+                        }`}
+                      >
+                        {f.status}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 text-[13.5px] leading-relaxed text-[#A9AFAB]">{f.description}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
           </div>
         </div>
-      </section>
 
-      {/* 2. The Appembly Product Suite ("Powerful Alone. Effortless Together.") */}
-      <section
-        id="products"
-        className="py-24 lg:py-28 bg-[var(--ui-bg-subtle)]/45 border-y border-[var(--ui-border)]"
-      >
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10 space-y-12">
-          {/* Section Header + Filter Tabs */}
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
-            <div className="space-y-3 max-w-2xl">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-[#4E8067]">
-                The Appembly Product Suite
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] text-[var(--ui-text-primary)]">
-                Powerful alone. Effortless together.
-              </h2>
-              <p className="text-[15.5px] text-[var(--ui-text-secondary)] leading-relaxed">
-                Start with any single Appembly application to solve an immediate workflow, or
-                connect the full suite so customer research, product validation, engineering, and
-                commerce share context automatically.
-              </p>
+        <div className="lg:col-span-7">
+          <Reveal delay={150}>
+            <PlatformDiagram />
+          </Reveal>
+        </div>
+      </div>
+    </div>
+  </section>
+);
+
+const Availability: React.FC = () => (
+  <section className="py-24 lg:py-28 border-b border-[var(--ui-border)]">
+    <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-12">
+        {AVAILABILITY.map((s, i) => (
+          <Reveal key={s.label} delay={i * 90} className={`px-6 ${i > 0 ? 'sm:border-l border-[var(--ui-border)]' : ''}`}>
+            <div className="text-[56px] sm:text-[64px] font-semibold tracking-[-0.04em] leading-none text-[var(--ui-text-primary)]">
+              <CountUp value={s.value} />
             </div>
+            <div className="mt-3 text-[15px] font-medium text-[var(--ui-text-secondary)]">{s.label}</div>
+            <div className="mt-1 text-[12.5px] text-[var(--ui-text-muted)]">{s.detail}</div>
+          </Reveal>
+        ))}
+      </div>
+    </div>
+  </section>
+);
 
-            {/* Clean Segmented Filter Pills */}
-            <div className="inline-flex flex-wrap p-1.5 rounded-2xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] shadow-2xs self-start">
+const Principles: React.FC = () => {
+  const [ref, inView] = useInView<HTMLDivElement>(0.3);
+  return (
+    <section id="principles" className="py-28 lg:py-36 scroll-mt-20">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 grid grid-cols-1 lg:grid-cols-12 gap-14 items-center">
+        <div className="lg:col-span-5">
+          <div
+            ref={ref}
+            className={`relative aspect-square max-w-[440px] mx-auto rounded-[32px] border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] flex items-center justify-center overflow-hidden ${
+              inView ? 'is-visible' : ''
+            }`}
+          >
+            <div className="absolute inset-0 ap-lattice opacity-70" />
+            <svg viewBox="0 0 100 100" className="relative w-[72%] h-[72%]" aria-hidden="true">
+              <g className="ap-grid-fade" stroke="var(--ui-accent)" strokeWidth="0.35" strokeDasharray="1.5 1.5" fill="none" opacity="0.7">
+                <line x1="50" y1="6" x2="50" y2="94" />
+                <line x1="6" y1="50" x2="94" y2="50" />
+                <line x1="12" y1="23" x2="88" y2="23" />
+                <line x1="12" y1="77" x2="88" y2="77" />
+                <circle cx="50" cy="50" r="36" />
+                <circle cx="50" cy="50" r="15" />
+              </g>
+              <g className="ap-draw" fill="none" stroke="var(--ui-text-primary)" strokeWidth="6.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline pathLength={1} points="20,77 50,23 80,77" style={{ '--ap-delay': '0ms' } as React.CSSProperties} />
+                <polyline pathLength={1} points="20,23 50,77 80,23" style={{ '--ap-delay': '250ms' } as React.CSSProperties} />
+                <line pathLength={1} x1="35" y1="50" x2="65" y2="50" style={{ '--ap-delay': '700ms' } as React.CSSProperties} />
+              </g>
+            </svg>
+            <div className="absolute bottom-5 inset-x-0 flex justify-center gap-2">
               {[
-                { id: 'all', label: 'All Products (5)' },
-                { id: 'product', label: 'Product & Venture' },
-                { id: 'engineering', label: 'Engineering' },
-                { id: 'customer', label: 'Commerce & Research' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setSelectedCategory(tab.id as typeof selectedCategory)}
-                  className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                    selectedCategory === tab.id
-                      ? 'bg-[#4E8067] text-[#F6F7F5] shadow-xs'
-                      : 'text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)]'
-                  }`}
-                >
-                  {tab.label}
-                </button>
+                { hex: '#111618', name: 'Graphite' },
+                { hex: '#F6F7F5', name: 'Off White' },
+                { hex: '#4E8067', name: 'Sage' },
+                { hex: '#A9AFAB', name: 'Silver' },
+              ].map((c) => (
+                <span
+                  key={c.hex}
+                  title={`${c.name} ${c.hex}`}
+                  className="w-5 h-5 rounded-full border border-[var(--ui-border-strong)]"
+                  style={{ backgroundColor: c.hex }}
+                />
               ))}
             </div>
           </div>
+        </div>
 
-          {/* Spacious Product Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
-            {filteredProducts.map((product) => (
-              <div
-                key={product.id}
-                className="group rounded-3xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] hover:border-[#4E8067]/50 p-7 sm:p-8 flex flex-col justify-between transition-all duration-200 shadow-xs hover:shadow-lg"
-              >
-                <div className="space-y-6">
-                  {/* Card Top Header */}
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-xs shrink-0"
-                        style={{ backgroundColor: product.accentColor }}
-                      >
-                        {product.icon}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-[19px] font-bold tracking-tight text-[var(--ui-text-primary)]">
-                            {product.name}
-                          </h3>
-                          <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-[var(--ui-bg-subtle)] text-[var(--ui-text-secondary)]">
-                            {product.port}
-                          </span>
-                        </div>
-                        <div className="text-[12.5px] font-medium text-[var(--ui-text-muted)] mt-0.5">
-                          {product.audience}
-                        </div>
-                      </div>
-                    </div>
-
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#4E8067]/12 text-[#4E8067] whitespace-nowrap shrink-0">
-                      {product.status}
-                    </span>
-                  </div>
-
-                  {/* Tagline & Description */}
-                  <div className="space-y-2">
-                    <div className="text-[15px] font-semibold text-[var(--ui-text-primary)] leading-snug">
-                      {product.tagline}
-                    </div>
-                    <p className="text-[13.5px] text-[var(--ui-text-secondary)] leading-relaxed">
-                      {product.description}
-                    </p>
-                  </div>
-
-                  {/* Capability Checkmarks */}
-                  <ul className="space-y-2.5 pt-4 border-t border-[var(--ui-border)]">
-                    {product.highlights.map((item) => (
-                      <li
-                        key={item}
-                        className="flex items-start gap-2.5 text-[13px] text-[var(--ui-text-secondary)] leading-snug"
-                      >
-                        <CheckCircle2 className="w-4 h-4 text-[#4E8067] shrink-0 mt-0.5" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Card Bottom Metric + Action Bar */}
-                <div className="pt-6 mt-7 border-t border-[var(--ui-border)] flex items-center justify-between gap-4">
+        <div className="lg:col-span-7">
+          <Reveal>
+            <SectionEyebrow>Built on simple geometry</SectionEyebrow>
+            <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
+              Two triangles. One bridge.
+            </h2>
+            <p className="mt-6 text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[560px]">
+              Our mark is two interlocking 60° triangles meeting at a shared bridge — modular
+              applications and autonomous agents assembling into a unified whole. The same idea
+              guides everything we ship.
+            </p>
+          </Reveal>
+          <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-8">
+            {PRINCIPLES.map((p, i) => (
+              <Reveal key={p.title} delay={100 + i * 80}>
+                <div className="flex items-start gap-4">
+                  <span className="mt-1 text-[12px] font-mono text-[var(--ui-text-muted)]">0{i + 1}</span>
                   <div>
-                    <div className="text-[11px] font-medium text-[var(--ui-text-muted)]">
-                      {product.metricLabel}
-                    </div>
-                    <div className="text-[16px] font-bold text-[var(--ui-text-primary)] tabular-nums">
-                      {product.metricValue}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={product.repoUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-3 py-2 rounded-xl text-[12.5px] font-medium text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-subtle)] transition-colors"
-                    >
-                      GitHub
-                    </a>
-
-                    {product.id === 'cyclode' ? (
-                      <a
-                        href="http://localhost:6013"
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12.5px] font-semibold bg-[#4E8067] text-[#F6F7F5] hover:bg-[#3F6B55] transition-colors shadow-2xs"
-                      >
-                        <span>Open App</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </a>
-                    ) : onOpenStudio ? (
-                      <button
-                        type="button"
-                        onClick={() => onOpenStudio(product.id)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12.5px] font-semibold bg-[var(--ui-bg-subtle)] hover:bg-[#4E8067] text-[var(--ui-text-primary)] hover:text-[#F6F7F5] transition-colors cursor-pointer"
-                      >
-                        <span>Live Preview</span>
-                        <ArrowUpRight className="w-3.5 h-3.5" />
-                      </button>
-                    ) : null}
+                    <div className="text-[17px] font-semibold text-[var(--ui-text-primary)]">{p.title}</div>
+                    <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{p.desc}</p>
                   </div>
                 </div>
-              </div>
+              </Reveal>
             ))}
           </div>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+};
 
-      {/* 3. Live Connected Workspace Previewer */}
-      <section id="interactive-studio" className="py-24 lg:py-28">
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10 space-y-10">
-          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
-            <div className="space-y-3 max-w-2xl">
-              <div className="text-[12px] font-semibold uppercase tracking-widest text-[#4E8067]">
-                Interactive Product Preview
-              </div>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] text-[var(--ui-text-primary)]">
-                See how Appembly apps &amp; agents assemble a launch.
-              </h2>
-              <p className="text-[15.5px] text-[var(--ui-text-secondary)] leading-relaxed">
-                Explore a live interactive workspace powered by{' '}
-                <code className="px-2 py-0.5 rounded-md bg-[var(--ui-bg-subtle)] text-[13px] font-mono text-[#4E8067]">
-                  @appembly/ui
-                </code>{' '}
-                — showing how a <strong>Gatharoom</strong> focus group insight flows into a{' '}
-                <strong>Valiscale</strong> project timeline and dispatches parallel{' '}
-                <strong>Cyclode</strong> &amp; <strong>Wotneed</strong> agent waves.
-              </p>
-            </div>
+type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-            {onOpenStudio && (
-              <button
-                type="button"
-                onClick={() => onOpenStudio('valiscale')}
-                className="inline-flex items-center gap-2.5 px-5 py-3 rounded-xl text-[13.5px] font-semibold bg-[#4E8067] text-[#F6F7F5] hover:bg-[#3F6B55] transition-colors cursor-pointer shrink-0 self-start lg:self-auto shadow-xs"
-              >
-                <Compass className="w-4 h-4" />
-                <span>Open Fullscreen Valiscale Studio</span>
-              </button>
-            )}
-          </div>
+const AccessSection: React.FC<{
+  interest: string[];
+  setInterest: React.Dispatch<React.SetStateAction<string[]>>;
+  endpoint?: string;
+  contactEmail: string;
+}> = ({ interest, setInterest, endpoint = '/api/waitlist', contactEmail }) => {
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [company, setCompany] = useState('');
+  const [message, setMessage] = useState('');
+  const [honeypot, setHoneypot] = useState('');
+  const [state, setState] = useState<SubmitState>('idle');
+  const [deliveryMode, setDeliveryMode] = useState<'api' | 'mailto'>('api');
+  const [error, setError] = useState<string | null>(null);
 
-          {/* KPI Summary Strip */}
-          <KpiSummaryCard
-            title="Connected Suite Performance Summary"
-            subtitle="Live telemetry across Valiscale, Swarmteam, Wotneed, and Gatharoom"
-            metrics={PREVIEW_METRICS}
+  const toggle = (id: string) =>
+    setInterest((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+
+  const triggerMailtoFallback = (
+    payload: { name: string; company: string; email: string; message: string },
+    productNames: string[]
+  ) => {
+    const subject = `Access request — ${productNames.length ? productNames.map((n) => n.split(' (')[0]).join(', ') : 'Appembly'}`;
+    const body = [
+      `Name: ${payload.name || '-'}`,
+      `Company: ${payload.company || '-'}`,
+      `Email: ${payload.email}`,
+      `Interested in: ${productNames.join(', ') || '-'}`,
+      '',
+      payload.message,
+    ].join('\n');
+    setDeliveryMode('mailto');
+    window.location.href = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    setState('success');
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (honeypot) {
+      setDeliveryMode('api');
+      setState('success');
+      return;
+    }
+    if (!EMAIL_RE.test(email.trim())) {
+      setError('Please enter a valid work email.');
+      return;
+    }
+    const products = interest.length ? interest : [];
+    const productNames = PRODUCT_SUITE.filter((p) => products.includes(p.id)).map(
+      (p) => `${p.name} (${p.status === 'beta' ? 'private beta' : 'waitlist'})`
+    );
+    const payload = {
+      email: email.trim(),
+      name: name.trim(),
+      company: company.trim(),
+      products,
+      message: message.trim(),
+      website: honeypot,
+      source: 'appembly.com',
+      submittedAt: new Date().toISOString(),
+    };
+
+    if (endpoint) {
+      setState('submitting');
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          setDeliveryMode('api');
+          setState('success');
+          return;
+        }
+        // If running on local static dev server (404/405) or unconfigured binding (503),
+        // seamlessly hand off to mailto: so no request is ever lost.
+        if (res.status === 404 || res.status === 405 || res.status === 503) {
+          triggerMailtoFallback(payload, productNames);
+          return;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      } catch {
+        // Network error or static preview without Functions runtime: fall back to mailto:
+        triggerMailtoFallback(payload, productNames);
+      }
+      return;
+    }
+
+    triggerMailtoFallback(payload, productNames);
+  };
+
+  const inputCls =
+    'w-full h-11 px-3.5 rounded-xl bg-[#111618] border border-[#263136] text-[14px] text-[#F6F7F5] placeholder:text-[#7C8380] focus:outline-none focus:border-[#4E8067] focus:ring-2 focus:ring-[#4E8067]/30 transition-colors';
+
+  return (
+    <section id="access" className="px-4 sm:px-6 pb-24 scroll-mt-24">
+      <Reveal>
+        <div className="relative max-w-[1320px] mx-auto rounded-[32px] bg-[#111618] text-[#F6F7F5] overflow-hidden px-6 sm:px-12 lg:px-16 py-16 sm:py-20">
+          <div className="pointer-events-none absolute inset-0 ap-lattice ap-lattice-inverse" />
+          <div
+            className="pointer-events-none absolute -top-40 left-1/4 w-[800px] h-[500px] rounded-full blur-3xl opacity-50 ap-glow"
+            style={{ background: 'radial-gradient(closest-side, rgba(78,128,103,0.55), transparent)' }}
           />
 
-          {/* Interactive Timeline + Multi-Series Trajectory Split */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            <div className="lg:col-span-7">
-              <ProjectTaskTimeline
-                projectName="Autonomous Commerce Launch"
-                tasks={PREVIEW_TIMELINE_TASKS}
-                totalHorizonHours={16}
-                onSelectTask={(task) => setSelectedTask(task)}
-              />
-            </div>
-
-            <div className="lg:col-span-5 space-y-6">
-              <MultiSeriesChart
-                title="Cross-Suite Velocity & Readiness"
-                subtitle="Real-time telemetry across Valiscale, Cyclode, and Wotneed"
-                labels={PREVIEW_CHART_LABELS}
-                series={PREVIEW_CHART_SERIES}
-              />
-
-              {selectedTask && (
-                <div className="rounded-2xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] p-5 space-y-2.5 shadow-2xs">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[12px] font-mono font-semibold text-[#4E8067]">
-                      {selectedTask.id} · Wave {selectedTask.wave}
+          <div className="relative grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16">
+            {/* Copy + steps */}
+            <div className="lg:col-span-5">
+              <div className="w-12 h-12 rounded-2xl bg-[#4E8067] flex items-center justify-center shadow-[0_12px_40px_-8px_rgba(78,128,103,0.7)]">
+                <AppemblyLogo variant="mark" size={28} strokeColor="#F6F7F5" />
+              </div>
+              <h2 className="mt-8 text-[36px] sm:text-[48px] font-semibold tracking-[-0.04em] leading-[1.04]">
+                Start with one.
+                <br />
+                <span className="text-[#72B091]">Connect them all.</span>
+              </h2>
+              <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
+                Appembly products are invitation-only while we onboard early teams. Request access
+                to the private beta, or join the waitlist for what’s coming next.
+              </p>
+              <ol className="mt-10 space-y-6">
+                {ACCESS_STEPS.map((s, i) => (
+                  <li key={s.title} className="flex gap-4">
+                    <span className="w-7 h-7 rounded-full border border-[#344248] text-[12px] font-semibold text-[#72B091] flex items-center justify-center shrink-0">
+                      {i + 1}
                     </span>
-                    <span className="text-[11.5px] font-medium px-2.5 py-0.5 rounded-full bg-[#4E8067]/12 text-[#4E8067]">
-                      Runctor Pack: {selectedTask.persona}
-                    </span>
-                  </div>
-                  <div className="text-[15px] font-semibold text-[var(--ui-text-primary)]">
-                    {selectedTask.title}
-                  </div>
-                  <div className="text-[12.5px] text-[var(--ui-text-muted)] flex items-center justify-between pt-1">
-                    <span className="inline-flex items-center gap-1.5">
-                      <GitBranch className="w-3.5 h-3.5 text-[#4E8067]" />
-                      <span>{selectedTask.worktreeBranch || 'main'}</span>
-                    </span>
-                    <span>
-                      Eval Gate: <strong className="text-[#4E8067]">{selectedTask.evalGateStatus || 'passed'}</strong> · {selectedTask.progress}%
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. What Makes Appembly "Connected Software" (Shared Foundation) */}
-      <section id="connected-suite" className="py-24 lg:py-28 bg-[#111618] text-[#F6F7F5]">
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10 space-y-14">
-          <div className="max-w-3xl space-y-4">
-            <div className="text-[12px] font-semibold uppercase tracking-widest text-[#72B091]">
-              The Appembly Advantage
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] text-[#F6F7F5]">
-              Why connected software beats disconnected tools.
-            </h2>
-            <p className="text-[16px] text-[#A9AFAB] leading-relaxed">
-              Most software suites are stitched together after the fact. Every Appembly application
-              is built from day one on three shared architectural layers — so identity, agentic
-              intelligence, and user experience never fragment.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {FOUNDATION_PILLARS.map((pillar) => (
-              <div
-                key={pillar.id}
-                className="rounded-3xl bg-[#171E21] border border-[#263136] p-8 flex flex-col justify-between space-y-8 hover:border-[#4E8067]/60 transition-colors"
-              >
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-wider bg-[#4E8067]/20 text-[#72B091] border border-[#4E8067]/30">
-                      {pillar.badge}
-                    </span>
-                    <span className="text-[12px] font-mono text-[#A9AFAB]">{pillar.port}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-[#111618] border border-[#263136] flex items-center justify-center shrink-0">
-                      {pillar.icon}
-                    </div>
                     <div>
-                      <h3 className="text-[20px] font-bold text-[#F6F7F5]">{pillar.name}</h3>
-                      <div className="text-[13px] font-medium text-[#72B091]">
-                        {pillar.subtitle}
-                      </div>
+                      <div className="text-[15px] font-semibold">{s.title}</div>
+                      <p className="mt-1 text-[13.5px] leading-relaxed text-[#A9AFAB]">{s.desc}</p>
                     </div>
-                  </div>
-
-                  <p className="text-[14px] text-[#A9AFAB] leading-relaxed">
-                    {pillar.description}
-                  </p>
-                </div>
-
-                <div className="pt-5 border-t border-[#263136] flex items-center justify-between">
-                  <a
-                    href={pillar.repoUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[13px] font-semibold text-[#F6F7F5] hover:text-[#72B091] inline-flex items-center gap-1.5 transition-colors"
-                  >
-                    <span>Explore {pillar.name}</span>
-                    <ArrowUpRight className="w-4 h-4" />
-                  </a>
-                  <span className="text-[11px] font-mono text-[#A9AFAB]">Appembly Core</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* 5. Built on Simple Geometry (Brand System & 4 Pillars) */}
-      <section id="geometry" className="py-24 lg:py-28 border-b border-[var(--ui-border)]">
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 items-center">
-            {/* Left: Built on Simple Geometry + 4 Pillars */}
-            <div className="lg:col-span-5 space-y-7">
-              <div className="space-y-3">
-                <div className="text-[12px] font-semibold uppercase tracking-widest text-[#4E8067]">
-                  Design Philosophy &amp; Identity
-                </div>
-                <h2 className="text-3xl sm:text-4xl font-bold tracking-[-0.02em] text-[var(--ui-text-primary)]">
-                  Built on simple geometry.
-                </h2>
-                <p className="text-[15.5px] text-[var(--ui-text-secondary)] leading-relaxed">
-                  The Appembly mark is constructed from two interlocking equilateral triangles
-                  meeting at a shared horizontal bridge — representing modular applications and
-                  autonomous agents assembling into a unified whole.
-                </p>
-              </div>
-
-              {/* 4 Pillars from Brand Sheet */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                {[
-                  {
-                    title: 'Connected',
-                    desc: 'Shared identity, context, and telemetry across every product.',
-                  },
-                  {
-                    title: 'Modular',
-                    desc: 'Adopt any application standalone or compose the full ecosystem.',
-                  },
-                  {
-                    title: 'Scalable',
-                    desc: 'From first concept validation to multi-agent production workloads.',
-                  },
-                  {
-                    title: 'Timeless',
-                    desc: 'Calm geometry and high-contrast clarity built to endure.',
-                  },
-                ].map((pillar) => (
-                  <div
-                    key={pillar.title}
-                    className="p-5 rounded-2xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] space-y-1.5 shadow-2xs"
-                  >
-                    <div className="text-[15px] font-bold text-[var(--ui-text-primary)] flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#4E8067]" />
-                      <span>{pillar.title}</span>
-                    </div>
-                    <p className="text-[13px] text-[var(--ui-text-secondary)] leading-relaxed">
-                      {pillar.desc}
-                    </p>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ol>
             </div>
 
-            {/* Right: Interactive Geometric Construction Grid & Color Palette */}
+            {/* Form */}
             <div className="lg:col-span-7">
-              <div className="rounded-3xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] p-7 sm:p-9 space-y-6 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <div className="text-[16px] font-bold text-[var(--ui-text-primary)]">
-                      Monogram Construction &amp; Brand Surfaces
+              <div className="rounded-3xl border border-[#263136] bg-[#171E21]/80 backdrop-blur p-6 sm:p-8">
+                {state === 'success' ? (
+                  <div className="ap-enter py-10 text-center" role="status">
+                    <div className="mx-auto w-14 h-14 rounded-full bg-[#4E8067]/20 text-[#72B091] flex items-center justify-center">
+                      <Check className="w-7 h-7" />
                     </div>
-                    <div className="text-[13px] text-[var(--ui-text-muted)]">
-                      Equilateral 60° triangular grid &amp; official color system
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowConstructionGrid((prev) => !prev)}
-                    className="px-3.5 py-2 rounded-xl text-[12.5px] font-semibold border border-[var(--ui-border)] bg-[var(--ui-bg-subtle)] hover:border-[#4E8067] text-[var(--ui-text-primary)] transition-colors cursor-pointer"
-                  >
-                    {showConstructionGrid ? 'Hide Construction Grid' : 'Show Construction Grid'}
-                  </button>
-                </div>
-
-                {/* Construction Grid Canvas + Surface Lockups */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  {/* Construction SVG */}
-                  <div className="rounded-2xl bg-[#F6F7F5] text-[#111618] border border-[#E2E5E2] p-7 flex flex-col items-center justify-center">
-                    <svg viewBox="0 0 100 100" className="w-40 h-40">
-                      {showConstructionGrid && (
-                        <g stroke="#4E8067" strokeWidth="0.6" strokeDasharray="2 2" opacity="0.6">
-                          <line x1="50" y1="8" x2="50" y2="92" />
-                          <line x1="8" y1="51.1" x2="92" y2="51.1" />
-                          <line x1="15" y1="27.7" x2="85" y2="27.7" />
-                          <line x1="15" y1="74.5" x2="85" y2="74.5" />
-                          <circle cx="50" cy="51.1" r="34" fill="none" />
-                        </g>
-                      )}
-                      <g
-                        fill="none"
-                        stroke="#111618"
-                        strokeWidth="6.2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="23,74.5 50,27.7 63.5,51.1" />
-                        <polyline points="77,27.7 50,74.5 36.5,51.1" />
-                        <line x1="36.5" y1="51.1" x2="63.5" y2="51.1" />
-                      </g>
-                    </svg>
-                    <span className="text-[11.5px] font-mono text-[#525956] mt-3">
-                      60° Interlocking Construction
-                    </span>
-                  </div>
-
-                  {/* Official Dark & Sage Lockup Cards */}
-                  <div className="space-y-5 flex flex-col justify-between">
-                    <div className="flex-1 rounded-2xl bg-[#111618] text-[#F6F7F5] p-6 flex items-center justify-between border border-[#263136]">
-                      <AppemblyLogo
-                        variant="lockup"
-                        size={32}
-                        productName="Appembly"
-                        strokeColor="#F6F7F5"
-                      />
-                      <span className="text-[11px] font-mono text-[#A9AFAB]">#111618</span>
-                    </div>
-
-                    <div className="flex-1 rounded-2xl bg-[#4E8067] text-[#F6F7F5] p-6 flex items-center justify-between">
-                      <AppemblyLogo
-                        variant="lockup"
-                        size={32}
-                        productName="Appembly"
-                        strokeColor="#F6F7F5"
-                      />
-                      <span className="text-[11px] font-mono text-[#F6F7F5]/85">#4E8067</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Official 4-Color Swatch Strip */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-1">
-                  {[
-                    { name: 'Graphite', hex: '#111618', text: '#F6F7F5' },
-                    { name: 'Off White', hex: '#F6F7F5', text: '#111618', border: true },
-                    { name: 'Sage Green', hex: '#4E8067', text: '#F6F7F5' },
-                    { name: 'Silver', hex: '#A9AFAB', text: '#111618' },
-                  ].map((swatch) => (
-                    <div
-                      key={swatch.name}
-                      className={`rounded-2xl p-4 flex flex-col justify-between h-24 ${
-                        swatch.border ? 'border border-[#E2E5E2]' : ''
-                      }`}
-                      style={{ backgroundColor: swatch.hex, color: swatch.text }}
+                    <div className="mt-6 text-[22px] font-semibold tracking-tight">You’re on the list.</div>
+                    <p className="mt-2 text-[14.5px] text-[#A9AFAB] max-w-[380px] mx-auto">
+                      {deliveryMode === 'api'
+                        ? 'Thanks — we’ll be in touch as soon as a seat opens for you.'
+                        : 'Your email app should have opened with your request. Send it and we’ll be in touch.'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setState('idle')}
+                      className="mt-6 text-[13px] font-semibold text-[#72B091] hover:text-[#F6F7F5] cursor-pointer"
                     >
-                      <span className="text-[13px] font-bold">{swatch.name}</span>
-                      <span className="text-[11.5px] font-mono opacity-85">{swatch.hex}</span>
+                      Submit another request
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={onSubmit} noValidate className="space-y-6">
+                    <fieldset>
+                      <legend className="text-[13px] font-semibold text-[#C5CAC7]">What are you interested in?</legend>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {PRODUCT_SUITE.map((p) => {
+                          const checked = interest.includes(p.id);
+                          return (
+                            <label
+                              key={p.id}
+                              className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                                checked ? 'border-[#4E8067] bg-[#4E8067]/12' : 'border-[#263136] hover:border-[#344248]'
+                              }`}
+                            >
+                              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(p.id)} />
+                              <span
+                                className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 ${
+                                  checked ? 'bg-[#4E8067] border-[#4E8067]' : 'border-[#344248]'
+                                }`}
+                              >
+                                {checked && <Check className="w-3 h-3 text-white" />}
+                              </span>
+                              <span className="text-[14px] font-medium flex-1">{p.name}</span>
+                              <span className={`text-[10.5px] font-semibold uppercase tracking-wider ${p.status === 'beta' ? 'text-[#72B091]' : 'text-[#7C8380]'}`}>
+                                {p.status === 'beta' ? 'Beta' : 'Waitlist'}
+                              </span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <label className="block sm:col-span-2">
+                        <span className="text-[13px] font-semibold text-[#C5CAC7]">
+                          Work email <span className="text-[#72B091]">*</span>
+                        </span>
+                        <input
+                          type="email"
+                          required
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          placeholder="you@company.com"
+                          className={`${inputCls} mt-2`}
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-[13px] font-semibold text-[#C5CAC7]">Name</span>
+                        <input type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Lovelace" className={`${inputCls} mt-2`} />
+                      </label>
+                      <label className="block">
+                        <span className="text-[13px] font-semibold text-[#C5CAC7]">Company</span>
+                        <input type="text" autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme Inc." className={`${inputCls} mt-2`} />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="text-[13px] font-semibold text-[#C5CAC7]">What would you use it for?</span>
+                        <textarea
+                          rows={3}
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value)}
+                          placeholder="A sentence or two about your team and use case (optional)"
+                          className={`${inputCls} mt-2 h-auto py-3 resize-none`}
+                        />
+                      </label>
+                      {/* Honeypot: hidden from people, tempting for bots */}
+                      <label className="hidden" aria-hidden="true">
+                        Website
+                        <input type="text" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+                      </label>
                     </div>
-                  ))}
-                </div>
+
+                    {error && (
+                      <p className="text-[13px] text-[#F59E8B]" role="alert">
+                        {error}
+                      </p>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                      <p className="text-[12px] leading-relaxed text-[#7C8380] max-w-[340px]">
+                        We’ll only use your details to contact you about access. No newsletters, no sharing.
+                      </p>
+                      <button
+                        type="submit"
+                        disabled={state === 'submitting'}
+                        className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[#F6F7F5] text-[#111618] hover:bg-white disabled:opacity-60 transition-colors cursor-pointer shrink-0"
+                      >
+                        {state === 'submitting' ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" /> Sending…
+                          </>
+                        ) : (
+                          <>
+                            Request access
+                            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           </div>
         </div>
-      </section>
+      </Reveal>
+    </section>
+  );
+};
 
-      {/* 6. Company Footer */}
-      <footer className="py-14 bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] text-[13px]">
-        <div className="max-w-[1320px] mx-auto px-6 sm:px-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-3.5">
-            <AppemblyLogo variant="lockup" size={28} productName="Appembly" />
-            <span className="text-[var(--ui-border-strong)]">|</span>
-            <span>Connected software. Greater possibilities.</span>
-          </div>
+const Footer: React.FC<{ contactEmail: string; onRequestAccess: RequestAccess }> = ({ contactEmail, onRequestAccess }) => (
+  <footer className="border-t border-[var(--ui-border)]">
+    <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-16 grid grid-cols-2 md:grid-cols-12 gap-10">
+      <div className="col-span-2 md:col-span-5 space-y-4">
+        <AppemblyLogo variant="lockup" size={30} productName="Appembly" />
+        <p className="text-[14px] text-[var(--ui-text-secondary)] max-w-[320px] leading-relaxed">
+          Assembling AI-native apps and agents. Modular software and autonomous systems, built into
+          one calm ecosystem.
+        </p>
+      </div>
+      <div className="md:col-span-3">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Products</div>
+        <ul className="mt-4 space-y-2.5">
+          {PRODUCT_SUITE.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onClick={() => onRequestAccess(p.id)}
+                className="inline-flex items-center gap-2 text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors cursor-pointer"
+              >
+                {p.name}
+                <span className={`text-[10px] font-semibold uppercase tracking-wider ${p.status === 'beta' ? 'text-[var(--ui-accent)]' : 'text-[var(--ui-text-muted)]'}`}>
+                  {p.status === 'beta' ? 'Beta' : 'Soon'}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="md:col-span-2">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Platform</div>
+        <ul className="mt-4 space-y-2.5">
+          {FOUNDATION.map((f) => (
+            <li key={f.id}>
+              <a href="#platform" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+                {f.name}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="md:col-span-2">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Company</div>
+        <ul className="mt-4 space-y-2.5">
+          <li>
+            <a href="#access" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+              Request access
+            </a>
+          </li>
+          <li>
+            <a href="#principles" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+              Principles
+            </a>
+          </li>
+          <li>
+            <a href={`mailto:${contactEmail}`} className="inline-flex items-center gap-1.5 text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+              <Mail className="w-3.5 h-3.5" /> Contact
+            </a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div className="border-t border-[var(--ui-border)]">
+      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-[12.5px] text-[var(--ui-text-muted)]">
+        <span>© {new Date().getFullYear()} Appembly. All rights reserved.</span>
+        <span>Products shown are in private beta or in development.</span>
+      </div>
+    </div>
+  </footer>
+);
 
-          <div className="flex flex-wrap items-center gap-6 font-medium">
-            <a href="https://github.com/Appembly/web" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Web (:6001)
-            </a>
-            <a href="https://github.com/Appembly/ui" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              UI (:6005)
-            </a>
-            <a href="https://github.com/Appembly/cyclode" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Cyclode (:6013)
-            </a>
-            <a href="https://github.com/Appembly/valiscale" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Valiscale (:6030)
-            </a>
-            <a href="https://github.com/Appembly/swarmteam" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Swarmteam (:6040)
-            </a>
-            <a href="https://github.com/Appembly/wotneed" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Wotneed (:6050)
-            </a>
-            <a href="https://github.com/Appembly/gatharoom" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Gatharoom (:6060)
-            </a>
-            <a href="https://github.com/Appembly/meterbox" target="_blank" rel="noreferrer" className="hover:text-[var(--ui-text-primary)] transition-colors">
-              Meterbox (:6070)
-            </a>
-          </div>
-        </div>
-      </footer>
+/* -------------------------------------------------------------------------- */
+/*                                    Page                                    */
+/* -------------------------------------------------------------------------- */
+
+export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
+  accessRequestEndpoint,
+  contactEmail = DEFAULT_CONTACT_EMAIL,
+}) => {
+  const [interest, setInterest] = useState<string[]>([]);
+
+  /** Pre-selects a product (if given) and scrolls to the access form. */
+  const requestAccess = useCallback<RequestAccess>((productId) => {
+    if (productId) {
+      setInterest((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
+    }
+    const target = document.getElementById('access');
+    if (target) {
+      const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      target.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' });
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-[var(--ui-bg-canvas)] text-[var(--ui-text-primary)] antialiased transition-colors duration-300 selection:bg-[#4E8067] selection:text-[#F6F7F5] overflow-x-clip">
+      <Header onRequestAccess={requestAccess} />
+      <main>
+        <Hero onRequestAccess={requestAccess} />
+        <ProductMarquee />
+        <Showcase onRequestAccess={requestAccess} />
+        <ProductGrid onRequestAccess={requestAccess} />
+        <Platform />
+        <Availability />
+        <Principles />
+        <AccessSection
+          interest={interest}
+          setInterest={setInterest}
+          endpoint={accessRequestEndpoint}
+          contactEmail={contactEmail}
+        />
+      </main>
+      <Footer contactEmail={contactEmail} onRequestAccess={requestAccess} />
     </div>
   );
 };
