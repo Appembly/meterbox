@@ -132,6 +132,23 @@ func (e *Engine) Evaluate(namespace, subjectKey, featureKey string) (models.Enti
 	}
 
 	balance := math.Max(0, totalGranted-usageInPeriod)
+
+	// 5. Auto-Recharge threshold check: if balance dropped at or below subject's
+	// configured threshold and an active card is vaulted, charge off-session & mint grant.
+	if newGrant, _, err := e.store.MaybeTriggerAutoRecharge(namespace, subjectKey, featureKey, balance, false); err == nil && newGrant != nil {
+		totalGranted += newGrant.Amount
+		creditBalance += newGrant.Amount
+		balance = math.Max(0, totalGranted-usageInPeriod)
+		breakdown = append([]models.GrantBurnDown{{
+			GrantID:   newGrant.ID,
+			GrantName: newGrant.Name,
+			Priority:  newGrant.Priority,
+			Initial:   newGrant.Amount,
+			Used:      0,
+			Remaining: newGrant.Amount,
+		}}, breakdown...)
+	}
+
 	overage := math.Max(0, usageInPeriod-totalGranted)
 	hasAccess := balance > 0 || ent.IsSoftLimit
 	us := time.Since(start).Microseconds()

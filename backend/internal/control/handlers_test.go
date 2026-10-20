@@ -363,3 +363,124 @@ func TestPostHogCaptureUserProfilesAndConsolidatedSnapshot(t *testing.T) {
 	}
 }
 
+func TestPaymentProviderOrchestrationAndWebhooks(t *testing.T) {
+	_, handler := setupTestServer()
+	adminKey := "mb_sk_live_appembly_admin_key_01"
+
+	doReq := func(method, path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewReader([]byte(body)))
+		req.Header.Set("Authorization", "Bearer "+adminKey)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// 1. Vault a saved payment method for usr_ken_architect
+	pmBody := `{
+		"subject_key": "usr_ken_architect",
+		"provider": "stripe",
+		"brand": "visa",
+		"last4": "4242",
+		"exp_month": 12,
+		"exp_year": 2029,
+		"is_default": true
+	}`
+	pmRes := doReq("POST", "/api/v1/payment-methods", pmBody)
+	if pmRes.Code != http.StatusCreated {
+		t.Fatalf("expected 201 attaching payment method, got %d: %s", pmRes.Code, pmRes.Body.String())
+	}
+
+	// 2. Configure an auto-recharge threshold rule & trigger it
+	arBody := `{
+		"subject_key": "usr_ken_architect",
+		"feature_key": "ai_token_allowance",
+		"enabled": true,
+		"threshold_units": 500000,
+		"recharge_units": 2000000,
+		"charge_amount_cents": 4000
+	}`
+	arRes := doReq("POST", "/api/v1/auto-recharge", arBody)
+	if arRes.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating auto-recharge rule, got %d: %s", arRes.Code, arRes.Body.String())
+	}
+
+	trigRes := doReq("POST", "/api/v1/auto-recharge/usr_ken_architect/trigger", `{}`)
+	if trigRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 triggering auto-recharge, got %d: %s", trigRes.Code, trigRes.Body.String())
+	}
+
+	// 3. Create an instant credit top-up checkout session
+	csBody := `{
+		"subject_key": "ws_cyclode_default",
+		"provider": "stripe",
+		"mode": "topup",
+		"feature_key": "ai_token_allowance",
+		"grant_units": 3000000,
+		"amount_cents": 6000,
+		"instant_complete": true
+	}`
+	csRes := doReq("POST", "/api/v1/checkout/sessions", csBody)
+	if csRes.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating checkout session, got %d: %s", csRes.Code, csRes.Body.String())
+	}
+
+	// 4. Generate an invoice and mark it paid via Stripe invoice.paid webhook
+	invBody := `{
+		"subject_key": "ws_cyclode_default",
+		"plan_slug": "appembly_autonomous_pro",
+		"sync_to_stripe": true
+	}`
+	invRes := doReq("POST", "/api/v1/invoices/generate", invBody)
+	if invRes.Code != http.StatusCreated {
+		t.Fatalf("expected 201 generating invoice, got %d: %s", invRes.Code, invRes.Body.String())
+	}
+	var inv models.Invoice
+	if err := json.Unmarshal(invRes.Body.Bytes(), &inv); err != nil {
+		t.Fatalf("failed decoding invoice: %v", err)
+	}
+
+	whBody := `{
+		"id": "evt_test_invoice_paid_01",
+		"type": "invoice.paid",
+		"subject_key": "ws_cyclode_default",
+		"object_id": "` + inv.StripeInvoiceID + `",
+		"amount_cents": 29900
+	}`
+	whRes := doReq("POST", "/api/v1/webhooks/stripe", whBody)
+	if whRes.Code != http.StatusOK {
+		t.Fatalf("expected 200 processing invoice.paid webhook, got %d: %s", whRes.Code, whRes.Body.String())
+	}
+
+	// 5. Verify snapshot contains payment methods, auto-recharge rules, checkout sessions, and paid invoice
+	snapRes := doReq("GET", "/api/control/v1/snapshot", "")
+	var snap models.NamespaceSnapshot
+	if err := json.Unmarshal(snapRes.Body.Bytes(), &snap); err != nil {
+		t.Fatalf("failed decoding snapshot: %v", err)
+	}
+
+	if len(snap.PaymentMethods) < 3 {
+		t.Fatalf("expected >= 3 payment methods in snapshot, got %d", len(snap.PaymentMethods))
+	}
+	if len(snap.AutoRechargeRules) < 3 {
+		t.Fatalf("expected >= 3 auto-recharge rules in snapshot, got %d", len(snap.AutoRechargeRules))
+	}
+	if len(snap.CheckoutSessions) < 3 {
+		t.Fatalf("expected >= 3 checkout sessions in snapshot, got %d", len(snap.CheckoutSessions))
+	}
+	if len(snap.PaymentWebhooks) < 4 {
+		t.Fatalf("expected >= 4 webhook events in snapshot, got %d", len(snap.PaymentWebhooks))
+	}
+	foundPaid := false
+	for _, i := range snap.Invoices {
+		if i.ID == inv.ID && i.Status == "paid" {
+			foundPaid = true
+			break
+		}
+	}
+	if !foundPaid {
+		t.Fatalf("expected invoice %s to be marked paid after invoice.paid webhook", inv.ID)
+	}
+}
+
+

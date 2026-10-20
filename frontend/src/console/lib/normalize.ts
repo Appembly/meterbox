@@ -5,6 +5,8 @@
  */
 import type {
   APIKey,
+  AutoRechargeRule,
+  CheckoutSession,
   CloudEventRecord,
   CostIntelligenceReport,
   CreditGrant,
@@ -14,6 +16,8 @@ import type {
   Invoice,
   Meter,
   Organization,
+  PaymentMethod,
+  PaymentWebhookEvent,
   Plan,
   ProductAnalyticsReport,
   Subject,
@@ -49,6 +53,10 @@ export interface Snapshot {
   plans: Plan[];
   subscriptions: Subscription[];
   invoices: Invoice[];
+  paymentMethods: PaymentMethod[];
+  autoRechargeRules: AutoRechargeRule[];
+  checkoutSessions: CheckoutSession[];
+  paymentWebhooks: PaymentWebhookEvent[];
   costIntel: CostIntelligenceReport | null;
   productAnalytics: ProductAnalyticsReport | null;
 }
@@ -64,6 +72,10 @@ export const EMPTY_SNAPSHOT: Snapshot = {
   plans: [],
   subscriptions: [],
   invoices: [],
+  paymentMethods: [],
+  autoRechargeRules: [],
+  checkoutSessions: [],
+  paymentWebhooks: [],
   costIntel: null,
   productAnalytics: null,
 };
@@ -232,8 +244,86 @@ export function normalizeSnapshot(snap: Raw, namespace: string): Snapshot {
           period_start: str(inv.period_start),
           period_end: str(inv.period_end),
           issued_at: str(inv.issued_at) || str(inv.created_at),
+          paid_at: inv.paid_at ? str(inv.paid_at) : undefined,
+          payment_intent_id: inv.payment_intent_id ? str(inv.payment_intent_id) : undefined,
         };
       })
+    : [];
+
+  const paymentMethods: PaymentMethod[] = Array.isArray(snap.payment_methods)
+    ? (snap.payment_methods as Raw[]).map((pm) => ({
+        id: str(pm.id),
+        namespace: str(pm.namespace, namespace),
+        subject_key: str(pm.subject_key),
+        provider: str(pm.provider, "stripe"),
+        provider_customer_id: str(pm.provider_customer_id),
+        provider_payment_method_id: str(pm.provider_payment_method_id),
+        brand: str(pm.brand, "visa"),
+        last4: str(pm.last4, "4242"),
+        exp_month: num(pm.exp_month, 12),
+        exp_year: num(pm.exp_year, 2028),
+        is_default: Boolean(pm.is_default),
+        status: str(pm.status, "active"),
+        created_at: str(pm.created_at),
+      }))
+    : [];
+
+  const autoRechargeRules: AutoRechargeRule[] = Array.isArray(snap.auto_recharge_rules)
+    ? (snap.auto_recharge_rules as Raw[]).map((ar) => ({
+        id: str(ar.id),
+        namespace: str(ar.namespace, namespace),
+        subject_key: str(ar.subject_key),
+        feature_key: str(ar.feature_key, "ai_token_allowance"),
+        enabled: Boolean(ar.enabled ?? true),
+        threshold_units: num(ar.threshold_units, 500000),
+        recharge_units: num(ar.recharge_units, 2500000),
+        charge_amount_cents: num(ar.charge_amount_cents, 5000),
+        currency: str(ar.currency, "USD"),
+        payment_method_id: ar.payment_method_id ? str(ar.payment_method_id) : undefined,
+        cooldown_minutes: num(ar.cooldown_minutes, 15),
+        last_triggered_at: ar.last_triggered_at ? str(ar.last_triggered_at) : undefined,
+        total_triggers: num(ar.total_triggers),
+        updated_at: str(ar.updated_at),
+      }))
+    : [];
+
+  const checkoutSessions: CheckoutSession[] = Array.isArray(snap.checkout_sessions)
+    ? (snap.checkout_sessions as Raw[]).map((cs) => ({
+        id: str(cs.id),
+        namespace: str(cs.namespace, namespace),
+        subject_key: str(cs.subject_key),
+        provider: str(cs.provider, "stripe"),
+        provider_session_id: str(cs.provider_session_id),
+        mode: str(cs.mode, "topup"),
+        feature_key: cs.feature_key ? str(cs.feature_key) : undefined,
+        grant_units: cs.grant_units != null ? num(cs.grant_units) : undefined,
+        amount_cents: num(cs.amount_cents),
+        currency: str(cs.currency, "USD"),
+        checkout_url: str(cs.checkout_url),
+        status: str(cs.status, "open"),
+        payment_intent_id: cs.payment_intent_id ? str(cs.payment_intent_id) : undefined,
+        grant_id: cs.grant_id ? str(cs.grant_id) : undefined,
+        created_at: str(cs.created_at),
+        completed_at: cs.completed_at ? str(cs.completed_at) : undefined,
+      }))
+    : [];
+
+  const paymentWebhooks: PaymentWebhookEvent[] = Array.isArray(snap.payment_webhooks)
+    ? (snap.payment_webhooks as Raw[]).map((wh) => ({
+        id: str(wh.id),
+        namespace: str(wh.namespace, namespace),
+        provider: str(wh.provider, "stripe"),
+        event_id: str(wh.event_id),
+        event_type: str(wh.event_type),
+        subject_key: str(wh.subject_key),
+        object_id: str(wh.object_id),
+        amount_cents: num(wh.amount_cents),
+        currency: str(wh.currency, "USD"),
+        status: str(wh.status, "processed"),
+        action_taken: str(wh.action_taken),
+        signature_verified: Boolean(wh.signature_verified ?? true),
+        received_at: str(wh.received_at),
+      }))
     : [];
 
   return {
@@ -247,6 +337,10 @@ export function normalizeSnapshot(snap: Raw, namespace: string): Snapshot {
     plans,
     subscriptions: Array.isArray(snap.subscriptions) ? (snap.subscriptions as Subscription[]) : [],
     invoices,
+    paymentMethods,
+    autoRechargeRules,
+    checkoutSessions,
+    paymentWebhooks,
     costIntel: (snap.cost_intelligence as CostIntelligenceReport) || null,
     productAnalytics: (snap.product_analytics as ProductAnalyticsReport) || null,
   };

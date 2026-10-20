@@ -314,13 +314,95 @@ type Invoice struct {
 	CreditsAppliedCents int               `json:"credits_applied_cents"`
 	TaxCents            int               `json:"tax_cents"`
 	TotalCents          int               `json:"total_cents"`
-	Status              string            `json:"status"` // "draft" | "issued" | "synced_stripe"
+	Status              string            `json:"status"` // "draft" | "issued" | "synced_stripe" | "paid" | "payment_failed"
 	StripeInvoiceID     string            `json:"stripe_invoice_id,omitempty"`
+	PaymentIntentID     string            `json:"payment_intent_id,omitempty"`
 	LineItems           []InvoiceLineItem `json:"line_items"`
 	PeriodStart         time.Time         `json:"period_start"`
 	PeriodEnd           time.Time         `json:"period_end"`
 	IssuedAt            time.Time         `json:"issued_at"`
+	PaidAt              *time.Time        `json:"paid_at,omitempty"`
 	CreatedAt           time.Time         `json:"created_at"`
+}
+
+// ---------------------------------------------------------------------------
+// Payment Provider Orchestration (Vaulted Cards, Top-Ups, Auto-Recharge, Webhooks)
+// ---------------------------------------------------------------------------
+
+// PaymentMethod stores a non-PCI provider token (`pm_...`) and display metadata
+// for off-session invoice collection and automatic credit recharge.
+type PaymentMethod struct {
+	ID                      string    `json:"id"`
+	Namespace               string    `json:"namespace"`
+	SubjectKey              string    `json:"subject_key"`
+	Provider                string    `json:"provider"`                   // "stripe" | "paystack" | "paddle"
+	ProviderCustomerID      string    `json:"provider_customer_id"`       // e.g., "cus_stripe_appembly_01"
+	ProviderPaymentMethodID string    `json:"provider_payment_method_id"` // e.g., "pm_1QxStripe4242"
+	Brand                   string    `json:"brand"`                      // "visa" | "mastercard" | "amex"
+	Last4                   string    `json:"last4"`                      // "4242"
+	ExpMonth                int       `json:"exp_month"`
+	ExpYear                 int       `json:"exp_year"`
+	IsDefault               bool      `json:"is_default"`
+	Status                  string    `json:"status"` // "active" | "detached" | "requires_action"
+	CreatedAt               time.Time `json:"created_at"`
+}
+
+// AutoRechargeRule configures automatic off-session credit grant top-ups when a
+// subject's metered entitlement balance drops below `ThresholdUnits`.
+type AutoRechargeRule struct {
+	ID                string     `json:"id"`
+	Namespace         string     `json:"namespace"`
+	SubjectKey        string     `json:"subject_key"`
+	FeatureKey        string     `json:"feature_key"`
+	Enabled           bool       `json:"enabled"`
+	ThresholdUnits    float64    `json:"threshold_units"`
+	RechargeUnits     float64    `json:"recharge_units"`
+	ChargeAmountCents int        `json:"charge_amount_cents"`
+	Currency          string     `json:"currency"`
+	PaymentMethodID   string     `json:"payment_method_id,omitempty"`
+	CooldownMinutes   int        `json:"cooldown_minutes"`
+	LastTriggeredAt   *time.Time `json:"last_triggered_at,omitempty"`
+	TotalTriggers     int        `json:"total_triggers"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+// CheckoutSession tracks a hosted card-setup, one-time credit top-up, or
+// off-session auto-recharge payment intent orchestrated with Stripe/Paystack.
+type CheckoutSession struct {
+	ID                string     `json:"id"`
+	Namespace         string     `json:"namespace"`
+	SubjectKey        string     `json:"subject_key"`
+	Provider          string     `json:"provider"` // "stripe" | "paystack"
+	ProviderSessionID string     `json:"provider_session_id"`
+	Mode              string     `json:"mode"` // "setup" | "topup" | "auto_recharge" | "invoice_collection"
+	FeatureKey        string     `json:"feature_key,omitempty"`
+	GrantUnits        float64    `json:"grant_units,omitempty"`
+	AmountCents       int        `json:"amount_cents"`
+	Currency          string     `json:"currency"`
+	CheckoutURL       string     `json:"checkout_url"`
+	Status            string     `json:"status"` // "open" | "succeeded" | "failed"
+	PaymentIntentID   string     `json:"payment_intent_id,omitempty"`
+	GrantID           string     `json:"grant_id,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	CompletedAt       *time.Time `json:"completed_at,omitempty"`
+}
+
+// PaymentWebhookEvent records inbound provider webhooks (`payment_intent.succeeded`,
+// `invoice.paid`, `invoice.payment_failed`, `setup_intent.succeeded`) and the ledger action taken.
+type PaymentWebhookEvent struct {
+	ID                string    `json:"id"`
+	Namespace         string    `json:"namespace"`
+	Provider          string    `json:"provider"`
+	EventID           string    `json:"event_id"`
+	EventType         string    `json:"event_type"`
+	SubjectKey        string    `json:"subject_key"`
+	ObjectID          string    `json:"object_id"`
+	AmountCents       int       `json:"amount_cents"`
+	Currency          string    `json:"currency"`
+	Status            string    `json:"status"` // "processed" | "ignored" | "failed"
+	ActionTaken       string    `json:"action_taken"`
+	SignatureVerified bool      `json:"signature_verified"`
+	ReceivedAt        time.Time `json:"received_at"`
 }
 
 type TelemetrySnapshot struct {
@@ -447,20 +529,24 @@ type ProductAnalyticsReport struct {
 // ---------------------------------------------------------------------------
 
 type NamespaceSnapshot struct {
-	Namespace        string                 `json:"namespace"`
-	Organizations    []Organization         `json:"organizations"`
-	Environments     []Environment          `json:"environments"`
-	Telemetry        TelemetrySnapshot      `json:"telemetry"`
-	Meters           []Meter                `json:"meters"`
-	Subjects         []Subject              `json:"subjects"`
-	APIKeys          []APIKey               `json:"api_keys"`
-	Entitlements     []Entitlement          `json:"entitlements"`
-	Grants           []EntitlementGrant     `json:"grants"`
-	DLQEvents        []DLQEvent             `json:"dlq_events"`
-	Plans            []Plan                 `json:"plans"`
-	Subscriptions    []Subscription         `json:"subscriptions"`
-	Invoices         []Invoice              `json:"invoices"`
-	RecentEvents     []CloudEvent           `json:"recent_events"`
-	CostIntelligence CostIntelligenceReport `json:"cost_intelligence"`
-	ProductAnalytics ProductAnalyticsReport `json:"product_analytics"`
+	Namespace         string                 `json:"namespace"`
+	Organizations     []Organization         `json:"organizations"`
+	Environments      []Environment          `json:"environments"`
+	Telemetry         TelemetrySnapshot      `json:"telemetry"`
+	Meters            []Meter                `json:"meters"`
+	Subjects          []Subject              `json:"subjects"`
+	APIKeys           []APIKey               `json:"api_keys"`
+	Entitlements      []Entitlement          `json:"entitlements"`
+	Grants            []EntitlementGrant     `json:"grants"`
+	DLQEvents         []DLQEvent             `json:"dlq_events"`
+	Plans             []Plan                 `json:"plans"`
+	Subscriptions     []Subscription         `json:"subscriptions"`
+	Invoices          []Invoice              `json:"invoices"`
+	PaymentMethods    []PaymentMethod        `json:"payment_methods"`
+	AutoRechargeRules []AutoRechargeRule     `json:"auto_recharge_rules"`
+	CheckoutSessions  []CheckoutSession      `json:"checkout_sessions"`
+	PaymentWebhooks   []PaymentWebhookEvent  `json:"payment_webhooks"`
+	RecentEvents      []CloudEvent           `json:"recent_events"`
+	CostIntelligence  CostIntelligenceReport `json:"cost_intelligence"`
+	ProductAnalytics  ProductAnalyticsReport `json:"product_analytics"`
 }

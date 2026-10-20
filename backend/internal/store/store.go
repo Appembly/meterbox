@@ -35,10 +35,14 @@ type MultiTenantStore struct {
 	subjects      map[string]models.Subject            // keyed by namespace + ":" + key
 	entitlements  map[string]models.Entitlement        // keyed by id
 	grants        map[string][]models.EntitlementGrant // keyed by entitlement_id
-	plans         map[string]models.Plan               // keyed by namespace + ":" + slug
-	subscriptions map[string]models.Subscription
-	invoices      map[string]models.Invoice
-	events        []models.CloudEvent
+	plans             map[string]models.Plan               // keyed by namespace + ":" + slug
+	subscriptions     map[string]models.Subscription
+	invoices          map[string]models.Invoice
+	paymentMethods    map[string]models.PaymentMethod     // keyed by pm.ID
+	autoRechargeRules map[string]models.AutoRechargeRule  // keyed by namespace + ":" + subject_key + ":" + feature_key
+	checkoutSessions  map[string]models.CheckoutSession   // keyed by cs.ID
+	paymentWebhooks   []models.PaymentWebhookEvent
+	events            []models.CloudEvent
 
 	// Track unique sessions per subject (`ns:subject:session_id`)
 	subjectSessions map[string]bool
@@ -85,10 +89,14 @@ func NewMultiTenantStore(chClient *clickhouse.Client, redpandaEndpoint, redisAdd
 		subjects:         make(map[string]models.Subject),
 		entitlements:     make(map[string]models.Entitlement),
 		grants:           make(map[string][]models.EntitlementGrant),
-		plans:            make(map[string]models.Plan),
-		subscriptions:    make(map[string]models.Subscription),
-		invoices:         make(map[string]models.Invoice),
-		events:           make([]models.CloudEvent, 0, 256),
+		plans:             make(map[string]models.Plan),
+		subscriptions:     make(map[string]models.Subscription),
+		invoices:          make(map[string]models.Invoice),
+		paymentMethods:    make(map[string]models.PaymentMethod),
+		autoRechargeRules: make(map[string]models.AutoRechargeRule),
+		checkoutSessions:  make(map[string]models.CheckoutSession),
+		paymentWebhooks:   make([]models.PaymentWebhookEvent, 0, 64),
+		events:            make([]models.CloudEvent, 0, 256),
 		subjectSessions:  make(map[string]bool),
 		dedupSet:         make(map[string]time.Time),
 		entCache:         make(map[string]models.EntitlementValue),
@@ -214,6 +222,8 @@ func (s *MultiTenantStore) seedDefaultPlatform() {
 
 	s.seedAppemblyNamespaceEntities("ns_live_appembly", periodStart, now)
 	s.seedAppemblyNamespaceEntities("ns_test_appembly", periodStart, now)
+	s.seedPaymentOrchestrationEntities("ns_live_appembly", now)
+	s.seedPaymentOrchestrationEntities("ns_test_appembly", now)
 
 	// 3. Demo Customer Organization: Acme AI Corp
 	acmeOrg := models.Organization{
@@ -275,6 +285,8 @@ func (s *MultiTenantStore) seedDefaultPlatform() {
 	// Seed namespaces with meters, subjects, entitlements, plans, subscriptions, and sample events
 	s.seedNamespaceEntities("ns_live_acme", periodStart, now)
 	s.seedNamespaceEntities("ns_test_acme", periodStart, now)
+	s.seedPaymentOrchestrationEntities("ns_live_acme", now)
+	s.seedPaymentOrchestrationEntities("ns_test_acme", now)
 }
 
 func (s *MultiTenantStore) createDeterministicKey(orgID, envID, ns, name string, scope models.KeyScope, rawKey string) {
@@ -3021,21 +3033,25 @@ func (s *MultiTenantStore) GetProductAnalytics(ns string) models.ProductAnalytic
 }
 
 type persistedState struct {
-	Orgs          map[string]models.Organization       `json:"orgs"`
-	Envs          map[string]models.Environment        `json:"envs"`
-	NsToEnv       map[string]string                    `json:"ns_to_env"`
-	APIKeys       map[string]models.APIKey             `json:"api_keys"`
-	HashToKeyID   map[string]string                    `json:"hash_to_key_id"`
-	DLQEvents     map[string]models.DLQEvent           `json:"dlq_events"`
-	Meters        map[string]models.Meter              `json:"meters"`
-	Subjects      map[string]models.Subject            `json:"subjects"`
-	Entitlements  map[string]models.Entitlement        `json:"entitlements"`
-	Grants        map[string][]models.EntitlementGrant `json:"grants"`
-	Plans         map[string]models.Plan               `json:"plans"`
-	Subscriptions map[string]models.Subscription       `json:"subscriptions"`
-	Invoices      map[string]models.Invoice            `json:"invoices"`
-	Events        []models.CloudEvent                  `json:"events"`
-	IDSeq         int64                                `json:"id_seq"`
+	Orgs              map[string]models.Organization       `json:"orgs"`
+	Envs              map[string]models.Environment        `json:"envs"`
+	NsToEnv           map[string]string                    `json:"ns_to_env"`
+	APIKeys           map[string]models.APIKey             `json:"api_keys"`
+	HashToKeyID       map[string]string                    `json:"hash_to_key_id"`
+	DLQEvents         map[string]models.DLQEvent           `json:"dlq_events"`
+	Meters            map[string]models.Meter              `json:"meters"`
+	Subjects          map[string]models.Subject            `json:"subjects"`
+	Entitlements      map[string]models.Entitlement        `json:"entitlements"`
+	Grants            map[string][]models.EntitlementGrant `json:"grants"`
+	Plans             map[string]models.Plan               `json:"plans"`
+	Subscriptions     map[string]models.Subscription       `json:"subscriptions"`
+	Invoices          map[string]models.Invoice            `json:"invoices"`
+	PaymentMethods    map[string]models.PaymentMethod      `json:"payment_methods,omitempty"`
+	AutoRechargeRules map[string]models.AutoRechargeRule   `json:"auto_recharge_rules,omitempty"`
+	CheckoutSessions  map[string]models.CheckoutSession    `json:"checkout_sessions,omitempty"`
+	PaymentWebhooks   []models.PaymentWebhookEvent         `json:"payment_webhooks,omitempty"`
+	Events            []models.CloudEvent                  `json:"events"`
+	IDSeq             int64                                `json:"id_seq"`
 }
 
 func (s *MultiTenantStore) saveStateLocked() {
@@ -3043,21 +3059,25 @@ func (s *MultiTenantStore) saveStateLocked() {
 		return
 	}
 	snap := persistedState{
-		Orgs:          s.orgs,
-		Envs:          s.envs,
-		NsToEnv:       s.nsToEnv,
-		APIKeys:       s.apiKeys,
-		HashToKeyID:   s.hashToKeyID,
-		DLQEvents:     s.dlqEvents,
-		Meters:        s.meters,
-		Subjects:      s.subjects,
-		Entitlements:  s.entitlements,
-		Grants:        s.grants,
-		Plans:         s.plans,
-		Subscriptions: s.subscriptions,
-		Invoices:      s.invoices,
-		Events:        s.events,
-		IDSeq:         s.idSeq.Load(),
+		Orgs:              s.orgs,
+		Envs:              s.envs,
+		NsToEnv:           s.nsToEnv,
+		APIKeys:           s.apiKeys,
+		HashToKeyID:       s.hashToKeyID,
+		DLQEvents:         s.dlqEvents,
+		Meters:            s.meters,
+		Subjects:          s.subjects,
+		Entitlements:      s.entitlements,
+		Grants:            s.grants,
+		Plans:             s.plans,
+		Subscriptions:     s.subscriptions,
+		Invoices:          s.invoices,
+		PaymentMethods:    s.paymentMethods,
+		AutoRechargeRules: s.autoRechargeRules,
+		CheckoutSessions:  s.checkoutSessions,
+		PaymentWebhooks:   s.paymentWebhooks,
+		Events:            s.events,
+		IDSeq:             s.idSeq.Load(),
 	}
 	raw, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
@@ -3094,8 +3114,28 @@ func (s *MultiTenantStore) loadState() bool {
 	s.plans = snap.Plans
 	s.subscriptions = snap.Subscriptions
 	s.invoices = snap.Invoices
+	if snap.PaymentMethods != nil {
+		s.paymentMethods = snap.PaymentMethods
+	}
+	if snap.AutoRechargeRules != nil {
+		s.autoRechargeRules = snap.AutoRechargeRules
+	}
+	if snap.CheckoutSessions != nil {
+		s.checkoutSessions = snap.CheckoutSessions
+	}
+	if snap.PaymentWebhooks != nil {
+		s.paymentWebhooks = snap.PaymentWebhooks
+	}
 	s.events = snap.Events
 	s.idSeq.Store(snap.IDSeq)
+	if len(s.paymentMethods) == 0 {
+		now := time.Now().UTC()
+		s.seedPaymentOrchestrationEntities("ns_live_appembly", now)
+		s.seedPaymentOrchestrationEntities("ns_test_appembly", now)
+		s.seedPaymentOrchestrationEntities("ns_live_acme", now)
+		s.seedPaymentOrchestrationEntities("ns_test_acme", now)
+		s.saveStateLocked()
+	}
 	s.rebuildSubjectProfilesLocked()
 	return true
 }

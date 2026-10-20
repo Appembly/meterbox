@@ -75,6 +75,26 @@ func (s *Server) Router() http.Handler {
 	apiMux.HandleFunc("GET /api/v1/invoices", s.handleListInvoices)
 	apiMux.HandleFunc("POST /api/v1/invoices/generate", s.handleGenerateInvoice)
 
+	// Payment Provider Orchestration (Vaulted Cards, Top-Up Sessions, Auto-Recharge, Webhooks)
+	apiMux.HandleFunc("GET /api/v1/payment-methods", s.handleListPaymentMethods)
+	apiMux.HandleFunc("POST /api/v1/payment-methods", s.handleAttachPaymentMethod)
+	apiMux.HandleFunc("POST /api/v1/payment-methods/{id}/default", s.handleSetDefaultPaymentMethod)
+	apiMux.HandleFunc("DELETE /api/v1/payment-methods/{id}", s.handleDetachPaymentMethod)
+
+	apiMux.HandleFunc("GET /api/v1/checkout/sessions", s.handleListCheckoutSessions)
+	apiMux.HandleFunc("POST /api/v1/checkout/sessions", s.handleCreateCheckoutSession)
+
+	apiMux.HandleFunc("GET /api/v1/auto-recharge", s.handleListAutoRechargeRules)
+	apiMux.HandleFunc("POST /api/v1/auto-recharge", s.handleUpsertAutoRechargeRule)
+	apiMux.HandleFunc("POST /api/v1/auto-recharge/{subject}/trigger", s.handleTriggerAutoRecharge)
+
+	apiMux.HandleFunc("GET /api/v1/webhooks/events", s.handleListPaymentWebhooks)
+	apiMux.HandleFunc("POST /api/v1/webhooks/stripe", s.handlePaymentWebhook)
+	apiMux.HandleFunc("POST /api/v1/webhooks/paystack", s.handlePaymentWebhook)
+
+	// Unauthenticated provider webhook endpoint (verifies Stripe-Signature HMAC-SHA256 when STRIPE_WEBHOOK_SECRET is configured)
+	mux.HandleFunc("POST /webhooks/stripe", s.handlePublicStripeWebhook)
+
 	apiMux.HandleFunc("POST /api/v1/portal/tokens", s.handleCreatePortalToken)
 
 	// Native PostHog Ingestion & User Profile Hydration Bridge
@@ -630,22 +650,26 @@ func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	snap := models.NamespaceSnapshot{
-		Namespace:        ns,
-		Organizations:    s.Store.ListOrganizations(),
-		Environments:     s.Store.ListEnvironments(),
-		Telemetry:        s.Store.GetTelemetry(ns),
-		Meters:           s.Store.ListMeters(ns),
-		Subjects:         s.Store.ListSubjects(ns),
-		Entitlements:     s.Store.ListEntitlements(ns, ""),
-		Grants:           s.Store.ListAllGrants(ns, ""),
-		Plans:            s.Store.ListPlans(ns),
-		Subscriptions:    s.Store.ListSubscriptions(ns),
-		Invoices:         s.Store.ListInvoices(ns),
-		APIKeys:          s.Store.ListAPIKeys(ns),
-		DLQEvents:        s.Store.ListDLQEvents(ns),
-		RecentEvents:     s.Store.ListRecentEvents(ns, limit),
-		CostIntelligence: s.Store.GetCostIntelligence(ns),
-		ProductAnalytics: s.Store.GetProductAnalytics(ns),
+		Namespace:         ns,
+		Organizations:     s.Store.ListOrganizations(),
+		Environments:      s.Store.ListEnvironments(),
+		Telemetry:         s.Store.GetTelemetry(ns),
+		Meters:            s.Store.ListMeters(ns),
+		Subjects:          s.Store.ListSubjects(ns),
+		Entitlements:      s.Store.ListEntitlements(ns, ""),
+		Grants:            s.Store.ListAllGrants(ns, ""),
+		Plans:             s.Store.ListPlans(ns),
+		Subscriptions:     s.Store.ListSubscriptions(ns),
+		Invoices:          s.Store.ListInvoices(ns),
+		PaymentMethods:    s.Store.ListPaymentMethods(ns, ""),
+		AutoRechargeRules: s.Store.ListAutoRechargeRules(ns, ""),
+		CheckoutSessions:  s.Store.ListCheckoutSessions(ns, ""),
+		PaymentWebhooks:   s.Store.ListPaymentWebhooks(ns),
+		APIKeys:           s.Store.ListAPIKeys(ns),
+		DLQEvents:         s.Store.ListDLQEvents(ns),
+		RecentEvents:      s.Store.ListRecentEvents(ns, limit),
+		CostIntelligence:  s.Store.GetCostIntelligence(ns),
+		ProductAnalytics:  s.Store.GetProductAnalytics(ns),
 	}
 	writeJSON(w, http.StatusOK, snap)
 }

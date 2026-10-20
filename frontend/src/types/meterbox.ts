@@ -163,6 +163,7 @@ export interface Invoice {
   total_cents: number;
   status: string;
   stripe_invoice_id: string;
+  payment_intent_id?: string;
   line_items: {
     description: string;
     meter_slug?: string;
@@ -173,6 +174,75 @@ export interface Invoice {
   period_start: string;
   period_end: string;
   issued_at: string;
+  paid_at?: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  namespace: string;
+  subject_key: string;
+  provider: string;
+  provider_customer_id: string;
+  provider_payment_method_id: string;
+  brand: string;
+  last4: string;
+  exp_month: number;
+  exp_year: number;
+  is_default: boolean;
+  status: string;
+  created_at: string;
+}
+
+export interface AutoRechargeRule {
+  id: string;
+  namespace: string;
+  subject_key: string;
+  feature_key: string;
+  enabled: boolean;
+  threshold_units: number;
+  recharge_units: number;
+  charge_amount_cents: number;
+  currency: string;
+  payment_method_id?: string;
+  cooldown_minutes: number;
+  last_triggered_at?: string;
+  total_triggers: number;
+  updated_at: string;
+}
+
+export interface CheckoutSession {
+  id: string;
+  namespace: string;
+  subject_key: string;
+  provider: string;
+  provider_session_id: string;
+  mode: string;
+  feature_key?: string;
+  grant_units?: number;
+  amount_cents: number;
+  currency: string;
+  checkout_url: string;
+  status: string;
+  payment_intent_id?: string;
+  grant_id?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface PaymentWebhookEvent {
+  id: string;
+  namespace: string;
+  provider: string;
+  event_id: string;
+  event_type: string;
+  subject_key: string;
+  object_id: string;
+  amount_cents: number;
+  currency: string;
+  status: string;
+  action_taken: string;
+  signature_verified: boolean;
+  received_at: string;
 }
 
 export interface CloudEventRecord {
