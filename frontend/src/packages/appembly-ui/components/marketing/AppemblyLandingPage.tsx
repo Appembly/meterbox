@@ -98,7 +98,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Rollups, dead-letter replay and Stripe invoicing',
     ],
     accentColor: '#10B981',
-    icon: <MeterboxIcon className="w-[18px] h-[18px]" />,
+    icon: <MeterboxIcon className="w-[22px] h-[22px]" />,
   },
   {
     id: 'valiscale',
@@ -196,7 +196,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'A live metering pipeline — from scoped keys to deduplication, rollups and invoicing — designed so usage is never dropped or billed twice.',
     image: SHOT_METERBOX,
     accent: '#10B981',
-    icon: <MeterboxIcon className="w-4 h-4" />,
+    icon: <MeterboxIcon compact className="w-[18px] h-[18px]" />,
     bullets: [
       'CloudEvents ingestion with idempotent deduplication',
       'Edge quota checks and prepaid credit burndown',
