@@ -13,12 +13,17 @@ import {
   ShieldCheck,
   ShoppingBag,
   Sun,
-  Terminal,
   Workflow,
   X,
 } from 'lucide-react';
 import { useAppemblyTheme } from '../../context/ThemeContext';
-import { AppemblyLogo } from '../brand/AppemblyLogo';
+import {
+  APPEMBLY_MONOGRAM_PATH,
+  AnimatedModularMarkGraphic,
+  AppemblyLogo,
+  orthoLoopsToSvgPath,
+} from '../brand/AppemblyLogo';
+import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
 import './landing.css';
 
@@ -43,7 +48,7 @@ export interface AppemblyLandingPageProps {
 
 const DEFAULT_CONTACT_EMAIL = 'hello@appembly.com';
 const SHOT_CYCLODE = '/showcase/cyclode-workstation.png';
-const SHOT_METERBOX = '/showcase/meterbox-control-plane.png';
+const SHOT_METERBOX = '/showcase/meterbox-control-plane.png?v=2';
 const SHOT_WIDTH = 1024;
 const SHOT_HEIGHT = 585;
 
@@ -82,7 +87,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Sandboxed previews, terminal and diffs side by side',
     ],
     accentColor: '#4E8067',
-    icon: <Terminal className="w-[18px] h-[18px]" />,
+    icon: <CyclodeIcon className="w-[24px] h-[24px]" />,
   },
   {
     id: 'meterbox',
@@ -97,7 +102,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Edge quota checks and prepaid credit burndown',
       'Rollups, dead-letter replay and Stripe invoicing',
     ],
-    accentColor: '#10B981',
+    accentColor: '#4E8067',
     icon: <MeterboxIcon className="w-[22px] h-[22px]" />,
   },
   {
@@ -109,7 +114,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     description:
       'Assess market viability, generate structured PRDs, and track a product from idea to growth.',
     capabilities: [],
-    accentColor: '#3B82F6',
+    accentColor: '#4E8067',
     icon: <Rocket className="w-[18px] h-[18px]" />,
   },
   {
@@ -121,7 +126,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     description:
       'Break work into dependency-safe waves where specialised agents build and verify in parallel.',
     capabilities: [],
-    accentColor: '#06B6D4',
+    accentColor: '#4E8067',
     icon: <Workflow className="w-[18px] h-[18px]" />,
   },
   {
@@ -133,7 +138,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     description:
       'Guide shoppers from intent to the right product, and capture unmet demand from real conversations.',
     capabilities: [],
-    accentColor: '#F59E0B',
+    accentColor: '#4E8067',
     icon: <ShoppingBag className="w-[18px] h-[18px]" />,
   },
   {
@@ -145,7 +150,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     description:
       'Run structured research sessions with adaptive follow-ups and synthesised insights.',
     capabilities: [],
-    accentColor: '#8B5CF6',
+    accentColor: '#4E8067',
     icon: <Radio className="w-[18px] h-[18px]" />,
   },
 ];
@@ -176,7 +181,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'Chat with an agent that understands your whole repository, while docs, terminal, previews and diffs sit right beside the conversation.',
     image: SHOT_CYCLODE,
     accent: '#4E8067',
-    icon: <Terminal className="w-4 h-4" />,
+    icon: <CyclodeIcon compact className="w-[18px] h-[18px]" />,
     bullets: [
       'Step-by-step reasoning and auditable actions',
       'Web & Docs reader that can operate live pages',
@@ -195,7 +200,7 @@ const SHOWCASE: ShowcaseItem[] = [
     description:
       'A live metering pipeline — from scoped keys to deduplication, rollups and invoicing — designed so usage is never dropped or billed twice.',
     image: SHOT_METERBOX,
-    accent: '#10B981',
+    accent: '#4E8067',
     icon: <MeterboxIcon compact className="w-[18px] h-[18px]" />,
     bullets: [
       'CloudEvents ingestion with idempotent deduplication',
@@ -352,6 +357,186 @@ const handleSpotlightMove = (e: React.MouseEvent<HTMLElement>) => {
 /*                               Visual helpers                               */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Full-bleed 640×640 (8×8 grid of 80×80 cells) tangent-bridged modular block tapestries.
+ * Every quadrant is packed with 1×1 rounded squares, 2×1 beams, 1×2 pillars, and
+ * Monogram "a" Loop counters fused at diagonal vertices via 45° concave circular bridges.
+ */
+const MODULAR_TAPESTRY_PRIMARY_PATH = orthoLoopsToSvgPath(
+  [
+    // Quadrant 1 (Top-Left & Center): Reference Stepped Cascade + 2×1 Bridge
+    [
+      [240, 0],
+      [320, 0],
+      [320, 80],
+      [240, 80],
+      [240, 160],
+      [80, 160],
+      [80, 240],
+      [160, 240],
+      [160, 320],
+      [320, 320],
+      [320, 400],
+      [160, 400],
+      [160, 320],
+      [80, 320],
+      [80, 240],
+      [0, 240],
+      [0, 160],
+      [80, 160],
+      [80, 80],
+      [240, 80],
+    ],
+    // Quadrant 2 (Top-Right & Mid-Right): 2×1 Beam + 1×2 Pillar + Stepped Nodes
+    [
+      [400, 0],
+      [560, 0],
+      [560, 80],
+      [640, 80],
+      [640, 160],
+      [560, 160],
+      [560, 80],
+      [400, 80],
+      [400, 160],
+      [480, 160],
+      [480, 320],
+      [640, 320],
+      [640, 400],
+      [480, 400],
+      [480, 320],
+      [400, 320],
+      [400, 160],
+      [320, 160],
+      [320, 80],
+      [400, 80],
+    ],
+    // Quadrant 3 (Bottom-Left): Twin 2×1 Beams + Diagonal Bridge Nodes
+    [
+      [0, 400],
+      [160, 400],
+      [160, 480],
+      [240, 480],
+      [240, 560],
+      [160, 560],
+      [160, 640],
+      [0, 640],
+      [0, 560],
+      [160, 560],
+      [160, 480],
+      [0, 480],
+    ],
+    // Quadrant 4 (Bottom-Right): Monogram "a" Loop + Stepped Right Wing
+    [
+      [320, 400],
+      [400, 400],
+      [400, 480],
+      [480, 480],
+      [480, 400],
+      [560, 400],
+      [560, 480],
+      [640, 480],
+      [640, 560],
+      [560, 560],
+      [560, 480],
+      [480, 480],
+      [480, 640],
+      [320, 640],
+      [320, 560],
+      [240, 560],
+      [240, 480],
+      [320, 480],
+    ],
+    // Inner CCW counter hole of Quadrant 4's Monogram "a" Loop
+    [
+      [320, 480],
+      [320, 560],
+      [400, 560],
+      [400, 480],
+    ],
+  ],
+  20,
+  24
+);
+
+const ModularPatternBackdrop: React.FC<{ tone?: 'light' | 'dark' }> = ({ tone = 'light' }) => {
+  const uid = React.useId().replace(/:/g, '');
+  const isDark = tone === 'dark';
+  const primaryStroke = isDark
+    ? 'text-[#F6F7F5]/[0.026]'
+    : 'text-[#111618]/[0.026] dark:text-[#F6F7F5]/[0.026]';
+  const secondaryStroke = isDark
+    ? 'text-[#72B091]/[0.018]'
+    : 'text-[#4E8067]/[0.016] dark:text-[#72B091]/[0.018]';
+  const traceStroke = isDark
+    ? 'text-[#72B091]/[0.055]'
+    : 'text-[#4E8067]/[0.05] dark:text-[#72B091]/[0.055]';
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0 overflow-hidden select-none"
+      style={{
+        maskImage:
+          'radial-gradient(ellipse 68% 60% at 50% 42%, rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.88) 65%, rgba(0,0,0,0.45) 100%)',
+        WebkitMaskImage:
+          'radial-gradient(ellipse 68% 60% at 50% 42%, rgba(0,0,0,0.38) 0%, rgba(0,0,0,0.88) 65%, rgba(0,0,0,0.45) 100%)',
+      }}
+    >
+      {/* Layer 1: Full-bleed faint contour lines of the tangent-bridged modular block pattern */}
+      <svg className="ap-mod-drift-a absolute -inset-12 w-[calc(100%+6rem)] h-[calc(100%+6rem)]">
+        <defs>
+          <pattern
+            id={`ap-mod-pat-a-${uid}`}
+            width="640"
+            height="640"
+            patternUnits="userSpaceOnUse"
+          >
+            <path
+              d={MODULAR_TAPESTRY_PRIMARY_PATH}
+              className={primaryStroke}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="0.9"
+            />
+            <path
+              d={MODULAR_TAPESTRY_PRIMARY_PATH}
+              pathLength={1}
+              className={`ap-mod-trace ${traceStroke}`}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.1"
+              strokeLinecap="round"
+            />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#ap-mod-pat-a-${uid})`} />
+      </svg>
+
+      {/* Layer 2: Phase-shifted counter-drifting modular contour line layer */}
+      <svg className="ap-mod-drift-b absolute -inset-12 w-[calc(100%+6rem)] h-[calc(100%+6rem)]">
+        <defs>
+          <pattern
+            id={`ap-mod-pat-b-${uid}`}
+            width="640"
+            height="640"
+            patternUnits="userSpaceOnUse"
+            patternTransform="translate(320 240) scale(0.75)"
+          >
+            <path
+              d={MODULAR_TAPESTRY_PRIMARY_PATH}
+              className={secondaryStroke}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="0.85"
+            />
+          </pattern>
+        </defs>
+        <rect width="100%" height="100%" fill={`url(#ap-mod-pat-b-${uid})`} />
+      </svg>
+    </div>
+  );
+};
+
 /** Product window chrome. Shows the product name — never a fake public URL. */
 const ProductFrame: React.FC<{
   children: React.ReactNode;
@@ -476,7 +661,7 @@ const Header: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess 
         }`}
       >
         <a href="#top" className="flex items-center shrink-0" aria-label="Appembly home">
-          <AppemblyLogo variant="lockup" size={30} productName="Appembly" />
+          <AppemblyLogo variant="lockup" size={30} productName="Appembly" animated />
         </a>
 
         <nav className="hidden md:flex items-center gap-1" aria-label="Primary">
@@ -578,7 +763,7 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
 
   return (
     <section id="top" className="relative overflow-hidden pt-36 sm:pt-44 pb-8">
-      <div className="pointer-events-none absolute inset-0 ap-lattice" />
+      <ModularPatternBackdrop tone="light" />
       <div
         className="pointer-events-none absolute -top-48 left-1/2 -translate-x-1/2 w-[1100px] h-[700px] rounded-full opacity-60 blur-3xl ap-glow"
         style={{
@@ -675,9 +860,12 @@ const ProductMarquee: React.FC = () => {
   return (
     <section aria-label="Appembly ecosystem" className="py-10 border-y border-[var(--ui-border)]">
       <div className="max-w-[1320px] mx-auto px-6 sm:px-10 flex flex-col md:flex-row md:items-center gap-6">
-        <div className="text-[12.5px] font-medium text-[var(--ui-text-muted)] shrink-0 md:w-56">
-          One ecosystem. Six products.
-          <br className="hidden md:block" /> One shared foundation.
+        <div className="inline-flex items-center gap-3 text-[12.5px] font-medium text-[var(--ui-text-muted)] shrink-0 md:w-64">
+          <AppemblyLogo variant="app-icon" size={28} animated />
+          <span>
+            One ecosystem. Six products.
+            <br className="hidden md:block" /> One shared foundation.
+          </span>
         </div>
         <div className="ap-marquee overflow-hidden flex-1" aria-hidden="true">
           <div className="ap-marquee-track">
@@ -720,8 +908,9 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
   }, []);
 
   return (
-    <section id="showcase" className="py-28 lg:py-36 scroll-mt-20">
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
+    <section id="showcase" className="relative overflow-hidden py-28 lg:py-36 scroll-mt-20">
+      <ModularPatternBackdrop tone="light" />
+      <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
         <Reveal className="max-w-[760px]">
           <SectionEyebrow>Now in private beta</SectionEyebrow>
           <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
@@ -853,8 +1042,9 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
 };
 
 const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => (
-  <section id="products" className="py-28 lg:py-36 bg-[var(--ui-bg-subtle)]/50 border-y border-[var(--ui-border)] scroll-mt-20">
-    <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
+  <section id="products" className="relative overflow-hidden py-28 lg:py-36 bg-[var(--ui-bg-subtle)]/50 border-y border-[var(--ui-border)] scroll-mt-20">
+    <ModularPatternBackdrop tone="light" />
+    <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
         <Reveal className="max-w-[720px]">
           <SectionEyebrow>The product suite</SectionEyebrow>
@@ -1046,18 +1236,9 @@ const PlatformDiagram: React.FC = () => {
         })}
 
         <g className="ap-node" style={{ '--ap-delay': '0ms' } as React.CSSProperties}>
-          <circle cx={cx} cy={cy} r={38} fill="#4E8067" />
-          <g
-            transform={`translate(${cx - 24}, ${cy - 24}) scale(0.48)`}
-            stroke="#F6F7F5"
-            strokeWidth={6}
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="20,77 50,23 80,77" />
-            <polyline points="20,23 50,77 80,23" />
-            <line x1="35" y1="50" x2="65" y2="50" />
+          <rect x={cx - 38} y={cy - 38} width={76} height={76} rx={18} fill="#4E8067" />
+          <g transform={`translate(${cx - 26}, ${cy - 26}) scale(0.52)`}>
+            <AnimatedModularMarkGraphic fill="#F6F7F5" maskId="ap-platform-core-mask" />
           </g>
         </g>
 
@@ -1100,7 +1281,7 @@ const PlatformDiagram: React.FC = () => {
 
 const Platform: React.FC = () => (
   <section id="platform" className="relative py-28 lg:py-36 bg-[#111618] text-[#F6F7F5] overflow-hidden scroll-mt-20">
-    <div className="pointer-events-none absolute inset-0 ap-lattice ap-lattice-inverse" />
+    <ModularPatternBackdrop tone="dark" />
     <div
       className="pointer-events-none absolute -bottom-40 -left-40 w-[700px] h-[700px] rounded-full blur-3xl opacity-40 ap-glow"
       style={{ background: 'radial-gradient(closest-side, rgba(78,128,103,0.45), transparent)' }}
@@ -1322,7 +1503,7 @@ const AccessSection: React.FC<{
     <section id="access" className={`px-4 sm:px-6 ${standalone ? 'py-10 sm:py-16' : 'pb-24'} scroll-mt-24`}>
       <Reveal>
         <div className="relative max-w-[1320px] mx-auto rounded-[32px] bg-[#111618] text-[#F6F7F5] overflow-hidden px-6 sm:px-12 lg:px-16 py-14 sm:py-20">
-          <div className="pointer-events-none absolute inset-0 ap-lattice ap-lattice-inverse" />
+          <ModularPatternBackdrop tone="dark" />
           <div
             className="pointer-events-none absolute -top-40 left-1/4 w-[800px] h-[500px] rounded-full blur-3xl opacity-50 ap-glow"
             style={{ background: 'radial-gradient(closest-side, rgba(78,128,103,0.55), transparent)' }}
@@ -1332,7 +1513,7 @@ const AccessSection: React.FC<{
             {/* Copy + steps */}
             <div className="lg:col-span-5">
               <div className="w-12 h-12 rounded-2xl bg-[#4E8067] flex items-center justify-center shadow-[0_12px_40px_-8px_rgba(78,128,103,0.7)]">
-                <AppemblyLogo variant="mark" size={28} strokeColor="#F6F7F5" />
+                <AppemblyLogo variant="mark" size={28} strokeColor="#F6F7F5" animated />
               </div>
               {isContact ? (
                 <>
@@ -1631,7 +1812,7 @@ const Footer: React.FC<{
   <footer className="border-t border-[var(--ui-border)]">
     <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-16 grid grid-cols-2 md:grid-cols-12 gap-10">
       <div className="col-span-2 md:col-span-5 space-y-4">
-        <AppemblyLogo variant="lockup" size={30} productName="Appembly" />
+        <AppemblyLogo variant="lockup" size={30} productName="Appembly" animated />
         <p className="text-[14px] text-[var(--ui-text-secondary)] max-w-[320px] leading-relaxed">
           Assembling AI-native apps and agents. Modular software and autonomous systems, built into
           one calm ecosystem.

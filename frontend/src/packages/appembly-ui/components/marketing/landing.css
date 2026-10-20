@@ -122,17 +122,52 @@
   }
 }
 
-/* True 60° triangular lattice (side 56px → row height 48.5px), echoing the monogram geometry. */
-.ap-lattice {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97'%3E%3Cpath d='M0 0L56 97M56 0L0 97M0 0.5H56M0 48.5H56' stroke='%23111618' stroke-opacity='0.07' fill='none'/%3E%3C/svg%3E");
-  background-size: 56px 97px;
-  background-position: center top;
-  mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 25%, transparent 75%);
-  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 30%, #000 25%, transparent 75%);
+/* ---------- Tangent-bridged modular pattern motion ---------- */
+.ap-mod-drift-a {
+  animation: ap-mod-drift-a 18s var(--ap-ease-in-out) infinite alternate;
+  will-change: transform;
 }
-[data-theme='dark'] .ap-lattice,
-.ap-lattice.ap-lattice-inverse {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97'%3E%3Cpath d='M0 0L56 97M56 0L0 97M0 0.5H56M0 48.5H56' stroke='%23F6F7F5' stroke-opacity='0.06' fill='none'/%3E%3C/svg%3E");
+.ap-mod-drift-b {
+  animation: ap-mod-drift-b 22s var(--ap-ease-in-out) infinite alternate;
+  will-change: transform;
+}
+.ap-mod-drift-c {
+  animation: ap-mod-drift-c 26s var(--ap-ease-in-out) infinite alternate;
+  will-change: transform;
+}
+@keyframes ap-mod-drift-a {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-22px, 18px, 0) scale(1.035);
+  }
+}
+@keyframes ap-mod-drift-b {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(24px, -16px, 0) scale(1.04);
+  }
+}
+@keyframes ap-mod-drift-c {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(-18px, -20px, 0) scale(1.03);
+  }
+}
+.ap-mod-trace {
+  stroke-dasharray: 0.16 0.84;
+  stroke-dashoffset: 0;
+  animation: ap-mod-trace 18s linear infinite;
+}
+@keyframes ap-mod-trace {
+  to {
+    stroke-dashoffset: -1;
+  }
 }
 
 /* ---------- Live status dot ---------- */
@@ -340,7 +375,12 @@
   .ap-marquee-track,
   .ap-flow,
   .ap-spin-slow,
-  .ap-progress-bar {
+  .ap-progress-bar,
+  .ap-mod-drift-a,
+  .ap-mod-drift-b,
+  .ap-mod-dock,
+  .ap-mod-trace,
+  .ap-mod-bridge-pulse {
     animation: none !important;
   }
   .ap-progress-bar {
