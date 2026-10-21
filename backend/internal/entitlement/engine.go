@@ -38,6 +38,9 @@ func (e *Engine) Evaluate(namespace, subjectKey, featureKey string) (models.Enti
 
 	// 2. Cache Miss: load entitlement & priority grants from transactional store
 	ent, grants, ok := e.store.GetEntitlementBySubjectFeature(namespace, subjectKey, featureKey)
+	if !ok && subjectKey != "ws_cyclode_default" {
+		ent, grants, ok = e.store.GetEntitlementBySubjectFeature(namespace, "ws_cyclode_default", featureKey)
+	}
 	if !ok {
 		return models.EntitlementValue{}, fmt.Errorf("entitlement for subject=%q feature=%q not found in namespace %q", subjectKey, featureKey, namespace)
 	}

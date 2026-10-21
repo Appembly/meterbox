@@ -108,6 +108,9 @@ func NewMultiTenantStore(chClient *clickhouse.Client, redpandaEndpoint, redisAdd
 	}
 
 	if s.stateFile != "" && s.loadState() {
+		s.reconcileCustomerTenantsLocked()
+		s.rebuildSubjectProfilesLocked()
+		s.saveStateLocked()
 		return s
 	}
 	s.seedDefaultPlatform()
@@ -225,48 +228,48 @@ func (s *MultiTenantStore) seedDefaultPlatform() {
 	s.seedPaymentOrchestrationEntities("ns_live_appembly", now)
 	s.seedPaymentOrchestrationEntities("ns_test_appembly", now)
 
-	// 3. Demo Customer Organization: Acme AI Corp
-	acmeOrg := models.Organization{
-		ID:               "org_acme_ai",
-		Name:             "Acme AI Corp",
-		Slug:             "acme-ai",
+	// 3. Isolated Demo Organization: Demo AI
+	demoOrg := models.Organization{
+		ID:               "org_demo_ai",
+		Name:             "Demo AI",
+		Slug:             "demo-ai",
 		PlanTier:         "pro",
-		StripeCustomerID: "cus_stripe_acme9921",
-		BillingEmail:     "billing@acme-ai.dev",
+		StripeCustomerID: "cus_stripe_demo9921",
+		BillingEmail:     "billing@demo-ai.dev",
 		CreatedAt:        now,
 	}
-	s.orgs[acmeOrg.ID] = acmeOrg
+	s.orgs[demoOrg.ID] = demoOrg
 
-	// Register Acme AI Corp as a Subject in `ns_meterbox_internal` for dogfood billing!
-	s.subjects[models.InternalDogfoodNamespace+":"+acmeOrg.ID] = models.Subject{
-		ID:               "sub_dogfood_acme",
+	// Register Demo AI as a Subject in `ns_meterbox_internal` for dogfood billing!
+	s.subjects[models.InternalDogfoodNamespace+":"+demoOrg.ID] = models.Subject{
+		ID:               "sub_dogfood_demo",
 		Namespace:        models.InternalDogfoodNamespace,
-		Key:              acmeOrg.ID,
-		DisplayName:      acmeOrg.Name,
-		Email:            acmeOrg.BillingEmail,
-		StripeCustomerID: acmeOrg.StripeCustomerID,
-		Metadata:         map[string]string{"tier": acmeOrg.PlanTier},
+		Key:              demoOrg.ID,
+		DisplayName:      demoOrg.Name,
+		Email:            demoOrg.BillingEmail,
+		StripeCustomerID: demoOrg.StripeCustomerID,
+		Metadata:         map[string]string{"tier": demoOrg.PlanTier},
 		CreatedAt:        now,
 	}
 
 	prodEnv := models.Environment{
-		ID:                 "env_live_acme",
-		OrgID:              acmeOrg.ID,
+		ID:                 "env_live_demo",
+		OrgID:              demoOrg.ID,
 		Name:               "Production",
 		Slug:               "production",
 		Type:               "production",
-		OpenMeterNamespace: "ns_live_acme",
+		OpenMeterNamespace: "ns_live_demo",
 		RateLimitRPS:       1000,
 		RetentionDays:      400,
 		CreatedAt:          now,
 	}
 	sandboxEnv := models.Environment{
-		ID:                 "env_test_acme",
-		OrgID:              acmeOrg.ID,
+		ID:                 "env_test_demo",
+		OrgID:              demoOrg.ID,
 		Name:               "Sandbox",
 		Slug:               "sandbox",
 		Type:               "sandbox",
-		OpenMeterNamespace: "ns_test_acme",
+		OpenMeterNamespace: "ns_test_demo",
 		RateLimitRPS:       250,
 		RetentionDays:      30,
 		CreatedAt:          now,
@@ -277,16 +280,16 @@ func (s *MultiTenantStore) seedDefaultPlatform() {
 	s.nsToEnv[sandboxEnv.OpenMeterNamespace] = sandboxEnv.ID
 
 	// Seed default scoped API keys for Production and Sandbox
-	s.createDeterministicKey(acmeOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Ingest Collector", models.ScopeIngest, "mb_ing_live_acme_default_collector_key_01")
-	s.createDeterministicKey(acmeOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Edge Quota Checker", models.ScopeEntitlement, "mb_ent_live_acme_default_quota_key_01")
-	s.createDeterministicKey(acmeOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Control Admin Key", models.ScopeAdmin, "mb_sk_live_acme_default_admin_key_01")
-	s.createDeterministicKey(acmeOrg.ID, sandboxEnv.ID, sandboxEnv.OpenMeterNamespace, "Sandbox Full Admin Key", models.ScopeAdmin, "mb_sk_test_acme_default_admin_key_01")
+	s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Ingest Collector", models.ScopeIngest, "mb_ing_live_demo_default_collector_key_01")
+	s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Edge Quota Checker", models.ScopeEntitlement, "mb_ent_live_demo_default_quota_key_01")
+	s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Control Admin Key", models.ScopeAdmin, "mb_sk_live_demo_default_admin_key_01")
+	s.createDeterministicKey(demoOrg.ID, sandboxEnv.ID, sandboxEnv.OpenMeterNamespace, "Sandbox Full Admin Key", models.ScopeAdmin, "mb_sk_test_demo_default_admin_key_01")
 
-	// Seed namespaces with meters, subjects, entitlements, plans, subscriptions, and sample events
-	s.seedNamespaceEntities("ns_live_acme", periodStart, now)
-	s.seedNamespaceEntities("ns_test_acme", periodStart, now)
-	s.seedPaymentOrchestrationEntities("ns_live_acme", now)
-	s.seedPaymentOrchestrationEntities("ns_test_acme", now)
+	// Seed demo namespaces with meters, subjects, entitlements, plans, subscriptions, and sample events
+	s.seedNamespaceEntities("ns_live_demo", periodStart, now)
+	s.seedNamespaceEntities("ns_test_demo", periodStart, now)
+	s.seedPaymentOrchestrationEntities("ns_live_demo", now)
+	s.seedPaymentOrchestrationEntities("ns_test_demo", now)
 }
 
 func (s *MultiTenantStore) createDeterministicKey(orgID, envID, ns, name string, scope models.KeyScope, rawKey string) {
@@ -1127,7 +1130,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		{
 			SpecVersion: "1.0",
 			ID:          fmt.Sprintf("evt_seed_%s_01", ns),
-			Source:      "https://gateway.acme-ai.dev/v1/chat/completions",
+			Source:      "https://gateway.demo-ai.dev/v1/chat/completions",
 			Type:        "ai.llm.tokens",
 			Subject:     sub1.Key,
 			Time:        now.Add(-3 * time.Hour),
@@ -1140,7 +1143,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		{
 			SpecVersion: "1.0",
 			ID:          fmt.Sprintf("evt_seed_%s_02", ns),
-			Source:      "https://gateway.acme-ai.dev/v1/chat/completions",
+			Source:      "https://gateway.demo-ai.dev/v1/chat/completions",
 			Type:        "ai.llm.tokens",
 			Subject:     sub1.Key,
 			Time:        now.Add(-2 * time.Hour),
@@ -1153,7 +1156,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		{
 			SpecVersion: "1.0",
 			ID:          fmt.Sprintf("evt_seed_%s_03", ns),
-			Source:      "https://gateway.acme-ai.dev/v1/chat/completions",
+			Source:      "https://gateway.demo-ai.dev/v1/chat/completions",
 			Type:        "ai.llm.tokens",
 			Subject:     sub2.Key,
 			Time:        now.Add(-1 * time.Hour),
@@ -1166,7 +1169,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		{
 			SpecVersion: "1.0",
 			ID:          fmt.Sprintf("evt_seed_%s_03b", ns),
-			Source:      "https://gateway.acme-ai.dev/v1/chat/completions",
+			Source:      "https://gateway.demo-ai.dev/v1/chat/completions",
 			Type:        "ai.llm.tokens",
 			Subject:     sub3.Key,
 			Time:        now.Add(-30 * time.Minute),
@@ -1262,13 +1265,13 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 	s.events = append(s.events, sampleEvents...)
 
 	// Also record dogfood event in ns_meterbox_internal for the seeded events
-	if ns == "ns_live_acme" {
+	if ns == "ns_live_demo" {
 		s.events = append(s.events, models.CloudEvent{
 			SpecVersion: "1.0",
 			ID:          "evt_dogfood_seed_01",
 			Source:      "meterbox://sink-worker",
 			Type:        "meterbox.events.ingested",
-			Subject:     "org_acme_ai",
+			Subject:     "org_demo_ai",
 			Time:        now.Add(-30 * time.Minute),
 			Data:        map[string]interface{}{"count": float64(len(sampleEvents)), "tenant_namespace": ns, "lane": "realtime"},
 			Namespace:   models.InternalDogfoodNamespace,
@@ -1287,7 +1290,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		RawPayload: map[string]interface{}{
 			"specversion": "1.0",
 			"id":          "evt_malformed_llm_991",
-			"source":      "https://agent.acme-ai.dev/v1/run",
+			"source":      "https://agent.demo-ai.dev/v1/run",
 			"type":        "ai.llm.tokens",
 			"subject":     "cust_hyperion_labs",
 			"data": map[string]interface{}{
@@ -1781,6 +1784,9 @@ func (s *MultiTenantStore) UpsertSubject(sub models.Subject) models.Subject {
 		sub.CreatedAt = time.Now().UTC()
 	}
 	s.subjects[key] = sub
+	if sub.Namespace == "ns_live_appembly" || sub.Namespace == "ns_test_appembly" {
+		s.ensureSubjectTokenEntitlementLocked(sub.Namespace, sub.Key)
+	}
 	s.saveStateLocked()
 	return sub
 }
@@ -1982,19 +1988,20 @@ func (s *MultiTenantStore) CreateOrganization(name, slug, billingEmail, planTier
 		s.mu.Unlock()
 		return models.Organization{}, nil, errors.New("name and slug are required")
 	}
+	cleanSlug := strings.ToLower(strings.TrimSpace(slug))
 	if planTier == "" {
 		planTier = "pro"
 	}
 	if billingEmail == "" {
-		billingEmail = "billing@" + slug + ".io"
+		billingEmail = "billing@" + cleanSlug + ".io"
 	}
 	now := time.Now().UTC()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	orgID := "org_" + slug
+	orgID := "org_" + strings.ReplaceAll(cleanSlug, "-", "_")
 	org := models.Organization{
 		ID:           orgID,
 		Name:         name,
-		Slug:         slug,
+		Slug:         cleanSlug,
 		PlanTier:     planTier,
 		BillingEmail: billingEmail,
 		CreatedAt:    now,
@@ -2013,23 +2020,23 @@ func (s *MultiTenantStore) CreateOrganization(name, slug, billingEmail, planTier
 	}
 
 	prodEnv := models.Environment{
-		ID:                 "env_live_" + slug,
+		ID:                 "env_live_" + cleanSlug,
 		OrgID:              orgID,
 		Name:               "Production",
 		Slug:               "production",
 		Type:               "production",
-		OpenMeterNamespace: "ns_live_" + slug,
+		OpenMeterNamespace: "ns_live_" + cleanSlug,
 		RateLimitRPS:       1000,
 		RetentionDays:      400,
 		CreatedAt:          now,
 	}
 	sandboxEnv := models.Environment{
-		ID:                 "env_test_" + slug,
+		ID:                 "env_test_" + cleanSlug,
 		OrgID:              orgID,
 		Name:               "Sandbox",
 		Slug:               "sandbox",
 		Type:               "sandbox",
-		OpenMeterNamespace: "ns_test_" + slug,
+		OpenMeterNamespace: "ns_test_" + cleanSlug,
 		RateLimitRPS:       250,
 		RetentionDays:      30,
 		CreatedAt:          now,
@@ -2039,8 +2046,13 @@ func (s *MultiTenantStore) CreateOrganization(name, slug, billingEmail, planTier
 	s.envs[sandboxEnv.ID] = sandboxEnv
 	s.nsToEnv[sandboxEnv.OpenMeterNamespace] = sandboxEnv.ID
 
-	s.seedNamespaceEntities(prodEnv.OpenMeterNamespace, periodStart, now)
-	s.seedNamespaceEntities(sandboxEnv.OpenMeterNamespace, periodStart, now)
+	// Customer organizations start 100% clean (zero demo customers, meters, plans, invoices, events, or DLQ items).
+	if orgID == "org_demo_ai" {
+		s.seedNamespaceEntities(prodEnv.OpenMeterNamespace, periodStart, now)
+		s.seedNamespaceEntities(sandboxEnv.OpenMeterNamespace, periodStart, now)
+	}
+	s.ensureNamespaceDefaultKeysLocked(prodEnv, now)
+	s.ensureNamespaceDefaultKeysLocked(sandboxEnv, now)
 	s.rebuildSubjectProfilesLocked()
 	s.saveStateLocked()
 	s.mu.Unlock()
@@ -2164,9 +2176,9 @@ func (s *MultiTenantStore) ResetSandboxNamespace(ns string) error {
 
 	now := time.Now().UTC()
 	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
-	if strings.Contains(ns, "appembly") {
+	if ns == "ns_test_appembly" {
 		s.seedAppemblyNamespaceEntities(ns, periodStart, now)
-	} else {
+	} else if ns == "ns_test_demo" {
 		s.seedNamespaceEntities(ns, periodStart, now)
 	}
 	s.rebuildSubjectProfilesLocked()
@@ -2294,12 +2306,17 @@ func (s *MultiTenantStore) GetTelemetry(ns string) models.TelemetrySnapshot {
 
 	hits := s.edgeCacheHits.Load()
 	misses := s.edgeCacheMisses.Load()
-	ratio := 96.0
+	ratio := 0.0
+	avgLatency := int64(0)
 	if hits+misses > 0 {
 		ratio = float64(hits) * 100.0 / float64(hits+misses)
+		avgLatency = 210
 	}
 
-	estimatedCents := 9900 + int(dogfoodRes.TotalValue*10)
+	estimatedCents := int(dogfoodRes.TotalValue * 10)
+	if dogfoodRes.TotalValue > 0 {
+		estimatedCents += 9900
+	}
 	dedupCount := int(s.dedupDropped.Load())
 
 	return models.TelemetrySnapshot{
@@ -2318,7 +2335,7 @@ func (s *MultiTenantStore) GetTelemetry(ns string) models.TelemetrySnapshot {
 		ActiveSubjects:         subjectsCount,
 		ActiveEntitlements:     entsCount,
 		EntitlementChecks:      hits + misses,
-		AvgCheckLatencyUs:      210,
+		AvgCheckLatencyUs:      avgLatency,
 		EdgeCacheHits:          hits,
 		EdgeCacheMisses:        misses,
 		EdgeCacheHitRatioPct:   ratio,
@@ -2671,6 +2688,13 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 			subjectsMap[sub.Key] = sub
 		}
 	}
+	hasSubscriptions := false
+	for _, sub := range s.subscriptions {
+		if sub.Namespace == ns && sub.Status == "active" {
+			hasSubscriptions = true
+			break
+		}
+	}
 	s.mu.RUnlock()
 
 	var totalTokens, inputTokens, cachedTokens, reasoningTokens, outputTokens float64
@@ -2756,9 +2780,9 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 	// Calculate cache savings vs uncached input rate ($3.00 / 1M tokens)
 	cacheSavingsUSD := (cachedTokens / 1_000_000.0) * (3.00 - 0.30)
 
-	// Billed revenue across active plan rate cards ($12.00 / 1M blended billable rate + base allocation share)
+	// Billed revenue across active plan rate cards ($12.00 / 1M blended billable rate + base allocation share when subscribed)
 	totalBilledUSD := totalCostUSD * 2.65
-	if totalTokens > 0 && totalBilledUSD < 45.0 {
+	if hasSubscriptions && totalTokens > 0 && totalBilledUSD < 45.0 {
 		totalBilledUSD = math.Round((49.0+totalCostUSD*2.4)*100) / 100
 	}
 	grossMarginPct := 0.0
@@ -2827,7 +2851,11 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		if sObj, ok := subjectsMap[subjKey]; ok && sObj.DisplayName != "" {
 			disp = sObj.DisplayName
 		}
-		rev := math.Round((29.0+b.costUSD*2.5)*100) / 100
+		baseFee := 0.0
+		if hasSubscriptions {
+			baseFee = 29.0
+		}
+		rev := math.Round((baseFee+b.costUSD*2.5)*100) / 100
 		margin := 0.0
 		if rev > 0 {
 			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
@@ -2910,38 +2938,42 @@ func (s *MultiTenantStore) GetProductAnalytics(ns string) models.ProductAnalytic
 		totalPageviews += sub.PageviewCount
 		totalSessions += sub.SessionCount
 
-		cc := sub.CountryCode
-		if cc == "" {
-			cc = "US"
-		}
-		cn := sub.CountryName
-		if cn == "" {
-			cn = "United States"
-		}
-		city := sub.City
-		if city == "" {
-			city = "San Francisco"
-		}
-		countriesSet[cc] = true
+		cc := strings.TrimSpace(sub.CountryCode)
+		cn := strings.TrimSpace(sub.CountryName)
+		city := strings.TrimSpace(sub.City)
+		if cc != "" || city != "" {
+			if cc == "" {
+				cc = "UN"
+			}
+			if cn == "" {
+				cn = cc
+			}
+			if city == "" {
+				city = cn
+			}
+			countriesSet[cc] = true
 
-		locKey := cc + ":" + city
-		if locMap[locKey] == nil {
-			locMap[locKey] = &locAgg{
-				countryCode: cc,
-				countryName: cn,
-				city:        city,
+			locKey := cc + ":" + city
+			if locMap[locKey] == nil {
+				locMap[locKey] = &locAgg{
+					countryCode: cc,
+					countryName: cn,
+					city:        city,
+				}
+			}
+			locMap[locKey].users++
+			locMap[locKey].events += sub.EventCount
+			locMap[locKey].pageviews += sub.PageviewCount
+			locMap[locKey].tokens += sub.TotalTokens
+		}
+
+		if sub.Browser != "" || sub.OS != "" {
+			devLabel := strings.TrimSpace(sub.Browser + " · " + sub.OS)
+			devLabel = strings.Trim(devLabel, "· ")
+			if devLabel != "" {
+				deviceMap[devLabel]++
 			}
 		}
-		locMap[locKey].users++
-		locMap[locKey].events += sub.EventCount
-		locMap[locKey].pageviews += sub.PageviewCount
-		locMap[locKey].tokens += sub.TotalTokens
-
-		devLabel := strings.TrimSpace(sub.Browser + " · " + sub.OS)
-		if devLabel == "·" || devLabel == "" {
-			devLabel = "Chrome 134 · macOS"
-		}
-		deviceMap[devLabel]++
 	}
 
 	pageUsers := make(map[string]map[string]bool)
@@ -3149,10 +3181,310 @@ func (s *MultiTenantStore) loadState() bool {
 		now := time.Now().UTC()
 		s.seedPaymentOrchestrationEntities("ns_live_appembly", now)
 		s.seedPaymentOrchestrationEntities("ns_test_appembly", now)
-		s.seedPaymentOrchestrationEntities("ns_live_acme", now)
-		s.seedPaymentOrchestrationEntities("ns_test_acme", now)
+		s.seedPaymentOrchestrationEntities("ns_live_demo", now)
+		s.seedPaymentOrchestrationEntities("ns_test_demo", now)
 		s.saveStateLocked()
 	}
 	s.rebuildSubjectProfilesLocked()
 	return true
 }
+
+// reconcileCustomerTenantsLocked ensures the isolated `org_demo_ai` tenant exists
+// and ensures all customer-created organizations start 100% clean (zero demo/seeded subjects,
+// meters, plans, subscriptions, invoices, events, DLQ items, or payment methods).
+func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now().UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	dirty := false
+
+	if _, hasDemo := s.orgs["org_demo_ai"]; !hasDemo {
+		demoOrg := models.Organization{
+			ID:               "org_demo_ai",
+			Name:             "Demo AI",
+			Slug:             "demo-ai",
+			PlanTier:         "pro",
+			StripeCustomerID: "cus_stripe_demo9921",
+			BillingEmail:     "billing@demo-ai.dev",
+			CreatedAt:        now,
+		}
+		s.orgs[demoOrg.ID] = demoOrg
+		s.subjects[models.InternalDogfoodNamespace+":"+demoOrg.ID] = models.Subject{
+			ID:               "sub_dogfood_demo",
+			Namespace:        models.InternalDogfoodNamespace,
+			Key:              demoOrg.ID,
+			DisplayName:      demoOrg.Name,
+			Email:            demoOrg.BillingEmail,
+			StripeCustomerID: demoOrg.StripeCustomerID,
+			Metadata:         map[string]string{"tier": demoOrg.PlanTier},
+			CreatedAt:        now,
+		}
+		prodEnv := models.Environment{
+			ID:                 "env_live_demo",
+			OrgID:              demoOrg.ID,
+			Name:               "Production",
+			Slug:               "production",
+			Type:               "production",
+			OpenMeterNamespace: "ns_live_demo",
+			RateLimitRPS:       1000,
+			RetentionDays:      400,
+			CreatedAt:          now,
+		}
+		sandboxEnv := models.Environment{
+			ID:                 "env_test_demo",
+			OrgID:              demoOrg.ID,
+			Name:               "Sandbox",
+			Slug:               "sandbox",
+			Type:               "sandbox",
+			OpenMeterNamespace: "ns_test_demo",
+			RateLimitRPS:       250,
+			RetentionDays:      30,
+			CreatedAt:          now,
+		}
+		s.envs[prodEnv.ID] = prodEnv
+		s.nsToEnv[prodEnv.OpenMeterNamespace] = prodEnv.ID
+		s.envs[sandboxEnv.ID] = sandboxEnv
+		s.nsToEnv[sandboxEnv.OpenMeterNamespace] = sandboxEnv.ID
+		s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Ingest Collector", models.ScopeIngest, "mb_ing_live_demo_default_collector_key_01")
+		s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Edge Quota Checker", models.ScopeEntitlement, "mb_ent_live_demo_default_quota_key_01")
+		s.createDeterministicKey(demoOrg.ID, prodEnv.ID, prodEnv.OpenMeterNamespace, "Production Control Admin Key", models.ScopeAdmin, "mb_sk_live_demo_default_admin_key_01")
+		s.createDeterministicKey(demoOrg.ID, sandboxEnv.ID, sandboxEnv.OpenMeterNamespace, "Sandbox Full Admin Key", models.ScopeAdmin, "mb_sk_test_demo_default_admin_key_01")
+		s.seedNamespaceEntities("ns_live_demo", periodStart, now)
+		s.seedNamespaceEntities("ns_test_demo", periodStart, now)
+		s.seedPaymentOrchestrationEntities("ns_live_demo", now)
+		s.seedPaymentOrchestrationEntities("ns_test_demo", now)
+		dirty = true
+	}
+
+	// 2. Purge any previously seeded demo/default entities from customer organizations so they start 100% clean
+	seededSubjectKeys := map[string]bool{
+		"cust_hyperion_labs":   true,
+		"cust_nova_studio":     true,
+		"cust_zephyr_robotics": true,
+		"cust_vanguard_ai":     true,
+		"cust_nebula_dev":      true,
+		"ws_cyclode_default":   true,
+		"ws_swarmteam_pods":    true,
+		"ws_valiscale_studio":  true,
+		"sub_enterprise_alpha": true,
+		"sub_startup_beta":     true,
+		"usr_ken_architect":    true,
+		"usr_elena_finops":     true,
+	}
+	seededPlanSlugs := map[string]bool{
+		"ai_scale_hybrid":         true,
+		"appembly_autonomous_pro": true,
+	}
+	seededMeterSlugs := map[string]bool{
+		"llm_tokens_total":        true,
+		"agent_tool_calls":        true,
+		"sandbox_compute_seconds": true,
+		"api_requests_total":      true,
+		"gpu_compute_seconds":     true,
+		"posthog_events_total":    true,
+		"pageviews_total":         true,
+	}
+
+	for orgID := range s.orgs {
+		if orgID == "org_meterbox_system" || orgID == "org_appembly" || orgID == "org_demo_ai" {
+			continue
+		}
+		for _, env := range s.envs {
+			if env.OrgID != orgID {
+				continue
+			}
+			ns := env.OpenMeterNamespace
+
+			// Remove seeded subjects & any auto-synced usr_ subjects with 0 real events
+			for subKey, sub := range s.subjects {
+				if sub.Namespace == ns && (seededSubjectKeys[sub.Key] || (strings.HasPrefix(sub.Key, "usr_") && sub.EventCount == 0)) {
+					delete(s.subjects, subKey)
+					dirty = true
+				}
+			}
+			for entID, ent := range s.entitlements {
+				if ent.Namespace == ns && (seededSubjectKeys[ent.SubjectKey] || strings.HasPrefix(ent.SubjectKey, "usr_")) {
+					delete(s.grants, entID)
+					delete(s.entitlements, entID)
+					dirty = true
+				}
+			}
+			for planKey, p := range s.plans {
+				if p.Namespace == ns && seededPlanSlugs[p.Slug] {
+					delete(s.plans, planKey)
+					dirty = true
+				}
+			}
+			for subscrID, subscr := range s.subscriptions {
+				if subscr.Namespace == ns && (seededSubjectKeys[subscr.SubjectKey] || seededPlanSlugs[subscr.PlanSlug]) {
+					delete(s.subscriptions, subscrID)
+					dirty = true
+				}
+			}
+			for invID, inv := range s.invoices {
+				if inv.Namespace == ns && (seededSubjectKeys[inv.SubjectKey] || seededPlanSlugs[inv.PlanSlug]) {
+					delete(s.invoices, invID)
+					dirty = true
+				}
+			}
+			filteredEvents := make([]models.CloudEvent, 0, len(s.events))
+			for _, ev := range s.events {
+				if ev.Namespace == ns && (seededSubjectKeys[ev.Subject] || strings.HasPrefix(ev.ID, "evt_seed_")) {
+					dirty = true
+					continue
+				}
+				filteredEvents = append(filteredEvents, ev)
+			}
+			s.events = filteredEvents
+
+			// If the namespace has 0 real events left, also remove the auto-seeded default meters
+			hasRealEvents := false
+			for _, ev := range s.events {
+				if ev.Namespace == ns {
+					hasRealEvents = true
+					break
+				}
+			}
+			if !hasRealEvents {
+				for mKey, m := range s.meters {
+					if m.Namespace == ns && seededMeterSlugs[m.Slug] {
+						delete(s.meters, mKey)
+						dirty = true
+					}
+				}
+			}
+
+			for dlqID, dlq := range s.dlqEvents {
+				if dlq.OpenMeterNamespace == ns && (dlq.EventID == "evt_malformed_llm_991" || strings.HasPrefix(dlq.EventID, "evt_malformed_")) {
+					delete(s.dlqEvents, dlqID)
+					dirty = true
+				}
+			}
+			for pmID, pm := range s.paymentMethods {
+				if pm.Namespace == ns && seededSubjectKeys[pm.SubjectKey] {
+					delete(s.paymentMethods, pmID)
+					dirty = true
+				}
+			}
+			for arID, ar := range s.autoRechargeRules {
+				if ar.Namespace == ns && seededSubjectKeys[ar.SubjectKey] {
+					delete(s.autoRechargeRules, arID)
+					dirty = true
+				}
+			}
+			for csID, cs := range s.checkoutSessions {
+				if cs.Namespace == ns && seededSubjectKeys[cs.SubjectKey] {
+					delete(s.checkoutSessions, csID)
+					dirty = true
+				}
+			}
+			s.ensureNamespaceDefaultKeysLocked(env, now)
+		}
+	}
+
+	if dirty {
+		s.rebuildSubjectProfilesLocked()
+		s.saveStateLocked()
+	}
+}
+
+func (s *MultiTenantStore) ensureSubjectTokenEntitlementLocked(ns, subjectKey string) {
+	if ns == "" || subjectKey == "" || ns == models.InternalDogfoodNamespace {
+		return
+	}
+	if !strings.HasPrefix(subjectKey, "usr_") && !strings.HasPrefix(subjectKey, "ws_") {
+		return
+	}
+	for _, ent := range s.entitlements {
+		if ent.Namespace == ns && ent.SubjectKey == subjectKey && ent.FeatureKey == "ai_token_allowance" {
+			return
+		}
+	}
+	now := time.Now().UTC()
+	periodStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC)
+	ent := models.Entitlement{
+		ID:              s.NextID("ent"),
+		Namespace:       ns,
+		SubjectKey:      subjectKey,
+		FeatureKey:      "ai_token_allowance",
+		FeatureName:     "Monthly Autonomous Token Allowance",
+		Type:            "metered",
+		MeterSlug:       "llm_tokens_total",
+		IssueAfterReset: 5000000,
+		IsSoftLimit:     true,
+		ResetPeriod:     "MONTH",
+		PeriodStart:     periodStart,
+		CreatedAt:       now,
+	}
+	s.entitlements[ent.ID] = ent
+	s.grants[ent.ID] = []models.EntitlementGrant{
+		{
+			ID:              s.NextID("grt"),
+			Namespace:       ns,
+			EntitlementID:   ent.ID,
+			Name:            "Appembly Priority Compute Grant",
+			Amount:          500000,
+			Priority:        1,
+			RolloverEnabled: false,
+			EffectiveAt:     periodStart,
+			CreatedAt:       now,
+		},
+		{
+			ID:              s.NextID("grt"),
+			Namespace:       ns,
+			EntitlementID:   ent.ID,
+			Name:            "Included Workstation Monthly Pool",
+			Amount:          5000000,
+			Priority:        2,
+			RolloverEnabled: true,
+			EffectiveAt:     periodStart,
+			CreatedAt:       now,
+		},
+	}
+}
+
+func (s *MultiTenantStore) ensureNamespaceDefaultKeysLocked(env models.Environment, now time.Time) {
+	existingScopes := make(map[models.KeyScope]bool)
+	for _, k := range s.apiKeys {
+		if k.OpenMeterNamespace == env.OpenMeterNamespace && k.RevokedAt == nil {
+			existingScopes[k.Scope] = true
+		}
+	}
+	type keySpec struct {
+		scope models.KeyScope
+		name  string
+	}
+	specs := []keySpec{
+		{scope: models.ScopeIngest, name: "Default Event Ingestion Key"},
+		{scope: models.ScopeEntitlement, name: "Default Entitlement Gate Key"},
+		{scope: models.ScopeAdmin, name: "Default Control Plane Key"},
+	}
+	for _, sp := range specs {
+		if existingScopes[sp.scope] {
+			continue
+		}
+		rawKey, prefix, preview, hash, err := auth.GenerateScopedKey(sp.scope, env.Type)
+		if err != nil || rawKey == "" {
+			continue
+		}
+		id := s.NextID("key")
+		k := models.APIKey{
+			ID:                 id,
+			OrgID:              env.OrgID,
+			EnvID:              env.ID,
+			OpenMeterNamespace: env.OpenMeterNamespace,
+			Name:               sp.name,
+			KeyPrefix:          prefix,
+			KeyPreview:         preview,
+			KeyHash:            hash,
+			Scope:              sp.scope,
+			RateLimitRPS:       env.RateLimitRPS,
+			CreatedAt:          now,
+		}
+		s.apiKeys[id] = k
+		s.hashToKeyID[hash] = id
+	}
+}
+

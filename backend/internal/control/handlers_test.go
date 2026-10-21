@@ -22,11 +22,11 @@ func TestScopedAPIKeyPermissionsAndNamespaceIsolation(t *testing.T) {
 	_, handler := setupTestServer()
 
 	// 1. Ingest-only key (`mb_ing_live_...`) can POST /api/v1/events
-	ingestKey := "mb_ing_live_acme_default_collector_key_01"
+	ingestKey := "mb_ing_live_demo_default_collector_key_01"
 	evPayload := map[string]interface{}{
 		"specversion": "1.0",
 		"id":          "evt_test_scope_001",
-		"source":      "https://api.acme.dev",
+		"source":      "https://api.demo-ai.dev",
 		"type":        "ai.llm.tokens",
 		"subject":     "cust_hyperion_labs",
 		"data":        map[string]interface{}{"tokens": 1500, "model": "claude-4-sonnet"},
@@ -40,8 +40,8 @@ func TestScopedAPIKeyPermissionsAndNamespaceIsolation(t *testing.T) {
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("expected 202 Accepted for ingest key on POST /api/v1/events, got %d: %s", rec.Code, rec.Body.String())
 	}
-	if ns := rec.Header().Get("X-OpenMeter-Namespace"); ns != "ns_live_acme" {
-		t.Fatalf("expected namespace header ns_live_acme, got %q", ns)
+	if ns := rec.Header().Get("X-OpenMeter-Namespace"); ns != "ns_live_demo" {
+		t.Fatalf("expected namespace header ns_live_demo, got %q", ns)
 	}
 
 	// 2. Ingest-only key MUST be rejected with 403 Forbidden on admin/meter routes
@@ -54,7 +54,7 @@ func TestScopedAPIKeyPermissionsAndNamespaceIsolation(t *testing.T) {
 	}
 
 	// 3. Entitlement-only key (`mb_ent_live_...`) can read entitlement values but cannot ingest events
-	entKey := "mb_ent_live_acme_default_quota_key_01"
+	entKey := "mb_ent_live_demo_default_quota_key_01"
 	reqEnt := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/cust_hyperion_labs/entitlements/ai_token_allowance/value", nil)
 	reqEnt.Header.Set("Authorization", "Bearer "+entKey)
 	recEnt := httptest.NewRecorder()
@@ -71,9 +71,9 @@ func TestScopedAPIKeyPermissionsAndNamespaceIsolation(t *testing.T) {
 		t.Fatalf("expected 403 Forbidden when entitlement key calls POST /api/v1/events, got %d", recEntIngest.Code)
 	}
 
-	// 4. Verify strict namespace isolation: event ingested into `ns_live_acme` does not affect `ns_test_acme`
+	// 4. Verify strict namespace isolation: event ingested into `ns_live_demo` does not affect `ns_test_demo`
 	reqLiveQuery := httptest.NewRequest(http.MethodGet, "/api/v1/meters/llm_tokens_total/query?subject=cust_hyperion_labs", nil)
-	reqLiveQuery.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqLiveQuery.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recLive := httptest.NewRecorder()
 	handler.ServeHTTP(recLive, reqLiveQuery)
 
@@ -81,7 +81,7 @@ func TestScopedAPIKeyPermissionsAndNamespaceIsolation(t *testing.T) {
 	_ = json.Unmarshal(recLive.Body.Bytes(), &liveRes)
 
 	reqTestQuery := httptest.NewRequest(http.MethodGet, "/api/v1/meters/llm_tokens_total/query?subject=cust_hyperion_labs", nil)
-	reqTestQuery.Header.Set("X-OpenMeter-Namespace", "ns_test_acme")
+	reqTestQuery.Header.Set("X-OpenMeter-Namespace", "ns_test_demo")
 	recTest := httptest.NewRecorder()
 	handler.ServeHTTP(recTest, reqTestQuery)
 
@@ -98,7 +98,7 @@ func TestSynchronousDeduplicationAndEdgeCacheInvalidation(t *testing.T) {
 
 	// 1. First quota evaluation should be a CACHE MISS
 	reqCheck1 := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/cust_hyperion_labs/entitlements/ai_token_allowance/value", nil)
-	reqCheck1.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqCheck1.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recCheck1 := httptest.NewRecorder()
 	handler.ServeHTTP(recCheck1, reqCheck1)
 
@@ -110,7 +110,7 @@ func TestSynchronousDeduplicationAndEdgeCacheInvalidation(t *testing.T) {
 
 	// 2. Second quota evaluation should be a sub-millisecond CACHE HIT
 	reqCheck2 := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/cust_hyperion_labs/entitlements/ai_token_allowance/value", nil)
-	reqCheck2.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqCheck2.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recCheck2 := httptest.NewRecorder()
 	handler.ServeHTTP(recCheck2, reqCheck2)
 
@@ -122,14 +122,14 @@ func TestSynchronousDeduplicationAndEdgeCacheInvalidation(t *testing.T) {
 	ev := map[string]interface{}{
 		"specversion": "1.0",
 		"id":          "evt_dedup_999",
-		"source":      "https://api.acme.dev",
+		"source":      "https://api.demo-ai.dev",
 		"type":        "ai.llm.tokens",
 		"subject":     "cust_hyperion_labs",
 		"data":        map[string]interface{}{"tokens": 5000, "model": "gpt-5"},
 	}
 	raw, _ := json.Marshal([]interface{}{ev, ev}) // Duplicate inside batch
 	reqIngest := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader(raw))
-	reqIngest.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqIngest.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recIngest := httptest.NewRecorder()
 	handler.ServeHTTP(recIngest, reqIngest)
 
@@ -141,7 +141,7 @@ func TestSynchronousDeduplicationAndEdgeCacheInvalidation(t *testing.T) {
 
 	// 4. Next quota check must reflect cache invalidation (MISS) and balance decremented by exactly 5000 (not 10000!)
 	reqCheck3 := httptest.NewRequest(http.MethodGet, "/api/v1/subjects/cust_hyperion_labs/entitlements/ai_token_allowance/value", nil)
-	reqCheck3.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqCheck3.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recCheck3 := httptest.NewRecorder()
 	handler.ServeHTTP(recCheck3, reqCheck3)
 
@@ -162,14 +162,14 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 	badEv := map[string]interface{}{
 		"specversion": "1.0",
 		"id":          "evt_bad_dlq_42",
-		"source":      "https://api.acme.dev",
+		"source":      "https://api.demo-ai.dev",
 		"type":        "ai.llm.tokens",
 		"subject":     "cust_hyperion_labs",
 		"data":        map[string]interface{}{"tokens": "NOT_A_NUMBER"},
 	}
 	rawBad, _ := json.Marshal(badEv)
 	reqBad := httptest.NewRequest(http.MethodPost, "/api/v1/events", bytes.NewReader(rawBad))
-	reqBad.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqBad.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recBad := httptest.NewRecorder()
 	handler.ServeHTTP(recBad, reqBad)
 
@@ -185,7 +185,7 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 		"payload": map[string]interface{}{
 			"specversion": "1.0",
 			"id":          "evt_bad_dlq_42",
-			"source":      "https://api.acme.dev",
+			"source":      "https://api.demo-ai.dev",
 			"type":        "ai.llm.tokens",
 			"subject":     "cust_hyperion_labs",
 			"data":        map[string]interface{}{"tokens": 7500, "model": "claude-4-sonnet"},
@@ -193,7 +193,7 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 	}
 	rawFixed, _ := json.Marshal(fixedPayload)
 	reqReplay := httptest.NewRequest(http.MethodPost, "/api/control/v1/dlq/"+dlqID+"/replay", bytes.NewReader(rawFixed))
-	reqReplay.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqReplay.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recReplay := httptest.NewRecorder()
 	handler.ServeHTTP(recReplay, reqReplay)
 
@@ -205,7 +205,7 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 
 	// 3. Verify Dogfooding (`ns_meterbox_internal`) incremented for the replayed event
 	reqDogfood := httptest.NewRequest(http.MethodGet, "/api/control/v1/dogfood", nil)
-	reqDogfood.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqDogfood.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recDogfood := httptest.NewRecorder()
 	handler.ServeHTTP(recDogfood, reqDogfood)
 	if recDogfood.Code != http.StatusOK {
@@ -219,7 +219,7 @@ func TestDLQCaptureAndReplayAndDogfoodBilling(t *testing.T) {
 		"sync_to_stripe": true,
 	})
 	reqInv := httptest.NewRequest(http.MethodPost, "/api/v1/invoices/generate", bytes.NewReader(invReq))
-	reqInv.Header.Set("X-OpenMeter-Namespace", "ns_live_acme")
+	reqInv.Header.Set("X-OpenMeter-Namespace", "ns_live_demo")
 	recInv := httptest.NewRecorder()
 	handler.ServeHTTP(recInv, reqInv)
 	if recInv.Code != http.StatusCreated {

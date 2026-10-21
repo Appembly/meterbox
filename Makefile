@@ -25,6 +25,6 @@ test-sim:
 
 demo-traffic:
 	curl -s -X POST http://localhost:8888/api/v1/events \
-		-H "Authorization: Bearer mb_ing_live_acme_default_collector_key_01" \
+		-H "Authorization: Bearer mb_ing_live_demo_default_collector_key_01" \
 		-H "Content-Type: application/json" \
-		-d '{"specversion":"1.0","id":"evt_cli_01","source":"https://gateway.acme-ai.dev","type":"ai.llm.tokens","subject":"cust_hyperion_labs","data":{"tokens":3200,"model":"claude-4-sonnet"}}' | jq .
+		-d '{"specversion":"1.0","id":"evt_cli_01","source":"https://gateway.demo-ai.dev","type":"ai.llm.tokens","subject":"cust_hyperion_labs","data":{"tokens":3200,"model":"claude-4-sonnet"}}' | jq .

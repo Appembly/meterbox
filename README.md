@@ -142,12 +142,12 @@ make sim
 ### Ingest CloudEvents (`POST /api/v1/events`)
 ```bash
 curl -s -X POST "http://localhost:8888/api/v1/events" \
-  -H "Authorization: Bearer mb_ing_live_acme_default_collector_key_01" \
+  -H "Authorization: Bearer mb_ing_live_demo_default_collector_key_01" \
   -H "Content-Type: application/json" \
   -d '{
     "specversion": "1.0",
     "id": "evt_live_1001",
-    "source": "https://gateway.acme-ai.dev/v1/chat",
+    "source": "https://gateway.demo-ai.dev/v1/chat",
     "type": "ai.llm.tokens",
     "subject": "cust_hyperion_labs",
     "data": {
@@ -161,20 +161,20 @@ curl -s -X POST "http://localhost:8888/api/v1/events" \
 ### Query ClickHouse Meter Rollups (`GET /api/v1/meters/{slug}/query`)
 ```bash
 curl -s "http://localhost:8888/api/v1/meters/llm_tokens_total/query" \
-  -H "X-OpenMeter-Namespace: ns_live_acme"
+  -H "X-OpenMeter-Namespace: ns_live_demo"
 ```
 
 ### Evaluate Sub-5ms Customer Entitlement (`GET /api/v1/subjects/{subject}/entitlements/{feature}/value`)
 ```bash
 curl -s "http://localhost:8888/api/v1/subjects/cust_hyperion_labs/entitlements/ai_token_allowance/value" \
-  -H "X-OpenMeter-Namespace: ns_live_acme"
+  -H "X-OpenMeter-Namespace: ns_live_demo"
 ```
 
 ### Generate Hybrid Usage Invoice (`POST /api/v1/invoices/generate`)
 ```bash
 curl -s -X POST "http://localhost:8888/api/v1/invoices/generate" \
   -H "Content-Type: application/json" \
-  -H "X-OpenMeter-Namespace: ns_live_acme" \
+  -H "X-OpenMeter-Namespace: ns_live_demo" \
   -d '{
     "subject_key": "cust_hyperion_labs",
     "plan_slug": "ai_scale_hybrid",

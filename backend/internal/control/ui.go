@@ -37,8 +37,8 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="flex items-center gap-3">
       <label class="text-xs text-slate-400">Namespace:</label>
       <select id="nsSelect" onchange="refreshAll()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm font-mono text-emerald-400">
-        <option value="ns_live_acme">Production (ns_live_acme)</option>
-        <option value="ns_test_acme">Sandbox (ns_test_acme)</option>
+        <option value="ns_live_demo">Production (ns_live_demo)</option>
+        <option value="ns_test_demo">Sandbox (ns_test_demo)</option>
       </select>
       <button onclick="resetSandbox()" class="text-xs px-3 py-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30">Reset Sandbox</button>
     </div>
@@ -60,7 +60,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <textarea id="eventInput" rows="8" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 font-mono text-xs text-emerald-300">{
   "specversion": "1.0",
   "id": "evt_live_9001",
-  "source": "https://gateway.acme-ai.dev/v1/chat",
+  "source": "https://gateway.demo-ai.dev/v1/chat",
   "type": "ai.llm.tokens",
   "subject": "cust_hyperion_labs",
   "data": { "tokens": 5000, "model": "claude-4-sonnet", "token_type": "output" }
@@ -144,13 +144,13 @@ const dashboardHTML = `<!DOCTYPE html>
       refreshAll();
     }
     async function emitMalformed() {
-      const bad = { specversion: '1.0', id: 'evt_bad_' + Date.now(), source: 'https://agent.acme.dev', type: 'ai.llm.tokens', subject: 'cust_hyperion_labs', data: { tokens: 'BAD_STRING' } };
+      const bad = { specversion: '1.0', id: 'evt_bad_' + Date.now(), source: 'https://agent.demo-ai.dev', type: 'ai.llm.tokens', subject: 'cust_hyperion_labs', data: { tokens: 'BAD_STRING' } };
       await fetch('/api/v1/events', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-OpenMeter-Namespace': ns() }, body: JSON.stringify(bad) });
       showBanner('Emitted malformed event -> captured in DLQ for inspection.');
       refreshAll();
     }
     async function replayDLQ(id) {
-      const fixed = { payload: { specversion: '1.0', id: 'evt_replayed_' + id, source: 'https://agent.acme.dev', type: 'ai.llm.tokens', subject: 'cust_hyperion_labs', data: { tokens: 4000, model: 'claude-4-sonnet' } } };
+      const fixed = { payload: { specversion: '1.0', id: 'evt_replayed_' + id, source: 'https://agent.demo-ai.dev', type: 'ai.llm.tokens', subject: 'cust_hyperion_labs', data: { tokens: 4000, model: 'claude-4-sonnet' } } };
       await fetch('/api/control/v1/dlq/' + id + '/replay', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-OpenMeter-Namespace': ns() }, body: JSON.stringify(fixed) });
       showBanner('Replayed DLQ event ' + id + ' into ClickHouse!');
       refreshAll();
@@ -171,7 +171,7 @@ const dashboardHTML = `<!DOCTYPE html>
     }
     async function resetSandbox() {
       const res = await fetch('/api/control/v1/environments/reset', { method: 'POST', headers: { 'X-OpenMeter-Namespace': ns() } });
-      showBanner(res.ok ? 'Sandbox namespace wiped and re-seeded!' : 'Switch to Sandbox (ns_test_acme) first to reset.');
+      showBanner(res.ok ? 'Sandbox namespace wiped and re-seeded!' : 'Switch to Sandbox (ns_test_demo) first to reset.');
       refreshAll();
     }
     refreshAll();

@@ -21,8 +21,8 @@ func (s *MultiTenantStore) seedPaymentOrchestrationEntities(ns string, now time.
 	if !isAppembly {
 		primarySub = "sub_enterprise_alpha"
 		secondarySub = "sub_startup_beta"
-		primaryCus = "cus_acme_alpha_01"
-		secondaryCus = "cus_acme_beta_01"
+		primaryCus = "cus_demo_alpha_01"
+		secondaryCus = "cus_demo_beta_01"
 		featureKey = "llm_tokens_monthly"
 	}
 

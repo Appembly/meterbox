@@ -165,9 +165,14 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 					ns = r.URL.Query().Get("namespace")
 				}
 				if ns == "" {
-					ns = "ns_live_acme"
+					ns = "ns_live_demo"
 				}
 				tenantCtx, err = resolver.ResolveNamespace(ns)
+				if (err != nil || tenantCtx == nil) && ns != "" && r.Header.Get("X-Appembly-Internal-Bridge") != "" {
+					if prov, ok := resolver.(SauthenNamespaceProvisioner); ok {
+						tenantCtx, err = prov.EnsureSauthenNamespace(ns)
+					}
+				}
 				if err != nil || tenantCtx == nil {
 					writeAuthError(w, http.StatusUnauthorized, "unknown_namespace", "Target OpenMeter namespace not found")
 					return

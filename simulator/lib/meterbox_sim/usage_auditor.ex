@@ -146,7 +146,7 @@ defmodule MeterboxSim.UsageAuditor do
       \e[1mChaos & Shield  :\e[0m SETNX_DedupVerified=\e[32m#{local.dedup_verified}\e[0m (ServerDedup=#{Map.get(tel, "deduplicated_total", 0)}) | DLQ_Injected=#{local.dlq_injected} | DLQ_Replayed=\e[32m#{local.dlq_replayed}\e[0m
       \e[1mClickHouse Roll :\e[0m llm_tokens_total=\e[1;36m#{format_num(snap.llm_total)}\e[0m | api_requests_total=\e[1;36m#{format_num(snap.api_total)}\e[0m | gpu_compute_seconds=\e[1;36m#{format_num(snap.gpu_total)}\e[0m
       \e[1mPer-Subject LLM :\e[0m #{if subject_breakdown == "", do: "warming up...", else: subject_breakdown}
-      \e[1mDogfood Billing :\e[0m Namespace=\e[90m#{Map.get(dog, "internal_namespace", "ns_meterbox_internal")}\e[0m | Org=#{Map.get(dog, "organization_id", "org_acme_ai")} | BillableIngest=\e[32m#{format_num(dogfood_billed)}\e[0m
+      \e[1mDogfood Billing :\e[0m Namespace=\e[90m#{Map.get(dog, "internal_namespace", "ns_meterbox_internal")}\e[0m | Org=#{Map.get(dog, "organization_id", "org_demo_ai")} | BillableIngest=\e[32m#{format_num(dogfood_billed)}\e[0m
       \e[1mPortal & Stripe :\e[0m PortalToken=#{snap.portal.status} (ents=#{snap.portal.entitlements}) | InvoicesGenerated=#{local.invoices_generated} | Latest=#{invoice_banner}
     """)
   end
