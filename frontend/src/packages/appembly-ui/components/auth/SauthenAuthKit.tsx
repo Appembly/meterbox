@@ -272,6 +272,14 @@ export function resolveBrandConfig(
 
 export function saveSauthenSession(payload: SauthenAuthPayload) {
   try {
+    const prev = loadSauthenSession();
+    if (prev?.user?.id && payload?.user?.id && prev.user.id !== payload.user.id) {
+      localStorage.removeItem('cyclode_active_task_id');
+      localStorage.removeItem('cyclode_active_task_snapshot');
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/session/')) {
+        window.history.replaceState({}, '', '/');
+      }
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent('sauthen-auth-change', { detail: payload }));
   } catch {
@@ -291,6 +299,11 @@ export function loadSauthenSession(): SauthenAuthPayload | null {
 export function clearSauthenSession() {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('cyclode_active_task_id');
+    localStorage.removeItem('cyclode_active_task_snapshot');
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/session/')) {
+      window.history.replaceState({}, '', '/');
+    }
     window.dispatchEvent(new CustomEvent('sauthen-auth-change', { detail: null }));
   } catch {
     /* ignore */
@@ -2017,7 +2030,7 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
   children,
 }) => {
   const cfg = resolveBrandConfig(brand);
-  const { authenticated, refresh } = useSauthenSession(apiUrl, namespace);
+  const { session, authenticated, refresh } = useSauthenSession(apiUrl, namespace);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -2026,7 +2039,7 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
     return <div className="sag-blank" style={{ minHeight: '100vh', background: cfg.surface }} />;
   }
   if (authenticated) {
-    return <>{children}</>;
+    return <React.Fragment key={session?.user?.id || 'authenticated'}>{children}</React.Fragment>;
   }
 
   const hero = GATE_HERO[cfg.appId] || GATE_HERO.sauthen;
