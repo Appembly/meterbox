@@ -288,7 +288,7 @@ export const ValiscalePreview: React.FC = () => {
           id: 'proj-cyclode',
           label: 'Cyclode Workstation',
           statusColor: 'emerald',
-          badge: ':6013',
+          badge: 'Live',
         },
         {
           id: 'proj-gatharoom',

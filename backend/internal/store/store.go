@@ -1355,6 +1355,23 @@ func (s *MultiTenantStore) ResolveNamespace(namespace string) (*models.TenantCon
 	}, nil
 }
 
+// EnsureSauthenNamespace provisions an isolated organization and live/test environments
+// when a cryptographically verified Sauthen Ed25519 JWT attests to a new `ns_live_<slug>` or `ns_test_<slug>`.
+func (s *MultiTenantStore) EnsureSauthenNamespace(namespace string) (*models.TenantContext, error) {
+	if tc, err := s.ResolveNamespace(namespace); err == nil && tc != nil {
+		return tc, nil
+	}
+	slug := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(namespace), "ns_live_"), "ns_test_")
+	if slug == "" || slug == namespace {
+		return nil, fmt.Errorf("invalid Sauthen namespace %q", namespace)
+	}
+	orgName := strings.Title(strings.ReplaceAll(slug, "-", " "))
+	if _, _, err := s.CreateOrganization(orgName, slug, "billing@"+slug+".dev", "pro"); err != nil {
+		return nil, err
+	}
+	return s.ResolveNamespace(namespace)
+}
+
 // CheckAndMarkDedup implements deterministic Redis SETNX deduplication keyed by `dedup:{namespace}:{source}:{id}`.
 func (s *MultiTenantStore) CheckAndMarkDedup(namespace, source, eventID string) bool {
 	s.mu.Lock()

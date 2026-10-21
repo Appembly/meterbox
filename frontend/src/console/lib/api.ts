@@ -1,15 +1,32 @@
 import { API_BASE } from "../../types/meterbox";
 
+export { API_BASE };
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
 }
 
+function getStoredBearerHeader(): Record<string, string> {
+  try {
+    const raw = typeof window !== "undefined" ? localStorage.getItem("sth.auth.session.v2") : null;
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as { access_token?: string };
+    return parsed?.access_token ? { Authorization: `Bearer ${parsed.access_token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 /** GET a JSON resource, scoped to an OpenMeter namespace when provided. */
 export async function apiGet<T = unknown>(path: string, namespace?: string, signal?: AbortSignal): Promise<T> {
+  const headers: Record<string, string> = {
+    ...getStoredBearerHeader(),
+    ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
+  };
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: namespace ? { "X-OpenMeter-Namespace": namespace } : undefined,
+    headers,
     signal,
     cache: "no-store",
   });
@@ -26,6 +43,7 @@ export async function apiPost<T = unknown>(
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...getStoredBearerHeader(),
     ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
     ...(extraHeaders ?? {}),
   };

@@ -161,8 +161,8 @@ export function CostIntelligenceView({
             Real-time token anatomy aggregated from ClickHouse (
             <code>$.token_type</code>, <code>$.model</code>, <code>$.tool</code>,{" "}
             <code>$.persona</code>), prefix cache savings, and crash-safe step
-            checkpoint deduplication across <code>Cyclode (:6013)</code>,{" "}
-            <code>Swarmteam (:6040)</code>, and <code>Valiscale (:6030)</code>.
+            checkpoint deduplication across <code>Cyclode</code>,{" "}
+            <code>Swarmteam</code>, and <code>Valiscale</code>.
           </p>
         </div>
         <div className="ws-actions">

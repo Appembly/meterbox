@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, ChevronsUpDown, Moon, Search, Sun } from "lucide-react";
 import { MeterboxIcon } from "../../packages/appembly-ui/components/brand/MeterboxIcon";
+import { SauthenUserBadge, loadSauthenSession, saveSauthenSession } from "../../packages/appembly-ui/components/auth/SauthenAuthKit";
 import { useConsole } from "../ConsoleProvider";
 import { NAV, NavItem, classicHref } from "../nav";
 import { relativeTime } from "../lib/format";
@@ -16,7 +17,7 @@ export const Sidebar: React.FC<{ onOpenPalette: () => void; onNavigate?: () => v
   onOpenPalette,
   onNavigate,
 }) => {
-  const { org, env, href, navigate, section, snapshot, entitlementUsage, connected, lastUpdated } = useConsole();
+  const { org, env, namespace, switchContext, href, navigate, section, snapshot, entitlementUsage, connected, lastUpdated } = useConsole();
   const pathname = usePathname();
   const { dark, toggle } = useTheme();
   const [, forceTick] = useState(0);
@@ -142,8 +143,18 @@ export const Sidebar: React.FC<{ onOpenPalette: () => void; onNavigate?: () => v
         ))}
       </nav>
 
+      {/* Sauthen SSO Principal & Account Menu (Org/Env switching is handled by the top ContextSwitcher) */}
+      <div className="shrink-0 px-3 pt-2">
+        <SauthenUserBadge
+          brand="meterbox"
+          namespace={namespace}
+          showOrgSwitcher={false}
+          onSwitchNamespace={(orgSlug) => switchContext(orgSlug, "production")}
+        />
+      </div>
+
       {/* Footer: connection + theme */}
-      <div className="shrink-0 border-t border-[var(--border)] px-3 py-2.5 flex items-center gap-2">
+      <div className="shrink-0 border-t border-[var(--border)] px-3 py-2.5 mt-2 flex items-center gap-2">
         <div className="flex-1 min-w-0 flex items-center gap-2 px-1.5 text-[12px]">
           <StatusDot tone={connected ? "ok" : "err"} live={connected} />
           <span className="truncate text-[var(--muted-foreground)]">
@@ -227,6 +238,21 @@ const ContextSwitcher: React.FC = () => {
                       aria-selected={selected}
                       onClick={() => {
                         setOpen(false);
+                        const sess = loadSauthenSession();
+                        if (sess) {
+                          saveSauthenSession({
+                            ...sess,
+                            organization: {
+                              id: o.id,
+                              name: o.name,
+                              slug: o.slug,
+                              plan_tier: o.plan_tier,
+                              meterbox_live_ns: `ns_live_${o.slug}`,
+                              meterbox_sandbox_ns: `ns_test_${o.slug}`,
+                            },
+                            namespace: e.openmeter_namespace,
+                          });
+                        }
                         if (!selected) switchContext(o.slug, e.slug);
                       }}
                       className="w-full flex items-center gap-2 h-8 px-2 rounded-lg text-[12.5px] mbx-hover"

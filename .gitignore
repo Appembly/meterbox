@@ -10,6 +10,7 @@ frontend/tsconfig.tsbuildinfo
 # Go binaries & test cache
 backend/meterbox
 backend/bin/
+backend/data/*.json
 *.exe
 *.test
 *.out

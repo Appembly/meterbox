@@ -479,7 +479,7 @@ export const InvoicesView: React.FC = () => {
 
         <Button variant="secondary" size="sm" onClick={() => setWebhookOpen(true)}>
           <Webhook className="w-3.5 h-3.5" />
-          Simulate provider webhook
+          Test webhook delivery
         </Button>
       </div>
 
@@ -488,7 +488,7 @@ export const InvoicesView: React.FC = () => {
         <Card>
           <CardHeader
             title="Issued invoices ledger"
-            subtitle="Click any invoice to inspect itemized rating or simulate `invoice.paid` collection"
+            subtitle="Click any invoice to inspect itemized rating or record payment collection"
           />
           <div className="overflow-x-auto mbx-scroll">
             {status === "loading" ? (

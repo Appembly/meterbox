@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Copy, Eye, KeyRound, Lock, Plus, ShieldCheck } from "lucide-react";
 import { useConsole } from "../../ConsoleProvider";
-import { apiGet, apiPost } from "../../lib/api";
+import { API_BASE, apiGet, apiPost } from "../../lib/api";
 import { formatCompact, formatCurrency, relativeTime } from "../../lib/format";
 import {
   Button,
@@ -248,7 +248,7 @@ export const ApiKeysView: React.FC = () => {
               <ShieldCheck className="w-3.5 h-3.5 text-[var(--primary)]" />
             </div>
             <pre className="p-3 rounded-xl bg-[var(--background)] border border-[var(--border)] mbx-mono text-[11.5px] overflow-x-auto leading-relaxed">
-{`curl -X POST http://localhost:6071/api/v1/events \\
+{`curl -X POST ${API_BASE}/api/v1/events \\
   -H "Authorization: Bearer ${snapshot.apiKeys[0]?.prefix || "mb_ing_live_..."}" \\
   -H "Content-Type: application/json" \\
   -d '{"specversion":"1.0","id":"evt_01","type":"ai.llm.tokens","subject":"${snapshot.subjects[0]?.key || "cust_cyclode"}","data":{"tokens":1500,"model":"claude-3-7-sonnet"}}'`}

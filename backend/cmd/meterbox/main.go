@@ -23,7 +23,14 @@ func main() {
 	redpandaEndpoint := envOrDefault("REDPANDA_PROXY_URL", "http://127.0.0.1:18082")
 	redisAddr := envOrDefault("REDIS_ADDR", "127.0.0.1:16379")
 	if os.Getenv("METERBOX_STATE_FILE") == "" {
-		_ = os.Setenv("METERBOX_STATE_FILE", "/tmp/meterbox_state_v2.json")
+		_ = os.MkdirAll("data", 0o755)
+		durablePath := "data/meterbox_state.json"
+		if _, err := os.Stat(durablePath); os.IsNotExist(err) {
+			if legacyBytes, err := os.ReadFile("/tmp/meterbox_state_v2.json"); err == nil && len(legacyBytes) > 0 {
+				_ = os.WriteFile(durablePath, legacyBytes, 0o600)
+			}
+		}
+		_ = os.Setenv("METERBOX_STATE_FILE", durablePath)
 	}
 
 	chClient := clickhouse.NewClient(chEndpoint, "openmeter")

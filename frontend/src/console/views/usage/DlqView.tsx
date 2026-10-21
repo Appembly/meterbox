@@ -191,7 +191,7 @@ export const DlqView: React.FC = () => {
             />
             <Button variant="secondary" onClick={handleInjectMalformed} disabled={injecting}>
               <TriangleAlert className="w-3.5 h-3.5" />
-              {injecting ? "Simulating…" : "Simulate malformed event"}
+              {injecting ? "Dispatching…" : "Send test malformed event"}
             </Button>
           </>
         }

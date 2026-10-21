@@ -9,6 +9,10 @@ export interface CyclodeIconProps extends React.SVGProps<SVGSVGElement> {
    * otherwise renders the signature 7-arch epicycloid (`k = 7/2`).
    */
   compact?: boolean;
+  /**
+   * When true, uses `currentColor` instead of Cyclode's signature Amber-Gold gradient.
+   */
+  monochrome?: boolean;
 }
 
 // 7-arch epicycloid (k = 7/2) in 128×128 viewBox
@@ -27,30 +31,57 @@ export const CyclodeIcon: React.FC<CyclodeIconProps> = ({
   size,
   strokeWidth,
   compact,
+  monochrome = false,
   className = '',
   style,
   ...rest
 }) => {
-  const isCompact = compact ?? (typeof size === 'number' && size <= 20);
+  const isCompact = compact ?? false;
   const pathD = isCompact ? PATH_5_2 : PATH_7_2;
   const baseRadius = isCompact ? 31.67 : 36.27;
-  const resolvedStrokeWidth = strokeWidth ?? (isCompact ? 8.2 : 7.2);
+  const resolvedStrokeWidth = strokeWidth ?? (isCompact ? 5.0 : 4.8);
+  const strokePaint = monochrome ? 'currentColor' : 'url(#cyclodeGoldGrad)';
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 128 128"
       fill="none"
-      stroke="currentColor"
-      strokeWidth={resolvedStrokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
       style={size ? { width: size, height: size, ...style } : style}
       className={className}
       {...rest}
     >
-      <circle cx="64" cy="64" r={baseRadius} />
-      <path d={pathD} />
+      {!monochrome && (
+        <defs>
+          <linearGradient id="cyclodeGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#F59E0B" />
+            <stop offset="40%" stopColor="#D97706" />
+            <stop offset="85%" stopColor="#B45309" />
+            <stop offset="100%" stopColor="#78350F" />
+          </linearGradient>
+          <filter id="cyclodeDepth" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="1.2" stdDeviation="1.5" floodColor="#000000" floodOpacity="0.32" />
+          </filter>
+        </defs>
+      )}
+      <circle
+        cx="64"
+        cy="64"
+        r={baseRadius}
+        fill="none"
+        stroke={strokePaint}
+        strokeWidth={resolvedStrokeWidth}
+        filter={!monochrome ? 'url(#cyclodeDepth)' : undefined}
+      />
+      <path
+        d={pathD}
+        fill="none"
+        stroke={strokePaint}
+        strokeWidth={resolvedStrokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter={!monochrome ? 'url(#cyclodeDepth)' : undefined}
+      />
     </svg>
   );
 };

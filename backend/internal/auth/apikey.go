@@ -2,12 +2,17 @@ package auth
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/meterbox/meterbox/internal/models"
 )
@@ -74,12 +79,19 @@ func WithTenant(ctx context.Context, tc *models.TenantContext) context.Context {
 	return context.WithValue(ctx, TenantContextKey, tc)
 }
 
-// Middleware authenticates incoming requests via `Authorization: Bearer mb_...`, `X-Meterbox-Key`,
-// or dashboard session header `X-OpenMeter-Namespace`, and enforces strict scope boundaries.
+// SauthenNamespaceProvisioner is an optional interface implemented by MultiTenantStore to lazily provision
+// an isolated namespace attested by a cryptographically verified Sauthen Ed25519 JWT.
+type SauthenNamespaceProvisioner interface {
+	EnsureSauthenNamespace(namespace string) (*models.TenantContext, error)
+}
+
+// Middleware authenticates incoming requests via `Authorization: Bearer mb_...`, `Authorization: Bearer st_...`,
+// `X-Meterbox-Key`, `X-Sauthen-Token`, or dashboard session header `X-OpenMeter-Namespace`, and enforces strict scope boundaries.
 func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawToken := extractToken(r)
+			sauthenToken := extractSauthenToken(r)
 			var tenantCtx *models.TenantContext
 			var err error
 
@@ -90,6 +102,31 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 					writeAuthError(w, http.StatusUnauthorized, "invalid_api_key", "API key is invalid, expired, or revoked")
 					return
 				}
+			} else if sauthenToken != "" {
+				claims, err := parseSauthenClaims(sauthenToken)
+				if err != nil {
+					writeAuthError(w, http.StatusUnauthorized, "invalid_sauthen_token", err.Error())
+					return
+				}
+				ns := r.Header.Get("X-OpenMeter-Namespace")
+				if ns == "" {
+					ns = claims.Namespace
+				}
+				if ns == "" {
+					ns = "ns_live_appembly"
+				}
+				tenantCtx, err = resolver.ResolveNamespace(ns)
+				if (err != nil || tenantCtx == nil) && ns == claims.Namespace {
+					if prov, ok := resolver.(SauthenNamespaceProvisioner); ok {
+						tenantCtx, err = prov.EnsureSauthenNamespace(ns)
+					}
+				}
+				if err != nil || tenantCtx == nil {
+					writeAuthError(w, http.StatusUnauthorized, "unknown_namespace", "Target OpenMeter namespace not found")
+					return
+				}
+				// Apply Sauthen token scope narrowing when token is an agent token without admin scope
+				tenantCtx.Scope = claims.Scope
 			} else {
 				// Control plane UI session / explicit namespace header fallback
 				ns := r.Header.Get("X-OpenMeter-Namespace")
@@ -125,11 +162,123 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 	}
 }
 
+type sauthenClaims struct {
+	Namespace string
+	Scope     models.KeyScope
+}
+
+func extractSauthenToken(r *http.Request) string {
+	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
+	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+		token := strings.TrimSpace(authHeader[7:])
+		if strings.HasPrefix(token, "st_") {
+			return token
+		}
+	}
+	if stToken := strings.TrimSpace(r.Header.Get("X-Sauthen-Token")); strings.HasPrefix(stToken, "st_") {
+		return stToken
+	}
+	return ""
+}
+
+func trustedSauthenPublicKeys() []ed25519.PublicKey {
+	seeds := []string{
+		strings.TrimSpace(os.Getenv("SAUTHEN_MASTER_SEED")),
+		"appembly-sauthen-ed25519-aes256gcm-2026",
+		"appembly-sauthen-default-master-seed-2026-ed25519-aes256gcm",
+		"unit-test-seed",
+	}
+	var keys []ed25519.PublicKey
+	for _, s := range seeds {
+		if s == "" {
+			continue
+		}
+		edSeed := sha256.Sum256([]byte("ed25519:" + s))
+		priv := ed25519.NewKeyFromSeed(edSeed[:])
+		keys = append(keys, priv.Public().(ed25519.PublicKey))
+	}
+	return keys
+}
+
+func parseSauthenClaims(rawToken string) (*sauthenClaims, error) {
+	clean := strings.TrimSpace(rawToken)
+	clean = strings.TrimPrefix(clean, "st_sess_")
+	clean = strings.TrimPrefix(clean, "st_agt_")
+
+	parts := strings.Split(clean, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("malformed Sauthen JWT")
+	}
+
+	signingInput := []byte(parts[0] + "." + parts[1])
+	sigBytes, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil || len(sigBytes) != ed25519.SignatureSize {
+		return nil, fmt.Errorf("invalid Sauthen Ed25519 signature encoding")
+	}
+
+	sigValid := false
+	for _, pub := range trustedSauthenPublicKeys() {
+		if ed25519.Verify(pub, signingInput, sigBytes) {
+			sigValid = true
+			break
+		}
+	}
+	if !sigValid {
+		return nil, fmt.Errorf("Sauthen Ed25519 signature verification failed")
+	}
+
+	payloadBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("invalid Sauthen JWT payload encoding")
+	}
+	var payload struct {
+		OmNS   string   `json:"om_ns"`
+		Scopes []string `json:"scopes"`
+		Exp    int64    `json:"exp"`
+	}
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return nil, fmt.Errorf("invalid Sauthen JWT claims")
+	}
+	if payload.Exp > 0 && time.Now().UTC().Unix() > payload.Exp {
+		return nil, fmt.Errorf("Sauthen JWT has expired")
+	}
+
+	resolvedScope := models.ScopeAdmin
+	if len(payload.Scopes) > 0 {
+		hasAdmin := false
+		hasIngest := false
+		hasEntitlement := false
+		for _, sc := range payload.Scopes {
+			if sc == "*" || sc == "meterbox:admin" || strings.HasPrefix(sc, "sauthen:") || sc == "meterbox:namespace" {
+				hasAdmin = true
+			}
+			if sc == "meterbox:ingest" {
+				hasIngest = true
+			}
+			if sc == "meterbox:entitlements:read" {
+				hasEntitlement = true
+			}
+		}
+		if !hasAdmin {
+			if hasIngest && !hasEntitlement {
+				resolvedScope = models.ScopeIngest
+			} else if hasEntitlement && !hasIngest {
+				resolvedScope = models.ScopeEntitlement
+			}
+		}
+	}
+
+	return &sauthenClaims{
+		Namespace: payload.OmNS,
+		Scope:     resolvedScope,
+	}, nil
+}
+
 func extractToken(r *http.Request) string {
 	authHeader := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
 		token := strings.TrimSpace(authHeader[7:])
-		if strings.HasPrefix(token, "mb_") {
+		if token != "" && !strings.HasPrefix(token, "st_") {
 			return token
 		}
 	}

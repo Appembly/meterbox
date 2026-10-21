@@ -3,6 +3,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  LogOut,
   Moon,
   Plus,
   Sun,
@@ -10,6 +11,7 @@ import {
 import { NavSection } from '../../types';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
 import { useAppemblyTheme } from '../../context/ThemeContext';
+import { useSauthenSession } from '../auth/SauthenAuthKit';
 
 export interface CollapsibleSidebarProps {
   brandTitle?: string;
@@ -49,6 +51,7 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
   footerSlot,
 }) => {
   const { theme, toggleTheme } = useAppemblyTheme();
+  const { signOut } = useSauthenSession();
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const isCollapsed = controlledCollapsed ?? internalCollapsed;
 
@@ -191,7 +194,7 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
           })}
         </nav>
 
-        {/* Bottom Utilities (Expand button + Theme Toggle) */}
+        {/* Bottom Utilities (Expand button + Theme Toggle + Sign Out) */}
         <div className="flex flex-col items-center space-y-2 pt-2 border-t border-[var(--ui-border)] w-full">
           <button
             onClick={toggleTheme}
@@ -199,6 +202,13 @@ export const CollapsibleSidebar: React.FC<CollapsibleSidebarProps> = ({
             title={`Switch to ${theme === 'light' ? 'Graphite Dark' : 'Off-White Light'} Mode`}
           >
             {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          </button>
+          <button
+            onClick={signOut}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--ui-text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
           <button
             onClick={handleToggleCollapse}

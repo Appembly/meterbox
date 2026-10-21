@@ -16,6 +16,7 @@ import { CostView } from "../views/insights/CostView";
 import { AnalyticsView } from "../views/insights/AnalyticsView";
 import { ApiKeysView } from "../views/developers/ApiKeysView";
 import { DocsView } from "../views/developers/DocsView";
+import { SauthenAuthGuard } from "../../packages/appembly-ui";
 import "../console.css";
 
 function renderSectionView(section: string, fallback: React.ReactNode): React.ReactNode {
@@ -78,6 +79,7 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   return (
+    <SauthenAuthGuard brand="meterbox">
     <div className="mbx-console min-h-screen bg-[var(--background)]">
       {isSandbox && <div className="mbx-env-stripe" aria-hidden="true" />}
 
@@ -148,5 +150,6 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
+    </SauthenAuthGuard>
   );
 };
