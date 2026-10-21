@@ -228,7 +228,7 @@ export function UsersAnalyticsView({
   -H "X-OpenMeter-Namespace: ${activeNamespace}" \\
   -d '{
     "event": "$pageview",
-    "distinct_id": "${activeProfile?.key || "usr_ken_architect"}",
+    "distinct_id": "${activeProfile?.key || "usr_principal_01"}",
     "properties": {
       "$pathname": "/finops/cost-intelligence",
       "$geoip_country_code": "${activeProfile?.country_code || "US"}",

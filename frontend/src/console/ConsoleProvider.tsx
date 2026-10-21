@@ -30,7 +30,7 @@ function inferNamespace(orgSlug: string, envSlug: string): string {
   const isSandbox = envSlug.toLowerCase().includes("sandbox") || envSlug.toLowerCase().includes("test");
   if (o.includes("acme")) return isSandbox ? "ns_test_acme" : "ns_live_acme";
   if (o.includes("appembly")) return isSandbox ? "ns_test_appembly" : "ns_live_appembly";
-  return "";
+  return isSandbox ? `ns_test_${o}` : `ns_live_${o}`;
 }
 
 function parseSectionFromPath(pathname: string): string {

@@ -455,7 +455,7 @@ export interface SauthenAuthCardProps {
 }
 
 const DEMO_ACCOUNTS = [
-  { id: 'usr_mburun_owner', name: 'Ken M.', email: 'mburun.dev@gmail.com', role: 'org:owner' },
+  { id: 'usr_demo_architect', name: 'Alex Mercer', email: 'alex@appembly.dev', role: 'org:owner' },
   { id: 'usr_elena_finops', name: 'Elena Rostova', email: 'elena@appembly.dev', role: 'meterbox:finops' },
   { id: 'usr_marcus_sec', name: 'Marcus Vance', email: 'marcus@appembly.dev', role: 'sauthen:secops' },
 ];
@@ -1503,15 +1503,22 @@ export const SauthenStepUpModal: React.FC<SauthenStepUpModalProps> = ({
   const resolveItem = async (id: string, decision: 'approved' | 'rejected') => {
     setBusyId(id);
     try {
+      const stored = loadSauthenSession();
+      const targetNs = stored?.namespace || namespace;
+      const approverId = stored?.user?.id || 'usr_authenticated';
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'X-OpenMeter-Namespace': targetNs,
+      };
+      if (stored?.access_token) {
+        headers.Authorization = `Bearer ${stored.access_token}`;
+      }
       const res = await fetch(`${apiUrl}/api/broker/v1/step-up/${id}/resolve`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-OpenMeter-Namespace': namespace,
-        },
+        headers,
         body: JSON.stringify({
           decision,
-          approver_user_id: 'usr_ken_architect',
+          approver_user_id: approverId,
         }),
       });
       const data = await res.json();
@@ -1969,13 +1976,13 @@ const SauthenHeroVisual: React.FC = () => {
       </div>
       <dl className="sag-tg-ticket">
         <dt>sub</dt>
-        <dd>usr_ken_architect</dd>
+        <dd>usr_alice_dev</dd>
         <dt>act</dt>
         <dd>{'{ sub: agt_cyclode_worker }'}</dd>
         <dt>scope</dt>
         <dd>repo:write llm:invoke meterbox:ingest</dd>
         <dt>om_ns</dt>
-        <dd style={{ color: '#F7AA2E' }}>ns_live_appembly</dd>
+        <dd style={{ color: '#F7AA2E' }}>ns_live_acme</dd>
       </dl>
     </div>
   );

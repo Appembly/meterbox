@@ -62,6 +62,7 @@ type APIKey struct {
 
 type TenantContext struct {
 	OrgID         string   `json:"org_id"`
+	AllowedOrgIDs []string `json:"allowed_org_ids,omitempty"`
 	EnvID         string   `json:"env_id"`
 	EnvType       string   `json:"env_type"`
 	Namespace     string   `json:"namespace"`

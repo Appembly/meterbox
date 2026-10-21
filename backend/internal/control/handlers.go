@@ -386,8 +386,45 @@ func (s *Server) handleCreatePortalToken(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusCreated, k)
 }
 
+func (s *Server) scopedOrganizations(tc *models.TenantContext) []models.Organization {
+	all := s.Store.ListOrganizations()
+	if tc == nil || len(tc.AllowedOrgIDs) == 0 {
+		return all
+	}
+	allowed := make(map[string]bool, len(tc.AllowedOrgIDs))
+	for _, oid := range tc.AllowedOrgIDs {
+		allowed[oid] = true
+	}
+	out := make([]models.Organization, 0, len(allowed))
+	for _, o := range all {
+		if allowed[o.ID] {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+func (s *Server) scopedEnvironments(tc *models.TenantContext) []models.Environment {
+	all := s.Store.ListEnvironments()
+	if tc == nil || len(tc.AllowedOrgIDs) == 0 {
+		return all
+	}
+	allowed := make(map[string]bool, len(tc.AllowedOrgIDs))
+	for _, oid := range tc.AllowedOrgIDs {
+		allowed[oid] = true
+	}
+	out := make([]models.Environment, 0)
+	for _, e := range all {
+		if allowed[e.OrgID] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func (s *Server) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Store.ListOrganizations())
+	tc := auth.TenantFromContext(r.Context())
+	writeJSON(w, http.StatusOK, s.scopedOrganizations(tc))
 }
 
 func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request) {
@@ -413,7 +450,8 @@ func (s *Server) handleCreateOrganization(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleListEnvironments(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.Store.ListEnvironments())
+	tc := auth.TenantFromContext(r.Context())
+	writeJSON(w, http.StatusOK, s.scopedEnvironments(tc))
 }
 
 func (s *Server) handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
@@ -651,8 +689,8 @@ func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	snap := models.NamespaceSnapshot{
 		Namespace:         ns,
-		Organizations:     s.Store.ListOrganizations(),
-		Environments:      s.Store.ListEnvironments(),
+		Organizations:     s.scopedOrganizations(tc),
+		Environments:      s.scopedEnvironments(tc),
 		Telemetry:         s.Store.GetTelemetry(ns),
 		Meters:            s.Store.ListMeters(ns),
 		Subjects:          s.Store.ListSubjects(ns),

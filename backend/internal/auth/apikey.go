@@ -108,7 +108,17 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 					writeAuthError(w, http.StatusUnauthorized, "invalid_sauthen_token", err.Error())
 					return
 				}
-				ns := r.Header.Get("X-OpenMeter-Namespace")
+				allowedOrgs := make(map[string]bool)
+				for _, oid := range claims.OrgIDs {
+					if oid != "" {
+						allowedOrgs[oid] = true
+					}
+				}
+				if claims.OrgID != "" {
+					allowedOrgs[claims.OrgID] = true
+				}
+
+				ns := strings.TrimSpace(r.Header.Get("X-OpenMeter-Namespace"))
 				if ns == "" {
 					ns = claims.Namespace
 				}
@@ -116,17 +126,38 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 					ns = "ns_live_appembly"
 				}
 				tenantCtx, err = resolver.ResolveNamespace(ns)
-				if (err != nil || tenantCtx == nil) && ns == claims.Namespace {
+				if (err != nil || tenantCtx == nil) && ns != "" {
 					if prov, ok := resolver.(SauthenNamespaceProvisioner); ok {
 						tenantCtx, err = prov.EnsureSauthenNamespace(ns)
+					}
+				}
+				// If the requested namespace belongs to an org outside the token's allowed orgs,
+				// snap to the token's own attested namespace (`claims.Namespace`).
+				if tenantCtx != nil && len(allowedOrgs) > 0 && !allowedOrgs[tenantCtx.OrgID] && claims.Namespace != "" {
+					ns = claims.Namespace
+					tenantCtx, err = resolver.ResolveNamespace(ns)
+					if (err != nil || tenantCtx == nil) && ns != "" {
+						if prov, ok := resolver.(SauthenNamespaceProvisioner); ok {
+							tenantCtx, err = prov.EnsureSauthenNamespace(ns)
+						}
+					}
+					if tenantCtx != nil {
+						allowedOrgs[tenantCtx.OrgID] = true
 					}
 				}
 				if err != nil || tenantCtx == nil {
 					writeAuthError(w, http.StatusUnauthorized, "unknown_namespace", "Target OpenMeter namespace not found")
 					return
 				}
-				// Apply Sauthen token scope narrowing when token is an agent token without admin scope
-				tenantCtx.Scope = claims.Scope
+				tcCopy := *tenantCtx
+				tcCopy.Scope = claims.Scope
+				if len(allowedOrgs) > 0 {
+					tcCopy.AllowedOrgIDs = make([]string, 0, len(allowedOrgs))
+					for oid := range allowedOrgs {
+						tcCopy.AllowedOrgIDs = append(tcCopy.AllowedOrgIDs, oid)
+					}
+				}
+				tenantCtx = &tcCopy
 			} else {
 				// Control plane UI session / explicit namespace header fallback
 				ns := r.Header.Get("X-OpenMeter-Namespace")
@@ -163,6 +194,8 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 }
 
 type sauthenClaims struct {
+	OrgID     string
+	OrgIDs    []string
 	Namespace string
 	Scope     models.KeyScope
 }
@@ -177,6 +210,11 @@ func extractSauthenToken(r *http.Request) string {
 	}
 	if stToken := strings.TrimSpace(r.Header.Get("X-Sauthen-Token")); strings.HasPrefix(stToken, "st_") {
 		return stToken
+	}
+	if c, err := r.Cookie("sauthen_sso"); err == nil {
+		if tok := strings.TrimSpace(c.Value); strings.HasPrefix(tok, "st_") {
+			return tok
+		}
 	}
 	return ""
 }
@@ -232,6 +270,8 @@ func parseSauthenClaims(rawToken string) (*sauthenClaims, error) {
 		return nil, fmt.Errorf("invalid Sauthen JWT payload encoding")
 	}
 	var payload struct {
+		OrgID  string   `json:"org_id"`
+		OrgIDs []string `json:"org_ids"`
 		OmNS   string   `json:"om_ns"`
 		Scopes []string `json:"scopes"`
 		Exp    int64    `json:"exp"`
@@ -269,6 +309,8 @@ func parseSauthenClaims(rawToken string) (*sauthenClaims, error) {
 	}
 
 	return &sauthenClaims{
+		OrgID:     payload.OrgID,
+		OrgIDs:    payload.OrgIDs,
 		Namespace: payload.OmNS,
 		Scope:     resolvedScope,
 	}, nil
