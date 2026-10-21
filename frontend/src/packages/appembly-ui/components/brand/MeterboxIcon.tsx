@@ -3,53 +3,105 @@ import React from 'react';
 export interface MeterboxIconProps extends React.SVGProps<SVGSVGElement> {
   size?: number | string;
   strokeWidth?: number;
-  /**
-   * When true (or automatically when numeric `size <= 20`), omits the micro
-   * register line in the base so the domed utility-meter silhouette and needle
-   * stay razor-sharp at 16px–20px scales.
-   */
   compact?: boolean;
+  variant?: 'default' | 'monochrome';
 }
 
 /**
- * Meterbox product icon — Domed Utility Meter silhouette:
- * an arch-top utility meter housing divided into an upper dial chamber
- * with a bold active needle and a lower register base, with optical scaling
- * for 16px–20px badges/favicons vs. larger display cards.
+ * Meterbox product icon — Concept 4: Ultra-Minimal Faceted Gauge + Counter Bar.
+ * A frameless 3-facet semi-circular gauge arch with a bold 45° needle and hollow pivot hub,
+ * sitting directly above a 3-block horizontal odometer counter bar.
+ * Automatically adapts between dark mode and light mode via CSS custom properties.
  */
 export const MeterboxIcon: React.FC<MeterboxIconProps> = ({
-  size,
-  strokeWidth = 2.2,
-  compact,
+  size = 24,
+  strokeWidth: _strokeWidth,
+  compact: _compact,
+  variant = 'default',
   className = '',
   style,
   ...rest
 }) => {
-  const isCompact = compact ?? (typeof size === 'number' && size <= 20);
-  const needleWidth = Number((strokeWidth * 1.15).toFixed(2));
+  if (variant === 'monochrome') {
+    return (
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="12 12 76 76"
+        fill="none"
+        style={size ? { width: size, height: size, ...style } : style}
+        className={className}
+        {...rest}
+      >
+        <path
+          d="M 17.11 66.64 A 36 36 0 0 1 50 16 L 50 27 A 25 25 0 0 0 27.16 62.17 Z"
+          fill="currentColor"
+        />
+        <path
+          d="M 50 16 A 36 36 0 0 1 71.16 22.88 L 64.70 31.78 A 25 25 0 0 0 50 27 Z"
+          fill="currentColor"
+          opacity={0.75}
+        />
+        <path
+          d="M 79.84 31.87 A 36 36 0 0 1 82.89 66.64 L 72.84 62.17 A 25 25 0 0 0 70.73 38.02 Z"
+          fill="currentColor"
+          opacity={0.45}
+        />
+        <g transform="translate(50 52) rotate(-45)">
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M -15.5 -3.2 L -8.8 -3.2 A 9.6 9.6 0 0 1 8.8 -3.8 L 35.5 -1.7 L 35.5 1.7 L 8.8 3.8 A 9.6 9.6 0 0 1 -8.8 3.2 L -15.5 3.2 Z M -4.2 0 A 4.2 4.2 0 1 0 4.2 0 A 4.2 4.2 0 1 0 -4.2 0 Z"
+            fill="currentColor"
+          />
+        </g>
+        <rect x="24" y="70" width="14.8" height="14" rx="2.5" fill="currentColor" />
+        <rect x="42.6" y="70" width="14.8" height="14" rx="2.5" fill="currentColor" />
+        <rect x="61.2" y="70" width="14.8" height="14" rx="2.5" fill="currentColor" />
+      </svg>
+    );
+  }
 
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
+      viewBox="12 12 76 76"
       fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
       style={size ? { width: size, height: size, ...style } : style}
       className={className}
       {...rest}
     >
-      {/* Domed utility meter outer silhouette */}
-      <path d="M 4 11 A 8 8 0 0 1 20 11 V 18.5 A 2.5 2.5 0 0 1 17.5 21 H 6.5 A 2.5 2.5 0 0 1 4 18.5 Z" />
-      {/* Horizontal faceplate divider between dial dome and register base */}
-      <line x1="4" y1="15.5" x2="20" y2="15.5" />
-      {/* Active gauge needle + pivot hub */}
-      <path d="M 12 15.5 L 15.8 8.2" strokeWidth={needleWidth} />
-      <circle cx="12" cy="15.5" r="1.6" fill="currentColor" stroke="none" />
-      {/* Lower register bar — shown at >20px display scales */}
-      {!isCompact && <line x1="8.5" y1="18.3" x2="15.5" y2="18.3" />}
+      {/* Facet 1: Left Active Gauge Arch (204° to 90°) */}
+      <path
+        d="M 17.11 66.64 A 36 36 0 0 1 50 16 L 50 27 A 25 25 0 0 0 27.16 62.17 Z"
+        style={{ fill: 'var(--mbx-mark-arch-1, #569475)' }}
+      />
+
+      {/* Facet 2: Top-Center Gauge Arch before Needle Gap (90° to 54°) */}
+      <path
+        d="M 50 16 A 36 36 0 0 1 71.16 22.88 L 64.70 31.78 A 25 25 0 0 0 50 27 Z"
+        style={{ fill: 'var(--mbx-mark-arch-2, #234233)' }}
+      />
+
+      {/* Facet 3: Right Gauge Arch after Needle Gap (34° to -24°) */}
+      <path
+        d="M 79.84 31.87 A 36 36 0 0 1 82.89 66.64 L 72.84 62.17 A 25 25 0 0 0 70.73 38.02 Z"
+        style={{ fill: 'var(--mbx-mark-arch-3, #9FA9A3)' }}
+      />
+
+      {/* 45° Gauge Needle + Hollow Pivot Hub + Counterweight Tail */}
+      <g transform="translate(50 52) rotate(-45)">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M -15.5 -3.2 L -8.8 -3.2 A 9.6 9.6 0 0 1 8.8 -3.8 L 35.5 -1.7 L 35.5 1.7 L 8.8 3.8 A 9.6 9.6 0 0 1 -8.8 3.2 L -15.5 3.2 Z M -4.2 0 A 4.2 4.2 0 1 0 4.2 0 A 4.2 4.2 0 1 0 -4.2 0 Z"
+          style={{ fill: 'var(--mbx-mark-ink, #111618)' }}
+        />
+      </g>
+
+      {/* 3-Block Horizontal Odometer Counter Bar */}
+      <rect x="24" y="70" width="14.8" height="14" rx="2.5" style={{ fill: 'var(--mbx-mark-ink, #111618)' }} />
+      <rect x="42.6" y="70" width="14.8" height="14" rx="2.5" style={{ fill: 'var(--mbx-mark-ink, #111618)' }} />
+      <rect x="61.2" y="70" width="14.8" height="14" rx="2.5" style={{ fill: 'var(--mbx-mark-ink, #111618)' }} />
     </svg>
   );
 };

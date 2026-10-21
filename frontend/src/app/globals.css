@@ -52,6 +52,12 @@
 
   --code-bg: #F1F3F0;
   --code-fg: #111618;
+
+  /* Meterbox Brand Mark (Concept 4 — Ultra-Minimal Faceted Gauge + Counter Bar, Light Mode) */
+  --mbx-mark-arch-1: #569475;
+  --mbx-mark-arch-2: #234233;
+  --mbx-mark-arch-3: #9FA9A3;
+  --mbx-mark-ink: #111618;
 }
 
 html.dark {
@@ -71,6 +77,12 @@ html.dark {
   --secondary: #1E272C;
   --secondary-foreground: #F6F7F5;
   --accent: #1A2B23;
+
+  /* Meterbox Brand Mark (Concept 4 — Ultra-Minimal Faceted Gauge + Counter Bar, Dark Mode) */
+  --mbx-mark-arch-1: #66BD8E;
+  --mbx-mark-arch-2: #4A8065;
+  --mbx-mark-arch-3: #2B4F3E;
+  --mbx-mark-ink: #F4F6F4;
 
   --ok: #34D399;
   --warn: #FBBF24;
