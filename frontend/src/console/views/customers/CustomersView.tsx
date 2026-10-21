@@ -65,14 +65,14 @@ export const CustomersView: React.FC = () => {
   const [subName, setSubName] = useState("");
   const [subStripe, setSubStripe] = useState("");
 
-  const [entFeature, setEntFeature] = useState("monthly_llm_tokens");
-  const [entMeter, setEntMeter] = useState("llm_tokens_total");
-  const [entLimit, setEntLimit] = useState("1000000");
+  const [entFeature, setEntFeature] = useState("");
+  const [entMeter, setEntMeter] = useState("");
+  const [entLimit, setEntLimit] = useState("");
   const [entSoft, setEntSoft] = useState(true);
 
   const [grantEntId, setGrantEntId] = useState("");
-  const [grantName, setGrantName] = useState("Enterprise Prepaid Top-Up");
-  const [grantAmount, setGrantAmount] = useState("500000");
+  const [grantName, setGrantName] = useState("");
+  const [grantAmount, setGrantAmount] = useState("");
   const [grantPriority, setGrantPriority] = useState("1");
   const [submitting, setSubmitting] = useState(false);
 
@@ -806,7 +806,7 @@ export const CustomersView: React.FC = () => {
             <Input
               mono
               required
-              placeholder="e.g. cust_acme_robotics"
+              placeholder="e.g. cust_enterprise_01"
               value={subKey}
               onChange={(e) => setSubKey(e.target.value)}
             />
@@ -814,7 +814,7 @@ export const CustomersView: React.FC = () => {
           <Field label="Display name">
             <Input
               required
-              placeholder="e.g. Acme Robotics Corp"
+              placeholder="e.g. Enterprise Corp"
               value={subName}
               onChange={(e) => setSubName(e.target.value)}
             />

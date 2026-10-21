@@ -28,7 +28,7 @@ const SNAPSHOT_CACHE = new Map<string, { snap: Snapshot; usage: EntitlementUsage
 function inferNamespace(orgSlug: string, envSlug: string): string {
   const o = orgSlug.toLowerCase();
   const isSandbox = envSlug.toLowerCase().includes("sandbox") || envSlug.toLowerCase().includes("test");
-  if (o.includes("acme")) return isSandbox ? "ns_test_acme" : "ns_live_acme";
+  if (o.includes("demo")) return isSandbox ? "ns_test_demo" : "ns_live_demo";
   if (o.includes("appembly")) return isSandbox ? "ns_test_appembly" : "ns_live_appembly";
   return isSandbox ? `ns_test_${o}` : `ns_live_${o}`;
 }
@@ -134,35 +134,39 @@ export const ConsoleProvider: React.FC<{
   }, []);
 
   // Tenants (organisations + environments)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [rawOrgs, rawEnvs] = await Promise.all([
-          apiGet("/api/control/v1/organizations"),
-          apiGet("/api/control/v1/environments"),
-        ]);
-        if (cancelled) return;
-        const normOrgs = normalizeOrganizations(rawOrgs);
-        const normEnvs = normalizeEnvironments(rawEnvs) as ConsoleEnv[];
-        CACHED_ORGS = normOrgs;
-        CACHED_ENVS = normEnvs;
-        setOrgs(normOrgs);
-        setEnvs(normEnvs);
-        setConnected(true);
-      } catch {
-        if (!cancelled) {
-          setConnected(false);
-          setStatus((s) => (s === "loading" ? "error" : s));
-        }
-      } finally {
-        if (!cancelled) setTenantsLoaded(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  const fetchTenants = useCallback(async () => {
+    try {
+      const [rawOrgs, rawEnvs] = await Promise.all([
+        apiGet("/api/control/v1/organizations"),
+        apiGet("/api/control/v1/environments"),
+      ]);
+      const normOrgs = normalizeOrganizations(rawOrgs);
+      const normEnvs = normalizeEnvironments(rawEnvs) as ConsoleEnv[];
+      CACHED_ORGS = normOrgs;
+      CACHED_ENVS = normEnvs;
+      setOrgs(normOrgs);
+      setEnvs(normEnvs);
+      setConnected(true);
+    } catch {
+      setConnected(false);
+      setStatus((s) => (s === "loading" ? "error" : s));
+    } finally {
+      setTenantsLoaded(true);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchTenants();
+    const onAuthChange = () => {
+      CACHED_ORGS = null;
+      CACHED_ENVS = null;
+      SNAPSHOT_CACHE.clear();
+      fetchTenants();
+      setTick((t) => t + 1);
+    };
+    window.addEventListener("sauthen-auth-change", onAuthChange);
+    return () => window.removeEventListener("sauthen-auth-change", onAuthChange);
+  }, [fetchTenants]);
 
   // Unknown org/env in the URL → fall back to a valid context instead of an empty console.
   useEffect(() => {

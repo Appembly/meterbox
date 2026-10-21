@@ -56,26 +56,26 @@ export const InvoicesView: React.FC = () => {
   const [cardSubject, setCardSubject] = useState("");
   const [cardProvider, setCardProvider] = useState("stripe");
   const [cardBrand, setCardBrand] = useState("visa");
-  const [cardLast4, setCardLast4] = useState("4242");
-  const [cardExpMonth, setCardExpMonth] = useState("12");
-  const [cardExpYear, setCardExpYear] = useState("2029");
+  const [cardLast4, setCardLast4] = useState("");
+  const [cardExpMonth, setCardExpMonth] = useState("");
+  const [cardExpYear, setCardExpYear] = useState("");
 
   const [topupSubject, setTopupSubject] = useState("");
-  const [topupUnits, setTopupUnits] = useState("2500000");
-  const [topupCents, setTopupCents] = useState("5000");
+  const [topupUnits, setTopupUnits] = useState("");
+  const [topupCents, setTopupCents] = useState("");
   const [topupInstant, setTopupInstant] = useState(true);
 
   const [ruleSubject, setRuleSubject] = useState("");
-  const [ruleFeature, setRuleFeature] = useState("ai_token_allowance");
-  const [ruleThreshold, setRuleThreshold] = useState("500000");
-  const [ruleRecharge, setRuleRecharge] = useState("2500000");
-  const [ruleCents, setRuleCents] = useState("5000");
+  const [ruleFeature, setRuleFeature] = useState("");
+  const [ruleThreshold, setRuleThreshold] = useState("");
+  const [ruleRecharge, setRuleRecharge] = useState("");
+  const [ruleCents, setRuleCents] = useState("");
 
   const [whType, setWhType] = useState("payment_intent.succeeded");
   const [whSubject, setWhSubject] = useState("");
   const [whObjectId, setWhObjectId] = useState("");
-  const [whCents, setWhCents] = useState("5000");
-  const [whUnits, setWhUnits] = useState("2500000");
+  const [whCents, setWhCents] = useState("");
+  const [whUnits, setWhUnits] = useState("");
 
   const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "err"; title: string; detail?: string } | null>(null);
 

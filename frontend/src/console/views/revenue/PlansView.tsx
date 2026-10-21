@@ -30,10 +30,10 @@ export const PlansView: React.FC = () => {
   // Plan form
   const [planSlug, setPlanSlug] = useState("");
   const [planName, setPlanName] = useState("");
-  const [planBaseFeeCents, setPlanBaseFeeCents] = useState("49900");
-  const [planMeter, setPlanMeter] = useState("llm_tokens_total");
-  const [planIncluded, setPlanIncluded] = useState("1000000");
-  const [planUnitPriceCents, setPlanUnitPriceCents] = useState("2");
+  const [planBaseFeeCents, setPlanBaseFeeCents] = useState("");
+  const [planMeter, setPlanMeter] = useState("");
+  const [planIncluded, setPlanIncluded] = useState("");
+  const [planUnitPriceCents, setPlanUnitPriceCents] = useState("");
 
   // Subscription form
   const [subSubject, setSubSubject] = useState("");

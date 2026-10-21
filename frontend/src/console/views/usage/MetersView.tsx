@@ -40,10 +40,10 @@ export const MetersView: React.FC = () => {
   const [slug, setSlug] = useState("");
   const [name, setName] = useState("");
   const [agg, setAgg] = useState<Meter["aggregation"]>("SUM");
-  const [eventType, setEventType] = useState("ai.llm.tokens");
-  const [valueProp, setValueProp] = useState("$.tokens");
-  const [groupDimKey, setGroupDimKey] = useState("model");
-  const [groupDimPath, setGroupDimPath] = useState("$.model");
+  const [eventType, setEventType] = useState("");
+  const [valueProp, setValueProp] = useState("");
+  const [groupDimKey, setGroupDimKey] = useState("");
+  const [groupDimPath, setGroupDimPath] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {

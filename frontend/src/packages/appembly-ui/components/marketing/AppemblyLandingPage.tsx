@@ -25,6 +25,7 @@ import {
 } from '../brand/AppemblyLogo';
 import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
+import { SauthenIcon } from '../brand/SauthenIcon';
 import './landing.css';
 
 export interface AppemblyLandingPageProps {
@@ -49,6 +50,7 @@ export interface AppemblyLandingPageProps {
 const DEFAULT_CONTACT_EMAIL = 'hello@appembly.com';
 const SHOT_CYCLODE = '/showcase/cyclode-workstation.png';
 const SHOT_METERBOX = '/showcase/meterbox-control-plane.png?v=2';
+const SHOT_SAUTHEN = '/showcase/sauthen-trust-graph.png?v=2';
 const SHOT_WIDTH = 1024;
 const SHOT_HEIGHT = 585;
 
@@ -87,7 +89,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Sandboxed previews, terminal and diffs side by side',
     ],
     accentColor: '#4E8067',
-    icon: <CyclodeIcon className="w-[24px] h-[24px]" />,
+    icon: <CyclodeIcon monochrome className="w-[24px] h-[24px]" />,
   },
   {
     id: 'meterbox',
@@ -104,6 +106,22 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     ],
     accentColor: '#4E8067',
     icon: <MeterboxIcon className="w-[22px] h-[22px]" />,
+  },
+  {
+    id: 'sauthen',
+    name: 'Sauthen',
+    status: 'beta',
+    categoryLabel: 'Identity & Agent Token Broker',
+    tagline: 'Unified OIDC, Passkey SSO, secret vault and scoped agent tokens.',
+    description:
+      'Authenticate humans once across the suite, mint 15-minute RFC 8693 tokens for agents, and proxy LLM calls without exposing raw keys.',
+    capabilities: [
+      'Ed25519 OIDC sessions & 1:1 Meterbox namespace provisioning',
+      'RFC 8693 scoped agent tokens with 15-minute TTLs',
+      'Zero-knowledge LLM vault proxy & human step-up approval gates',
+    ],
+    accentColor: '#4E8067',
+    icon: <SauthenIcon className="w-[22px] h-[22px]" />,
   },
   {
     id: 'valiscale',
@@ -181,7 +199,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'Chat with an agent that understands your whole repository, while docs, terminal, previews and diffs sit right beside the conversation.',
     image: SHOT_CYCLODE,
     accent: '#4E8067',
-    icon: <CyclodeIcon compact className="w-[18px] h-[18px]" />,
+    icon: <CyclodeIcon compact monochrome className="w-[18px] h-[18px]" />,
     bullets: [
       'Step-by-step reasoning and auditable actions',
       'Web & Docs reader that can operate live pages',
@@ -212,6 +230,26 @@ const SHOWCASE: ShowcaseItem[] = [
       { title: 'Edge-first', detail: 'Quota checks before usage' },
     ],
   },
+  {
+    id: 'sauthen',
+    name: 'Sauthen',
+    kicker: 'Identity & agent token broker',
+    headline: 'Know exactly who — and what — is acting for you.',
+    description:
+      'Unified OIDC & Passkey sign-in for humans, 15-minute RFC 8693 scoped tokens for agents, an AES-256-GCM secret vault, and human step-up gates.',
+    image: SHOT_SAUTHEN,
+    accent: '#4E8067',
+    icon: <SauthenIcon className="w-[18px] h-[18px]" />,
+    bullets: [
+      'Ed25519 OIDC sessions & 1:1 Meterbox namespace provisioning',
+      'RFC 8693 scoped agent tokens with 15-minute TTLs',
+      'Zero-knowledge LLM vault proxy & human step-up approval gates',
+    ],
+    highlights: [
+      { title: 'Zero-knowledge', detail: 'Keys stay in vault' },
+      { title: 'Sub-millisecond', detail: 'Ed25519 JWKS verify' },
+    ],
+  },
 ];
 
 const FOUNDATION = [
@@ -228,10 +266,10 @@ const FOUNDATION = [
     id: 'sauthen',
     name: 'Sauthen',
     subtitle: 'One account everywhere',
-    status: 'In development',
+    status: 'In use',
     description:
-      'Unified identity across every Appembly app, with organisation workspaces and scoped delegation for people and agents.',
-    icon: <ShieldCheck className="w-5 h-5" />,
+      'Unified OIDC & Passkey SSO, 1:1 Meterbox namespace provisioning, RFC 8693 scoped agent tokens, zero-knowledge LLM vault proxy, and human step-up gates.',
+    icon: <SauthenIcon className="w-5 h-5" />,
   },
 ];
 
@@ -784,7 +822,7 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
               Private beta
             </span>
             <span>
-              Cyclode &amp; Meterbox<span className="hidden sm:inline"> are onboarding early teams</span>
+              Cyclode, Meterbox &amp; Sauthen<span className="hidden sm:inline"> are onboarding early teams</span>
             </span>
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
           </a>
@@ -854,7 +892,11 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
 const ProductMarquee: React.FC = () => {
   const items = [
     ...PRODUCT_SUITE.map((p) => ({ name: p.name, color: p.accentColor, soon: p.status === 'soon' })),
-    ...FOUNDATION.map((f) => ({ name: f.name, color: '#72B091', soon: false })),
+    ...FOUNDATION.filter((f) => !PRODUCT_SUITE.some((p) => p.id === f.id)).map((f) => ({
+      name: f.name,
+      color: '#72B091',
+      soon: false,
+    })),
   ];
   const loop = [...items, ...items];
   return (
@@ -863,7 +905,7 @@ const ProductMarquee: React.FC = () => {
         <div className="inline-flex items-center gap-3 text-[12.5px] font-medium text-[var(--ui-text-muted)] shrink-0 md:w-64">
           <AppemblyLogo variant="app-icon" size={28} animated />
           <span>
-            One ecosystem. Six products.
+            One ecosystem. Seven products.
             <br className="hidden md:block" /> One shared foundation.
           </span>
         </div>
@@ -917,8 +959,9 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
             Real products, built for real work.
           </h2>
           <p className="mt-5 text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[620px]">
-            Cyclode and Meterbox are running today with early teams. Both share the same calm
-            interface and live telemetry — so moving between them feels like one product.
+            Cyclode, Meterbox and Sauthen are running today with early teams. All three share the
+            same calm interface, unified identity and live telemetry — so moving between them feels
+            like one product.
           </p>
         </Reveal>
 
@@ -1063,7 +1106,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
       </div>
 
       {/* Private beta */}
-      <div className="mt-16 grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="mt-16 grid grid-cols-1 lg:grid-cols-3 gap-5">
         {BETA_PRODUCTS.map((product, idx) => (
           <Reveal key={product.id} delay={idx * 90}>
             <article
@@ -1161,8 +1204,9 @@ const PlatformDiagram: React.FC = () => {
   const [ref, inView] = useInView<HTMLDivElement>(0.25);
   const cx = 320;
   const cy = 240;
-  const products = PRODUCT_SUITE.map((p, i) => {
-    const angle = (-90 + i * 60) * (Math.PI / 180);
+  const outerProducts = PRODUCT_SUITE.filter((p) => !FOUNDATION.some((f) => f.id === p.id));
+  const products = outerProducts.map((p, i) => {
+    const angle = (-90 + i * (360 / outerProducts.length)) * (Math.PI / 180);
     return { ...p, x: cx + Math.cos(angle) * 236, y: cy + Math.sin(angle) * 178 };
   });
   // Foundation nodes sit at 0°/180° — symmetrically between the product flow lines (every 60° from -90°).
@@ -1540,7 +1584,7 @@ const AccessSection: React.FC<{
                       <div className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#72B091]">
                         Private beta cohorts
                       </div>
-                      <div className="mt-1 font-medium text-[#F6F7F5]">Cyclode &amp; Meterbox</div>
+                      <div className="mt-1 font-medium text-[#F6F7F5]">Cyclode, Meterbox &amp; Sauthen</div>
                       <div className="mt-0.5 text-[12.5px] text-[#A9AFAB]">
                         Need early product access? Switch to the Request Access tab on the right.
                       </div>
@@ -1715,7 +1759,7 @@ const AccessSection: React.FC<{
                       </label>
                       <label className="block">
                         <span className="text-[13px] font-semibold text-[#C5CAC7]">Company</span>
-                        <input type="text" autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Acme Inc." className={`${inputCls} mt-2`} />
+                        <input type="text" autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Your company" className={`${inputCls} mt-2`} />
                       </label>
                       <label className="block sm:col-span-2">
                         <span className="text-[13px] font-semibold text-[#C5CAC7]">

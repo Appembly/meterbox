@@ -276,9 +276,9 @@ export default function MeterboxApp() {
     orgEnvironments[0] ||
     environments[0];
   const activeNamespace =
-    activeEnv?.openmeter_namespace || telemetry?.active_namespace || "ns_live_acme";
-  const activeOrgName = activeOrg?.name || telemetry?.org_name || "Acme AI Corp";
-  const activeOrgId = selectedOrgId || telemetry?.org_id || "org_acme_ai";
+    activeEnv?.openmeter_namespace || telemetry?.active_namespace || "";
+  const activeOrgName = activeOrg?.name || telemetry?.org_name || "Organization";
+  const activeOrgId = selectedOrgId || telemetry?.org_id || "";
 
   // ---------------------------------------------------------------------------
   // Fetch Organizations & Environments (with resilient fallback)
@@ -290,9 +290,9 @@ export default function MeterboxApp() {
       if (orgRes.ok) {
         const rawOrgs = await orgRes.json();
         orgList = (rawOrgs || []).map((o: Record<string, unknown>) => ({
-          id: String(o.id || "org_acme_ai"),
-          slug: String(o.slug || "acme-ai"),
-          name: String(o.name || "Acme AI Corp"),
+          id: String(o.id || "org_demo_ai"),
+          slug: String(o.slug || "demo-ai"),
+          name: String(o.name || "Demo AI"),
           billing_tier: String(o.billing_tier || o.plan_tier || "pro"),
           rate_limit_eps: Number(o.rate_limit_eps || 1000),
           burst_capacity: Number(o.burst_capacity || 5000),
@@ -308,7 +308,7 @@ export default function MeterboxApp() {
       const currentOrgId =
         selectedOrgId && orgList.some((o) => o.id === selectedOrgId)
           ? selectedOrgId
-          : orgList[0]?.id || "org_acme_ai";
+          : orgList[0]?.id || "";
       if (currentOrgId && currentOrgId !== selectedOrgId) {
         setSelectedOrgId(currentOrgId);
       }
@@ -318,13 +318,13 @@ export default function MeterboxApp() {
         const rawEnvs = await envRes.json();
         const envList: Environment[] = (rawEnvs || []).map(
           (e: Record<string, unknown>) => ({
-            id: String(e.id || "env_live_acme"),
-            org_id: String(e.org_id || "org_acme_ai"),
+            id: String(e.id || "env_live_demo"),
+            org_id: String(e.org_id || "org_demo_ai"),
             slug: String(e.slug || "production"),
             type: (e.type === "sandbox" ? "sandbox" : "production") as
               | "production"
               | "sandbox",
-            openmeter_namespace: String(e.openmeter_namespace || "ns_live_acme"),
+            openmeter_namespace: String(e.openmeter_namespace || "ns_live_demo"),
             created_at: String(e.created_at || new Date().toISOString()),
           })
         );
@@ -372,8 +372,8 @@ export default function MeterboxApp() {
           const misses = Number(rawTel.edge_cache_misses ?? 0);
           const rawRatioPct = Number(rawTel.edge_cache_hit_ratio_pct ?? 96);
           setTelemetry({
-            org_id: String(rawTel.org_id || selectedOrgId || "org_acme_ai"),
-            org_name: String(rawTel.org_name || activeOrgName || "Acme AI Corp"),
+            org_id: String(rawTel.org_id || selectedOrgId || "org_demo_ai"),
+            org_name: String(rawTel.org_name || activeOrgName || "Demo AI"),
             active_namespace: String(rawTel.active_namespace || activeNamespace),
             ingested_events: Number(rawTel.ingested_events ?? rawTel.total_events_ingested ?? 0),
             deduplicated_hits: Number(rawTel.deduplicated_hits ?? rawTel.deduplicated_dropped ?? 0),
@@ -1584,7 +1584,7 @@ export default function MeterboxApp() {
                       </option>
                     ))
                   ) : (
-                    <option value="org_acme_ai">Acme AI Corp (enterprise)</option>
+                    <option value="org_demo_ai">Demo AI (enterprise)</option>
                   )}
                 </select>
               </div>
@@ -1606,7 +1606,7 @@ export default function MeterboxApp() {
                       </option>
                     ))
                   ) : (
-                    <option value="env_live_acme">production · ns_live_acme</option>
+                    <option value="env_live_demo">production · ns_live_demo</option>
                   )}
                 </select>
               </div>
@@ -2087,7 +2087,7 @@ export default function MeterboxApp() {
                       className="btn"
                       onClick={() =>
                         copyToClipboard(
-                          `curl -s "${API_BASE}/api/v1/meters/${selectedMeterSlug || "llm_tokens_total"}/query" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_acme"}" | jq .`,
+                          `curl -s "${API_BASE}/api/v1/meters/${selectedMeterSlug || "llm_tokens_total"}/query" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_demo"}" | jq .`,
                           "Meter Query cURL"
                         )
                       }
@@ -2382,7 +2382,7 @@ export default function MeterboxApp() {
                       className="btn"
                       onClick={() =>
                         copyToClipboard(
-                          `curl -X POST "${API_BASE}/api/v1/events" \\\n  -H "Content-Type: application/json" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_acme"}" \\\n  -d '${JSON.stringify(
+                          `curl -X POST "${API_BASE}/api/v1/events" \\\n  -H "Content-Type: application/json" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_demo"}" \\\n  -d '${JSON.stringify(
                             {
                               specversion: "1.0",
                               id: ingestId || "evt_demo_01",
@@ -2750,7 +2750,7 @@ export default function MeterboxApp() {
                         style={{ height: 32, fontSize: 12 }}
                         onClick={() =>
                           copyToClipboard(
-                            `curl -s "${API_BASE}/api/v1/subjects/${selectedSubjectKey}/entitlements/${selectedFeatureKey}/value" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_acme"}" | jq .`,
+                            `curl -s "${API_BASE}/api/v1/subjects/${selectedSubjectKey}/entitlements/${selectedFeatureKey}/value" \\\n  -H "X-OpenMeter-Namespace: ${activeNamespace || "ns_live_demo"}" | jq .`,
                             "Entitlement Check cURL"
                           )
                         }
@@ -3545,7 +3545,7 @@ export default function MeterboxApp() {
                       </select>
                     </div>
                     <button type="submit" className="btn">
-                      Create Environment (ns_{activeOrg?.slug || "acme"}_{newEnvSlug || "env"})
+                      Create Environment (ns_{activeOrg?.slug || "demo"}_{newEnvSlug || "env"})
                     </button>
                   </form>
                 </>

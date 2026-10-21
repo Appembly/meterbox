@@ -455,6 +455,7 @@ export interface SauthenAuthCardProps {
 }
 
 const DEMO_ACCOUNTS = [
+  { id: 'usr_aria_dev', name: 'Aria Lin', email: 'aria@demo-ai.dev', role: 'org:owner' },
   { id: 'usr_demo_architect', name: 'Alex Mercer', email: 'alex@appembly.dev', role: 'org:owner' },
   { id: 'usr_elena_finops', name: 'Elena Rostova', email: 'elena@appembly.dev', role: 'meterbox:finops' },
   { id: 'usr_marcus_sec', name: 'Marcus Vance', email: 'marcus@appembly.dev', role: 'sauthen:secops' },
@@ -701,7 +702,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                     className="sag-input sag-input-iconed sag-mono"
                     value={samlDomain}
                     onChange={(e) => setSamlDomain(e.target.value)}
-                    placeholder="acme.com"
+                    placeholder="company.com"
                     autoFocus
                   />
                 </span>
@@ -1864,7 +1865,7 @@ const SAG_CSS = `
 
 const CyclodeHeroVisual: React.FC = () => {
   const lines: Array<{ icon: string; cls: string; text: React.ReactNode }> = [
-    { icon: '$', cls: 'sag-term-dim', text: <span>cyclode run &quot;Fix flaky checkout test&quot; --repo acme/web</span> },
+    { icon: '$', cls: 'sag-term-dim', text: <span>cyclode run &quot;Fix flaky checkout test&quot; --repo demo-ai/web</span> },
     { icon: '✓', cls: 'sag-ok', text: <span>sandbox <span className="sag-term-dim">sbx_7f2a</span> ready · node 22 · 4 vCPU</span> },
     { icon: '✓', cls: 'sag-ok', text: <span>minted <span className="sag-term-dim">st_agt_…9c1</span> · repo:write llm:invoke · 15m</span> },
     { icon: '●', cls: 'sag-run', text: <span>planner   3 steps · worker editing cart.test.ts <span className="sag-term-dim">+12 −4</span></span> },
@@ -1891,7 +1892,7 @@ const CyclodeHeroVisual: React.FC = () => {
         <div className="sag-stepup-k">
           <ShieldAlert size={12} /> Approval required
         </div>
-        <div className="sag-stepup-t">git_push → acme/web:main</div>
+        <div className="sag-stepup-t">git_push → demo-ai/web:main</div>
         <div className="sag-stepup-a">
           <span style={{ background: '#F5B547', color: '#1A1205' }}>Approve</span>
           <span style={{ padding: '0 12px', border: '1px solid #2A323D', color: '#C9D3DF' }}>Deny</span>
@@ -1904,7 +1905,7 @@ const CyclodeHeroVisual: React.FC = () => {
 const MeterboxHeroVisual: React.FC = () => {
   const bars = [18, 22, 20, 26, 31, 28, 34, 30, 38, 42, 36, 44, 49, 46, 52, 58, 54, 61, 66, 63, 70, 76, 72, 84];
   const customers = [
-    { name: 'Acme AI', used: '820K / 1M', pct: 82, color: '#D49A2A' },
+    { name: 'Demo AI', used: '820K / 1M', pct: 82, color: '#D49A2A' },
     { name: 'Northwind', used: '460K / 1M', pct: 46, color: '#4E8067' },
     { name: 'Globex', used: '230K / 1M', pct: 23, color: '#4E8067' },
   ];
@@ -1936,9 +1937,9 @@ const MeterboxHeroVisual: React.FC = () => {
       </div>
       <div className="sag-mb-card sag-mb-inv">
         <div>
-          <div className="sag-mb-k">Draft invoice · Acme AI</div>
+          <div className="sag-mb-k">Draft invoice · Demo AI</div>
           <div style={{ fontSize: 12, color: '#5A625E', marginTop: 2 }} className="sag-mono">
-            in_2026_10_acme · closes Oct 31
+            in_2026_10_demo · closes Oct 31
           </div>
         </div>
         <strong>$650.12</strong>
@@ -1951,7 +1952,7 @@ const SauthenHeroVisual: React.FC = () => {
   const nodes = [
     { x: 17, y: 50, name: 'Ken M.', meta: 'passkey · st_sess', bg: 'rgba(143,128,255,.16)', fg: '#8F80FF', icon: <UserIcon size={14} />, delay: 0.1 },
     { x: 44, y: 50, name: 'cyclode-worker', meta: 'st_agt · 15m', bg: 'rgba(56,189,248,.14)', fg: '#38BDF8', icon: <Terminal size={14} />, delay: 0.3 },
-    { x: 74, y: 24, name: 'acme/web', meta: 'repo:write', bg: 'rgba(255,255,255,.06)', fg: '#ECECF6', icon: <GitHubMark />, delay: 0.5 },
+    { x: 74, y: 24, name: 'demo-ai/web', meta: 'repo:write', bg: 'rgba(255,255,255,.06)', fg: '#ECECF6', icon: <GitHubMark />, delay: 0.5 },
     { x: 74, y: 76, name: 'Anthropic key', meta: 'vault · AES-GCM', bg: 'rgba(247,170,46,.14)', fg: '#F7AA2E', icon: <KeyRound size={14} />, delay: 0.7 },
   ];
   return (
@@ -1982,7 +1983,7 @@ const SauthenHeroVisual: React.FC = () => {
         <dt>scope</dt>
         <dd>repo:write llm:invoke meterbox:ingest</dd>
         <dt>om_ns</dt>
-        <dd style={{ color: '#F7AA2E' }}>ns_live_acme</dd>
+        <dd style={{ color: '#F7AA2E' }}>ns_live_demo</dd>
       </dl>
     </div>
   );
