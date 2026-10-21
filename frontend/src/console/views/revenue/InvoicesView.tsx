@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useConsole } from "../../ConsoleProvider";
 import { apiPost } from "../../lib/api";
-import { formatCompact, formatCurrency, relativeTime } from "../../lib/format";
+import { formatCompact, formatCurrency, humanizeKey, relativeTime } from "../../lib/format";
 import {
   Button,
   Card,
@@ -25,6 +25,7 @@ import {
   Drawer,
   EmptyState,
   Field,
+  Input,
   Notice,
   PageHeader,
   Pagination,
@@ -56,26 +57,26 @@ export const InvoicesView: React.FC = () => {
   const [cardSubject, setCardSubject] = useState("");
   const [cardProvider, setCardProvider] = useState("stripe");
   const [cardBrand, setCardBrand] = useState("visa");
-  const [cardLast4, setCardLast4] = useState("");
-  const [cardExpMonth, setCardExpMonth] = useState("");
-  const [cardExpYear, setCardExpYear] = useState("");
+  const [cardLast4, setCardLast4] = useState("4242");
+  const [cardExpMonth, setCardExpMonth] = useState("12");
+  const [cardExpYear, setCardExpYear] = useState("2029");
 
   const [topupSubject, setTopupSubject] = useState("");
-  const [topupUnits, setTopupUnits] = useState("");
-  const [topupCents, setTopupCents] = useState("");
+  const [topupUnits, setTopupUnits] = useState("2500000");
+  const [topupCents, setTopupCents] = useState("5000");
   const [topupInstant, setTopupInstant] = useState(true);
 
   const [ruleSubject, setRuleSubject] = useState("");
-  const [ruleFeature, setRuleFeature] = useState("");
-  const [ruleThreshold, setRuleThreshold] = useState("");
-  const [ruleRecharge, setRuleRecharge] = useState("");
-  const [ruleCents, setRuleCents] = useState("");
+  const [ruleFeature, setRuleFeature] = useState("ai_token_allowance");
+  const [ruleThreshold, setRuleThreshold] = useState("500000");
+  const [ruleRecharge, setRuleRecharge] = useState("2500000");
+  const [ruleCents, setRuleCents] = useState("5000");
 
   const [whType, setWhType] = useState("payment_intent.succeeded");
   const [whSubject, setWhSubject] = useState("");
   const [whObjectId, setWhObjectId] = useState("");
-  const [whCents, setWhCents] = useState("");
-  const [whUnits, setWhUnits] = useState("");
+  const [whCents, setWhCents] = useState("5000");
+  const [whUnits, setWhUnits] = useState("2500000");
 
   const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "err"; title: string; detail?: string } | null>(null);
 
@@ -96,6 +97,10 @@ export const InvoicesView: React.FC = () => {
   const subjectNameMap = useMemo(
     () => new Map(snapshot.subjects.map((s) => [s.key, s.display_name])),
     [snapshot.subjects],
+  );
+  const planNameMap = useMemo(
+    () => new Map(snapshot.plans.map((p) => [p.slug, p.name])),
+    [snapshot.plans],
   );
 
   const invPagination = usePagination(snapshot.invoices, 10);
@@ -400,12 +405,12 @@ export const InvoicesView: React.FC = () => {
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-[12.5px] text-[var(--muted-foreground)]">
-            <span>Vaulted payment methods</span>
+            <span>Saved payment methods</span>
             <CreditCard className="w-4 h-4 text-[var(--primary)]" />
           </div>
           <div className="mt-2 text-[24px] font-semibold mbx-num">{snapshot.paymentMethods.length}</div>
           <div className="mt-1 text-[12px] text-[var(--muted-foreground)]">
-            PCI-free provider tokens (`pm_...`) ready for off-session billing
+            Tokenized cards ready for off-session billing
           </div>
         </Card>
 
@@ -434,9 +439,9 @@ export const InvoicesView: React.FC = () => {
         </Card>
       </div>
 
-      {/* Sub-navigation Tabs */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-2.5">
-        <div className="flex flex-wrap items-center gap-1.5">
+      {/* Sub-navigation Tabs (Calm Underline Bar) */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)]">
+        <div className="flex flex-wrap items-center gap-1 -mb-px">
           {(
             [
               { id: "invoices", label: "Invoices Ledger", count: snapshot.invoices.length, icon: Receipt },
@@ -457,17 +462,19 @@ export const InvoicesView: React.FC = () => {
                 key={t.id}
                 type="button"
                 onClick={() => setActiveTab(t.id)}
-                className={`inline-flex items-center gap-2 h-8 px-3 rounded-lg text-[12.5px] font-medium transition-colors cursor-pointer ${
+                className={`inline-flex items-center gap-2 h-10 px-3.5 border-b-2 text-[13px] transition-colors cursor-pointer ${
                   active
-                    ? "bg-[var(--primary)] text-[#F6F7F5]"
-                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--surface-subtle)]"
+                    ? "border-[var(--primary)] text-[var(--foreground)] font-semibold"
+                    : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] font-medium"
                 }`}
               >
-                <Icon className="w-3.5 h-3.5" />
+                <Icon className={`w-3.5 h-3.5 ${active ? "text-[var(--primary)]" : ""}`} />
                 <span>{t.label}</span>
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[11px] mbx-num ${
-                    active ? "bg-white/20 text-white" : "bg-[var(--surface-subtle)] text-[var(--muted-foreground)]"
+                  className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold mbx-num ${
+                    active
+                      ? "bg-[var(--accent)] text-[var(--primary)]"
+                      : "bg-[var(--surface-subtle)] text-[var(--muted-foreground)]"
                   }`}
                 >
                   {t.count}
@@ -477,10 +484,12 @@ export const InvoicesView: React.FC = () => {
           })}
         </div>
 
-        <Button variant="secondary" size="sm" onClick={() => setWebhookOpen(true)}>
-          <Webhook className="w-3.5 h-3.5" />
-          Test webhook delivery
-        </Button>
+        <div className="pb-2">
+          <Button variant="secondary" size="sm" onClick={() => setWebhookOpen(true)}>
+            <Webhook className="w-3.5 h-3.5" />
+            Test webhook delivery
+          </Button>
+        </div>
       </div>
 
       {/* TAB 1: INVOICES LEDGER */}
@@ -509,7 +518,7 @@ export const InvoicesView: React.FC = () => {
                 }
               />
             ) : (
-              <table className="min-w-[820px] w-full text-[12.5px]">
+              <table className="min-w-[780px] w-full text-[13px]">
                 <thead>
                   <tr className="border-y border-[var(--border)] bg-[var(--surface-subtle)] text-[11.5px] font-medium text-[var(--muted-foreground)]">
                     <th className="px-5 py-2.5 text-left">Invoice ID</th>
@@ -518,7 +527,7 @@ export const InvoicesView: React.FC = () => {
                     <th className="px-3 py-2.5 text-right">Subtotal</th>
                     <th className="px-3 py-2.5 text-right">Credits</th>
                     <th className="px-3 py-2.5 text-right">Net Total</th>
-                    <th className="px-3 py-2.5 text-left">Payment Status</th>
+                    <th className="px-3 py-2.5 text-left">Status</th>
                     <th className="px-5 py-2.5 text-right">Action</th>
                   </tr>
                 </thead>
@@ -529,33 +538,34 @@ export const InvoicesView: React.FC = () => {
                       onClick={() => setSelectedInvoice(inv)}
                       className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-subtle)] cursor-pointer transition-colors"
                     >
-                      <td className="px-5 py-2.5 font-semibold mbx-mono">{inv.id}</td>
-                      <td className="px-3 py-2.5 font-medium">
+                      <td className="px-5 py-3 font-semibold mbx-mono">{inv.id}</td>
+                      <td className="px-3 py-3 font-medium">
                         {subjectNameMap.get(inv.subject_key) || inv.subject_key}
                       </td>
-                      <td className="px-3 py-2.5">
-                        <Pill mono>{inv.plan_slug}</Pill>
+                      <td className="px-3 py-3 text-[var(--muted-foreground)]">
+                        {planNameMap.get(inv.plan_slug) || humanizeKey(inv.plan_slug)}
                       </td>
-                      <td className="px-3 py-2.5 text-right mbx-num text-[var(--muted-foreground)]">
+                      <td className="px-3 py-3 text-right mbx-num text-[var(--muted-foreground)]">
                         {formatCurrency(inv.subtotal_cents, inv.currency)}
                       </td>
-                      <td className="px-3 py-2.5 text-right mbx-num text-[var(--primary)]">
+                      <td className="px-3 py-3 text-right mbx-num text-[var(--primary)]">
                         −{formatCurrency(inv.credits_applied_cents, inv.currency)}
                       </td>
-                      <td className="px-3 py-2.5 text-right font-semibold mbx-num">
+                      <td className="px-3 py-3 text-right font-semibold mbx-num">
                         {formatCurrency(inv.total_cents, inv.currency)}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td className="px-3 py-3">
                         <Pill
                           tone={inv.status === "paid" ? "ok" : inv.status === "payment_failed" ? "err" : "info"}
-                          mono
                         >
                           {inv.status === "paid"
-                            ? `PAID · ${inv.stripe_invoice_id || inv.id}`
-                            : inv.stripe_invoice_id || inv.status}
+                            ? "Paid"
+                            : inv.status === "payment_failed"
+                            ? "Failed"
+                            : inv.status.replace("_", " ")}
                         </Pill>
                       </td>
-                      <td className="px-5 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                         {inv.status !== "paid" ? (
                           <Button
                             variant="secondary"
@@ -567,7 +577,7 @@ export const InvoicesView: React.FC = () => {
                             Charge card
                           </Button>
                         ) : (
-                          <span className="text-[11.5px] text-[var(--muted-foreground)] mbx-num">
+                          <span className="text-[12px] text-[var(--muted-foreground)] mbx-num">
                             {inv.paid_at ? relativeTime(inv.paid_at) : "Paid"}
                           </span>
                         )}
@@ -988,7 +998,7 @@ export const InvoicesView: React.FC = () => {
             <select
               value={genSubject}
               onChange={(e) => setGenSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -1001,7 +1011,7 @@ export const InvoicesView: React.FC = () => {
             <select
               value={genPlan}
               onChange={(e) => setGenPlan(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.plans.map((p) => (
                 <option key={p.slug} value={p.slug}>
@@ -1011,7 +1021,7 @@ export const InvoicesView: React.FC = () => {
             </select>
           </Field>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setGenOpen(false)}>
+            <Button variant="secondary" onClick={() => setGenOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -1026,14 +1036,14 @@ export const InvoicesView: React.FC = () => {
         open={cardOpen}
         onClose={() => setCardOpen(false)}
         title="Vault customer payment method"
-        subtitle="Store a non-PCI provider token (`pm_...`) from a completed Stripe or Paystack SetupIntent."
+        subtitle="Store a tokenized card from a completed Stripe or Paystack SetupIntent."
       >
         <form onSubmit={handleAttachCard} className="space-y-4">
           <Field label="Customer (subject)">
             <select
               value={cardSubject}
               onChange={(e) => setCardSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -1047,7 +1057,7 @@ export const InvoicesView: React.FC = () => {
               <select
                 value={cardProvider}
                 onChange={(e) => setCardProvider(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 <option value="stripe">Stripe</option>
                 <option value="paystack">Paystack</option>
@@ -1058,7 +1068,7 @@ export const InvoicesView: React.FC = () => {
               <select
                 value={cardBrand}
                 onChange={(e) => setCardBrand(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 <option value="visa">Visa</option>
                 <option value="mastercard">Mastercard</option>
@@ -1068,37 +1078,39 @@ export const InvoicesView: React.FC = () => {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Last 4 digits">
-              <input
-                type="text"
+              <Input
+                mono
                 maxLength={4}
+                placeholder="4242"
                 value={cardLast4}
                 onChange={(e) => setCardLast4(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
             <Field label="Exp month">
-              <input
+              <Input
+                mono
                 type="number"
                 min={1}
                 max={12}
+                placeholder="12"
                 value={cardExpMonth}
                 onChange={(e) => setCardExpMonth(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
             <Field label="Exp year">
-              <input
+              <Input
+                mono
                 type="number"
                 min={2026}
                 max={2040}
+                placeholder="2029"
                 value={cardExpYear}
                 onChange={(e) => setCardExpYear(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
           </div>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setCardOpen(false)}>
+            <Button variant="secondary" onClick={() => setCardOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -1120,7 +1132,7 @@ export const InvoicesView: React.FC = () => {
             <select
               value={topupSubject}
               onChange={(e) => setTopupSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -1130,34 +1142,38 @@ export const InvoicesView: React.FC = () => {
             </select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Grant units (tokens)">
-              <input
+            <Field label="Grant units (tokens)" hint="Default 2.5M">
+              <Input
+                mono
                 type="number"
+                placeholder="e.g. 2500000"
                 value={topupUnits}
                 onChange={(e) => setTopupUnits(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
-            <Field label="Charge amount (cents)">
-              <input
+            <Field label="Charge amount (cents)" hint="5000 = $50.00">
+              <Input
+                mono
                 type="number"
+                placeholder="e.g. 5000"
                 value={topupCents}
                 onChange={(e) => setTopupCents(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
           </div>
-          <label className="flex items-center gap-2 text-[12.5px] cursor-pointer">
+          <label className="flex items-start gap-2.5 text-[13px] cursor-pointer pt-1">
             <input
               type="checkbox"
               checked={topupInstant}
               onChange={(e) => setTopupInstant(e.target.checked)}
-              className="rounded border-[var(--border)]"
+              className="mt-0.5 rounded border-[var(--border)]"
             />
-            <span>Charge saved default card immediately &amp; mint Priority-1 grant (`payment_intent.succeeded`)</span>
+            <span className="leading-snug text-[var(--foreground)]">
+              Charge saved default card immediately and mint Priority-1 credit grant
+            </span>
           </label>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setTopupOpen(false)}>
+            <Button variant="secondary" onClick={() => setTopupOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -1179,7 +1195,7 @@ export const InvoicesView: React.FC = () => {
             <select
               value={ruleSubject}
               onChange={(e) => setRuleSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -1189,41 +1205,44 @@ export const InvoicesView: React.FC = () => {
             </select>
           </Field>
           <Field label="Entitlement feature key">
-            <input
-              type="text"
+            <Input
+              mono
+              placeholder="e.g. ai_token_allowance"
               value={ruleFeature}
               onChange={(e) => setRuleFeature(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
             />
           </Field>
           <div className="grid grid-cols-3 gap-3">
             <Field label="Threshold units">
-              <input
+              <Input
+                mono
                 type="number"
+                placeholder="500000"
                 value={ruleThreshold}
                 onChange={(e) => setRuleThreshold(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
             <Field label="Recharge units">
-              <input
+              <Input
+                mono
                 type="number"
+                placeholder="2500000"
                 value={ruleRecharge}
                 onChange={(e) => setRuleRecharge(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
             <Field label="Charge (cents)">
-              <input
+              <Input
+                mono
                 type="number"
+                placeholder="5000"
                 value={ruleCents}
                 onChange={(e) => setRuleCents(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
           </div>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setRuleOpen(false)}>
+            <Button variant="secondary" onClick={() => setRuleOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -1238,14 +1257,14 @@ export const InvoicesView: React.FC = () => {
         open={webhookOpen}
         onClose={() => setWebhookOpen(false)}
         title="Simulate payment provider webhook"
-        subtitle="Dispatch a signed Stripe / Paystack webhook event to `/api/v1/webhooks/stripe` to test ledger orchestration."
+        subtitle="Dispatch a signed Stripe / Paystack webhook event to test ledger orchestration."
       >
         <form onSubmit={handleSimulateWebhook} className="space-y-4">
           <Field label="Webhook event type">
             <select
               value={whType}
               onChange={(e) => setWhType(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               <option value="payment_intent.succeeded">payment_intent.succeeded (Mint credit grant)</option>
               <option value="invoice.paid">invoice.paid (Mark invoice paid)</option>
@@ -1257,7 +1276,7 @@ export const InvoicesView: React.FC = () => {
             <select
               value={whSubject}
               onChange={(e) => setWhSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -1266,35 +1285,36 @@ export const InvoicesView: React.FC = () => {
               ))}
             </select>
           </Field>
-          <Field label="Provider object ID (optional — e.g. in_stripe_... or pi_...)">
-            <input
-              type="text"
+          <Field label="Provider object ID" hint="Optional — e.g. in_stripe_... or pi_...">
+            <Input
+              mono
               placeholder="Auto-generated or matches open invoice"
               value={whObjectId}
               onChange={(e) => setWhObjectId(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Amount (cents)">
-              <input
+            <Field label="Amount (cents)" hint="5000 = $50.00">
+              <Input
+                mono
                 type="number"
+                placeholder="5000"
                 value={whCents}
                 onChange={(e) => setWhCents(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
-            <Field label="Grant units (for payment_intent.succeeded)">
-              <input
+            <Field label="Grant units">
+              <Input
+                mono
                 type="number"
+                placeholder="2500000"
                 value={whUnits}
                 onChange={(e) => setWhUnits(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
               />
             </Field>
           </div>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setWebhookOpen(false)}>
+            <Button variant="secondary" onClick={() => setWebhookOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>

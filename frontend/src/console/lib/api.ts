@@ -2,18 +2,76 @@ import { API_BASE } from "../../types/meterbox";
 
 export { API_BASE };
 
+const SAUTHEN_API_BASE = process.env.NEXT_PUBLIC_SAUTHEN_URL || "http://localhost:6021";
+const SESSION_STORAGE_KEY = "sth.auth.session.v2";
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
 }
 
-function getStoredBearerHeader(): Record<string, string> {
+function isTokenExpiredOrInvalid(rawToken?: string): boolean {
+  if (!rawToken || typeof rawToken !== "string") return true;
+  const clean = rawToken.trim().replace(/^st_(sess|agt)_/, "");
+  const parts = clean.split(".");
+  if (parts.length !== 3) return true;
   try {
-    const raw = typeof window !== "undefined" ? localStorage.getItem("sth.auth.session.v2") : null;
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as { access_token?: string };
-    return parsed?.access_token ? { Authorization: `Bearer ${parsed.access_token}` } : {};
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { exp?: number };
+    if (typeof payload.exp === "number" && payload.exp > 0) {
+      return Math.floor(Date.now() / 1000) >= payload.exp - 5;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+let ssoHydrationPromise: Promise<string | null> | null = null;
+
+async function hydrateSsoToken(): Promise<string | null> {
+  if (typeof window === "undefined") return null;
+  if (!ssoHydrationPromise) {
+    ssoHydrationPromise = fetch(`${SAUTHEN_API_BASE}/api/v1/auth/sso`, {
+      cache: "no-store",
+      credentials: "include",
+    })
+      .then(async (r) => {
+        if (!r.ok) return null;
+        const d = await r.json();
+        if (d?.access_token && !isTokenExpiredOrInvalid(d.access_token)) {
+          localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(d));
+          return d.access_token as string;
+        }
+        return null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        ssoHydrationPromise = null;
+      });
+  }
+  return ssoHydrationPromise;
+}
+
+async function getStoredBearerHeader(forceRefresh = false): Promise<Record<string, string>> {
+  try {
+    if (typeof window === "undefined") return {};
+    if (forceRefresh) {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    } else {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { access_token?: string };
+        if (parsed?.access_token && !isTokenExpiredOrInvalid(parsed.access_token)) {
+          return { Authorization: `Bearer ${parsed.access_token}` };
+        }
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    }
+    const ssoToken = await hydrateSsoToken();
+    return ssoToken ? { Authorization: `Bearer ${ssoToken}` } : {};
   } catch {
     return {};
   }
@@ -21,15 +79,35 @@ function getStoredBearerHeader(): Record<string, string> {
 
 /** GET a JSON resource, scoped to an OpenMeter namespace when provided. */
 export async function apiGet<T = unknown>(path: string, namespace?: string, signal?: AbortSignal): Promise<T> {
+  const bearer = await getStoredBearerHeader(false);
   const headers: Record<string, string> = {
-    ...getStoredBearerHeader(),
+    ...bearer,
     ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
   };
-  const res = await fetch(`${API_BASE}${path}`, {
+  let res = await fetch(`${API_BASE}${path}`, {
     headers,
     signal,
     cache: "no-store",
   });
+  if (res.status === 401 && bearer.Authorization) {
+    const retryBearer = await getStoredBearerHeader(true);
+    const retryHeaders: Record<string, string> = {
+      ...retryBearer,
+      ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
+    };
+    res = await fetch(`${API_BASE}${path}`, {
+      headers: retryHeaders,
+      signal,
+      cache: "no-store",
+    });
+    if (res.status === 401 && retryBearer.Authorization) {
+      res = await fetch(`${API_BASE}${path}`, {
+        headers: namespace ? { "X-OpenMeter-Namespace": namespace } : {},
+        signal,
+        cache: "no-store",
+      });
+    }
+  }
   if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`);
   return (await res.json()) as T;
 }
@@ -41,17 +119,32 @@ export async function apiPost<T = unknown>(
   namespace?: string,
   extraHeaders?: Record<string, string>,
 ): Promise<T> {
+  const bearer = await getStoredBearerHeader(false);
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...getStoredBearerHeader(),
+    ...bearer,
     ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
     ...(extraHeaders ?? {}),
   };
-  const res = await fetch(`${API_BASE}${path}`, {
+  let res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && bearer.Authorization) {
+    const retryBearer = await getStoredBearerHeader(true);
+    const retryHeaders: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...retryBearer,
+      ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
+      ...(extraHeaders ?? {}),
+    };
+    res = await fetch(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: retryHeaders,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  }
   const text = await res.text();
   let parsed: unknown = {};
   try {

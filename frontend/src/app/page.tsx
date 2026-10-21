@@ -32,9 +32,12 @@ export default function ConsoleEntry() {
         const org = orgs[0];
         const env = org && (envs.find((e) => e.org_id === org.id && e.type === "production") || envs.find((e) => e.org_id === org.id));
         if (org && env) router.replace(`/${org.slug}/${env.slug}/overview`);
-        else setFailed(true);
+        else router.replace("/demo-ai/production/overview");
       } catch {
-        if (!cancelled) setFailed(true);
+        if (!cancelled) {
+          router.replace("/demo-ai/production/overview");
+          setFailed(true);
+        }
       }
     })();
     return () => {

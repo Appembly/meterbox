@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { useConsole } from "../../ConsoleProvider";
 import { formatCompact } from "../../lib/format";
-import { Card, CardHeader, EmptyState, EnvBadge, Segmented, Select, Skeleton } from "../../ui/primitives";
+import { Card, CardHeader, EmptyState, PageHeader, Segmented, Select, Skeleton } from "../../ui/primitives";
 import { StackedAreaChart } from "../../ui/StackedAreaChart";
 import { AllowancePanel, AttentionPanel, KpiRow, LiveEvents, PipelineStrip } from "./panels";
 import { RANGES, RangeKey, useMeterSeries } from "./useMeterSeries";
@@ -46,36 +46,33 @@ export const OverviewView: React.FC = () => {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <header className="mbx-enter flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 text-[12.5px] text-[var(--muted-foreground)]">
-            <span className="truncate">{org?.name || " "}</span>
-            {env && <EnvBadge type={env.type} label={env.name} />}
-          </div>
-          <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.025em]">Overview</h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Segmented<RangeKey>
-            ariaLabel="Time range"
-            value={range}
-            onChange={setRange}
-            options={(Object.keys(RANGES) as RangeKey[]).map((k) => ({ value: k, label: RANGES[k].label }))}
-          />
-          <a
-            href={href("events?ingest=1")}
-            onClick={(e) => {
-              if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
-                e.preventDefault();
-                navigate("events?ingest=1");
-              }
-            }}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-[var(--primary)] text-white hover:brightness-110 shadow-sm"
-          >
-            {env?.type === "sandbox" ? "Send test event" : "Ingest playground"}
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      </header>
+      <PageHeader
+        title="Overview"
+        subtitle="Real-time metering posture, customer allowance usage, and live ingestion pipeline health."
+        actions={
+          <>
+            <Segmented<RangeKey>
+              ariaLabel="Time range"
+              value={range}
+              onChange={setRange}
+              options={(Object.keys(RANGES) as RangeKey[]).map((k) => ({ value: k, label: RANGES[k].label }))}
+            />
+            <a
+              href={href("events?ingest=1")}
+              onClick={(e) => {
+                if (!e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) {
+                  e.preventDefault();
+                  navigate("events?ingest=1");
+                }
+              }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[13px] font-medium bg-[var(--primary)] text-white hover:brightness-110 shadow-sm"
+            >
+              {env?.type === "sandbox" ? "Send test event" : "Ingest playground"}
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </a>
+          </>
+        }
+      />
 
       <KpiRow
         meterName={meter?.name || ""}

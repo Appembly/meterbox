@@ -280,34 +280,34 @@ export const ApiKeysView: React.FC = () => {
               </select>
             }
           />
-          <div className="px-5 pb-5 space-y-4">
+          <div className="flex-1">
             {portalLoading ? (
-              <Skeleton className="h-44 w-full" />
+              <div className="px-5 pb-5">
+                <Skeleton className="h-44 w-full" />
+              </div>
             ) : !portalData ? (
               <EmptyState title="No portal preview available" description="Select a customer above." />
             ) : (
-              <div className="p-4 rounded-xl bg-[var(--background)] border border-[var(--border)] space-y-4">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                <div className="flex items-center justify-between px-5 py-3.5">
                   <div>
                     <div className="text-[11px] uppercase tracking-wider text-[var(--muted-foreground)]">
                       Embedded Usage Widget
                     </div>
                     <div className="text-[14px] font-semibold mt-0.5">{portalData.subject}</div>
                   </div>
-                  <Pill tone="info" mono>
-                    PORTAL_READ_ONLY
-                  </Pill>
+                  <Pill tone="info">Read-only portal</Pill>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="text-[12px] font-semibold">Allowances ({portalData.entitlements?.length || 0})</div>
+                <div className="px-5 py-4 space-y-3">
+                  <div className="text-[12.5px] font-semibold">Allowances ({portalData.entitlements?.length || 0})</div>
                   {(portalData.entitlements || []).map((ent, i) => {
                     const limit = ent.limit || 1;
                     const usage = ent.usage || 0;
                     const ratio = usage / limit;
                     return (
                       <div key={i} className="space-y-1">
-                        <div className="flex justify-between text-[12px] mbx-num">
+                        <div className="flex justify-between text-[12.5px] mbx-num">
                           <span className="font-medium">{ent.feature_key}</span>
                           <span>
                             {formatCompact(usage)} / {formatCompact(limit)}
@@ -319,10 +319,10 @@ export const ApiKeysView: React.FC = () => {
                   })}
                 </div>
 
-                <div className="pt-3 border-t border-[var(--border)] space-y-2">
-                  <div className="text-[12px] font-semibold">Recent Invoices ({portalData.invoices?.length || 0})</div>
+                <div className="px-5 py-4 space-y-2">
+                  <div className="text-[12.5px] font-semibold">Recent Invoices ({portalData.invoices?.length || 0})</div>
                   {(portalData.invoices || []).slice(0, 3).map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between text-[12px] mbx-num">
+                    <div key={inv.id} className="flex items-center justify-between text-[12.5px] mbx-num">
                       <span className="mbx-mono">{inv.id}</span>
                       <span className="font-semibold">{formatCurrency(inv.total_cents, inv.currency)}</span>
                     </div>
@@ -354,7 +354,7 @@ export const ApiKeysView: React.FC = () => {
             <select
               value={keyScope}
               onChange={(e) => setKeyScope(e.target.value as APIKey["scope"])}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               <option value="ingest">ingest (mb_ing_*) — Write-only CloudEvents & PostHog</option>
               <option value="entitlement">entitlement (mb_ent_*) — Sub-5ms edge quota checks</option>
@@ -367,7 +367,7 @@ export const ApiKeysView: React.FC = () => {
               <select
                 value={keySubject}
                 onChange={(e) => setKeySubject(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 {snapshot.subjects.map((s) => (
                   <option key={s.key} value={s.key}>
@@ -378,7 +378,7 @@ export const ApiKeysView: React.FC = () => {
             </Field>
           )}
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>

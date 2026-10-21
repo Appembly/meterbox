@@ -52,7 +52,7 @@ export const CustomersView: React.FC = () => {
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<ProfileTab>("entitlements");
-  const [drawer, setDrawer] = useState<"subject" | "entitlement" | "grant" | null>(null);
+  const [drawer, setDrawer] = useState<"subject" | "entitlement" | "grant" | "evaluator" | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "warn" | "err"; title: string; detail?: string } | null>(null);
 
   // Edge quota evaluator state
@@ -332,24 +332,30 @@ export const CustomersView: React.FC = () => {
 
       {/* Main Customer 360 Workbench */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Customer Directory */}
+        {/* Left: Customer Directory (Single Surface) */}
         <Card className="lg:col-span-4 flex flex-col">
           <CardHeader
             title="Customer directory"
             subtitle={`${snapshot.subjects.length} active subject${snapshot.subjects.length === 1 ? "" : "s"}`}
           />
-          <div className="px-3 pb-3 space-y-2.5">
+          <div className="px-4 pb-3">
             <Input
               placeholder="Search customers by name or key…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+          <div className="flex-1">
             {status === "loading" ? (
-              [0, 1, 2].map((i) => <Skeleton key={i} className="h-20 w-full" />)
+              <div className="px-4 pb-3 space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
             ) : filteredSubjects.length === 0 ? (
               <EmptyState title="No customers found" description="Create a customer subject to track usage and quotas." />
             ) : (
-              <div className="space-y-2">
+              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
                 {subjectListPagination.pageItems.map((s) => {
                   const selected = s.key === activeSubject?.key;
                   const usageList = entitlementUsage.filter((u) => u.subjectKey === s.key);
@@ -362,16 +368,19 @@ export const CustomersView: React.FC = () => {
                     <button
                       key={s.key}
                       type="button"
+                      data-active={selected}
                       onClick={() => setSelectedKey(s.key)}
-                      className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                        selected
-                          ? "border-[var(--primary)] bg-[var(--accent)]"
-                          : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-strong)]"
-                      }`}
+                      className="mbx-list-item px-4 py-3.5"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="text-[13.5px] font-semibold truncate">{s.display_name}</div>
+                          <div
+                            className={`text-[14px] font-semibold truncate ${
+                              selected ? "text-[var(--primary)]" : "text-[var(--foreground)]"
+                            }`}
+                          >
+                            {s.display_name}
+                          </div>
                           <div className="text-[11.5px] mbx-mono text-[var(--muted-foreground)]">{s.key}</div>
                         </div>
                         {sub && (
@@ -382,7 +391,7 @@ export const CustomersView: React.FC = () => {
                       </div>
 
                       {topUsage && (
-                        <div className="mt-2.5">
+                        <div className="mt-2">
                           <div className="flex justify-between text-[11.5px] mbx-num mb-1">
                             <span className="text-[var(--muted-foreground)] truncate">
                               {topUsage.featureName || humanizeKey(topUsage.featureKey)}
@@ -475,52 +484,61 @@ export const CustomersView: React.FC = () => {
                 </div>
               </Card>
 
-              {/* Tab 1: Entitlements & Sub-5ms Evaluator */}
+              {/* Tab 1: Entitlements (Single Surface + Drawer for Edge Evaluator) */}
               {tab === "entitlements" && (
-                <div className="space-y-4">
-                  <Card>
-                    <CardHeader
-                      title="Metered allowances & quotas"
-                      subtitle="Real-time usage tracked against period limits and credit grants"
-                      actions={
-                        <Button size="sm" variant="secondary" onClick={() => setDrawer("entitlement")}>
+                <Card>
+                  <CardHeader
+                    title="Metered allowances & quotas"
+                    subtitle="Real-time usage tracked against period limits and credit grants"
+                    actions={
+                      <>
+                        {subjectEntitlements.length > 0 && (
+                          <Button size="sm" variant="secondary" onClick={() => setDrawer("evaluator")}>
+                            <Zap className="w-3.5 h-3.5" /> Test edge quota
+                          </Button>
+                        )}
+                        <Button size="sm" variant="primary" onClick={() => setDrawer("entitlement")}>
                           <Plus className="w-3.5 h-3.5" /> Attach entitlement
                         </Button>
-                      }
-                    />
-                    <div className="px-5 pb-5 space-y-4">
-                      {subjectUsage.length === 0 ? (
-                        <EmptyState
-                          icon={<ShieldCheck className="w-5 h-5" />}
-                          title="No entitlements attached"
-                          description="Attach a metered entitlement to enforce hard or soft usage limits for this customer."
-                        />
-                      ) : (
-                        subjectUsage.map((u) => {
+                      </>
+                    }
+                  />
+                  <div>
+                    {subjectUsage.length === 0 ? (
+                      <EmptyState
+                        icon={<ShieldCheck className="w-5 h-5" />}
+                        title="No entitlements attached"
+                        description="Attach a metered entitlement to enforce hard or soft usage limits for this customer."
+                      />
+                    ) : (
+                      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                        {subjectUsage.map((u) => {
                           const tone: Tone = u.ratio >= 1 ? (u.softLimit ? "warn" : "err") : u.ratio >= 0.8 ? "warn" : "ok";
                           return (
-                            <div key={u.featureKey} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)]">
+                            <div key={u.featureKey} className="px-5 py-4">
                               <div className="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                  <div className="text-[14px] font-semibold">{u.featureName || humanizeKey(u.featureKey)}</div>
-                                  <div className="text-[11.5px] mbx-mono text-[var(--muted-foreground)]">
-                                    feature: {u.featureKey} · meter: {u.meterSlug}
+                                  <div className="text-[14.5px] font-semibold text-[var(--foreground)]">
+                                    {u.featureName || humanizeKey(u.featureKey)}
+                                  </div>
+                                  <div className="text-[12px] mbx-mono text-[var(--muted-foreground)]">
+                                    {u.featureKey} · meter: {u.meterSlug}
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <Pill tone={u.softLimit ? "info" : "neutral"}>
-                                    {u.softLimit ? "Soft limit (overage billed)" : "Hard stop"}
+                                    {u.softLimit ? "Soft limit" : "Hard stop"}
                                   </Pill>
-                                  <Pill tone={u.hasAccess ? "ok" : "err"} mono>
-                                    {u.hasAccess ? "ACCESS_GRANTED" : "QUOTA_EXCEEDED"}
+                                  <Pill tone={u.hasAccess ? "ok" : "err"}>
+                                    {u.hasAccess ? "Access granted" : "Quota exceeded"}
                                   </Pill>
                                 </div>
                               </div>
                               <div className="mt-3">
                                 <div className="flex justify-between text-[12.5px] mbx-num mb-1.5">
-                                  <span>
-                                    Used <strong>{formatNumber(u.usage)}</strong> of{" "}
-                                    <strong>{formatNumber(u.limit)}</strong>
+                                  <span className="text-[var(--muted-foreground)]">
+                                    Used <strong className="text-[var(--foreground)]">{formatNumber(u.usage)}</strong> of{" "}
+                                    <strong className="text-[var(--foreground)]">{formatNumber(u.limit)}</strong>
                                   </span>
                                   <span className="font-semibold">{formatPercent(u.ratio)}</span>
                                 </div>
@@ -528,93 +546,19 @@ export const CustomersView: React.FC = () => {
                               </div>
                             </div>
                           );
-                        })
-                      )}
-                    </div>
-                  </Card>
-
-                  {/* Sub-5ms Edge Quota Evaluator */}
-                  <Card>
-                    <CardHeader
-                      title={
-                        <span className="inline-flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-[var(--primary)]" />
-                          Sub-5ms Edge Quota Evaluator
-                        </span>
-                      }
-                      subtitle="Test the synchronous write-through Redis/Edge entitlement check endpoint"
-                      actions={
-                        <div className="flex items-center gap-2">
-                          {subjectEntitlements.length > 0 && (
-                            <select
-                              value={evalFeature}
-                              onChange={(e) => setEvalFeature(e.target.value)}
-                              className="h-7 px-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[12px] mbx-mono"
-                            >
-                              {subjectEntitlements.map((e) => (
-                                <option key={e.feature_key} value={e.feature_key}>
-                                  {e.feature_key}
-                                </option>
-                              ))}
-                            </select>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            disabled={!evalFeature || evaluating}
-                            onClick={() => runEdgeEval(activeSubject.key, evalFeature)}
-                          >
-                            <Gauge className="w-3.5 h-3.5" />
-                            {evaluating ? "Checking…" : "Evaluate now"}
-                          </Button>
-                        </div>
-                      }
-                    />
-                    <div className="px-5 pb-5">
-                      {evalResult ? (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 rounded-xl bg-[var(--surface-subtle)] border border-[var(--border)]">
-                          <div>
-                            <div className="text-[11.5px] text-[var(--muted-foreground)]">Decision</div>
-                            <div className="mt-1 flex items-center gap-1.5 font-semibold text-[14px]">
-                              <StatusDot tone={evalResult.has_access ? "ok" : "err"} live />
-                              {evalResult.has_access ? "ALLOW (200 OK)" : "DENY (429 Quota)"}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11.5px] text-[var(--muted-foreground)]">Edge Latency</div>
-                            <div className="mt-1 font-semibold text-[14px] mbx-num">
-                              {formatLatencyUs(evalResult.latency_us)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11.5px] text-[var(--muted-foreground)]">Period Usage</div>
-                            <div className="mt-1 font-semibold text-[14px] mbx-num">
-                              {formatCompact(evalResult.usage)} / {formatCompact(evalResult.limit)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-[11.5px] text-[var(--muted-foreground)]">Credit Balance</div>
-                            <div className="mt-1 font-semibold text-[14px] mbx-num">
-                              {formatCompact(evalResult.credit_balance)}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-[12.5px] text-[var(--muted-foreground)]">
-                          Attach an entitlement above to run live sub-5ms edge quota evaluations.
-                        </p>
-                      )}
-                    </div>
-                  </Card>
-                </div>
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </Card>
               )}
 
-              {/* Tab 2: Priority Credit Grant Waterfall */}
+              {/* Tab 2: Priority Credit Grant Waterfall (Single Surface) */}
               {tab === "grants" && (
                 <Card>
                   <CardHeader
                     title="Priority Credit Grant Waterfall"
-                    subtitle="Grants are consumed in strict priority order (Priority 1 burns first, then earliest expiration)"
+                    subtitle="Grants are consumed in priority order (Priority 1 burns first, then earliest expiration)"
                     actions={
                       <Button
                         size="sm"
@@ -626,7 +570,7 @@ export const CustomersView: React.FC = () => {
                       </Button>
                     }
                   />
-                  <div className="px-5 pb-5 space-y-3">
+                  <div>
                     {subjectGrants.length === 0 ? (
                       <EmptyState
                         icon={<Coins className="w-5 h-5" />}
@@ -634,38 +578,40 @@ export const CustomersView: React.FC = () => {
                         description="Issue a promotional or prepaid credit grant to offset metered usage for this customer."
                       />
                     ) : (
-                      subjectGrantsPagination.pageItems.map((g, idx) => {
-                        const used = g.used_balance != null ? g.used_balance : Math.max(0, g.amount - g.remaining);
-                        const ratio = g.amount > 0 ? used / g.amount : 0;
-                        const exhausted = g.remaining <= 0;
-                        return (
-                          <div key={g.id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)]">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5">
-                                <span className="w-6 h-6 rounded-md bg-[var(--surface-subtle)] text-[11.5px] font-semibold mbx-mono flex items-center justify-center">
-                                  P{g.priority || idx + 1}
-                                </span>
-                                <div>
-                                  <div className="text-[13.5px] font-semibold">{g.name}</div>
-                                  <div className="text-[11.5px] mbx-mono text-[var(--muted-foreground)]">
-                                    id: {g.id} {g.expires_at ? `· expires ${new Date(g.expires_at).toLocaleDateString()}` : ""}
+                      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                        {subjectGrantsPagination.pageItems.map((g, idx) => {
+                          const used = g.used_balance != null ? g.used_balance : Math.max(0, g.amount - g.remaining);
+                          const ratio = g.amount > 0 ? used / g.amount : 0;
+                          const exhausted = g.remaining <= 0;
+                          return (
+                            <div key={g.id} className="px-5 py-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="w-6 h-6 rounded-md bg-[var(--surface-subtle)] text-[11.5px] font-semibold mbx-mono flex items-center justify-center">
+                                    P{g.priority || idx + 1}
+                                  </span>
+                                  <div>
+                                    <div className="text-[14px] font-semibold">{g.name}</div>
+                                    <div className="text-[12px] mbx-mono text-[var(--muted-foreground)]">
+                                      {g.id} {g.expires_at ? `· expires ${new Date(g.expires_at).toLocaleDateString()}` : ""}
+                                    </div>
                                   </div>
                                 </div>
+                                <Pill tone={exhausted ? "warn" : "ok"}>
+                                  {exhausted ? "Exhausted" : `${formatCompact(g.remaining)} remaining`}
+                                </Pill>
                               </div>
-                              <Pill tone={exhausted ? "warn" : "ok"} mono>
-                                {exhausted ? "EXHAUSTED" : `${formatCompact(g.remaining)} REMAINING`}
-                              </Pill>
-                            </div>
-                            <div className="mt-3">
-                              <div className="flex justify-between text-[12px] mbx-num text-[var(--muted-foreground)] mb-1">
-                                <span>Consumed: {formatNumber(used)}</span>
-                                <span>Granted: {formatNumber(g.amount)}</span>
+                              <div className="mt-3">
+                                <div className="flex justify-between text-[12px] mbx-num text-[var(--muted-foreground)] mb-1">
+                                  <span>Consumed: {formatNumber(used)}</span>
+                                  <span>Granted: {formatNumber(g.amount)}</span>
+                                </div>
+                                <ProgressBar value={ratio} tone={exhausted ? "warn" : "ok"} />
                               </div>
-                              <ProgressBar value={ratio} tone={exhausted ? "warn" : "ok"} />
                             </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                   {subjectGrants.length > 0 && (
@@ -734,14 +680,14 @@ export const CustomersView: React.FC = () => {
                 </Card>
               )}
 
-              {/* Tab 4: Customer Invoices */}
+              {/* Tab 4: Customer Invoices (Single Surface) */}
               {tab === "billing" && (
                 <Card>
                   <CardHeader
                     title="Customer Subscriptions & Invoices"
                     subtitle="Issued invoices with automated prepaid credit deductions and Stripe sync status"
                   />
-                  <div className="px-5 pb-5 space-y-3">
+                  <div>
                     {subjectInvoices.length === 0 ? (
                       <EmptyState
                         icon={<CreditCard className="w-5 h-5" />}
@@ -749,34 +695,36 @@ export const CustomersView: React.FC = () => {
                         description="Generate an invoice for this customer under Revenue → Invoices."
                       />
                     ) : (
-                      subjectInvoicesPagination.pageItems.map((inv) => (
-                        <div
-                          key={inv.id}
-                          className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)] flex flex-wrap items-center justify-between gap-3"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold mbx-mono text-[13px]">{inv.id}</span>
-                              <Pill tone="ok" mono>
-                                {inv.status}
-                              </Pill>
+                      <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                        {subjectInvoicesPagination.pageItems.map((inv) => (
+                          <div
+                            key={inv.id}
+                            className="px-5 py-4 flex flex-wrap items-center justify-between gap-3"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold mbx-mono text-[13.5px]">{inv.id}</span>
+                                <Pill tone={inv.status === "paid" ? "ok" : "info"}>
+                                  {inv.status === "paid" ? "Paid" : inv.status}
+                                </Pill>
+                              </div>
+                              <div className="mt-1 text-[12.5px] text-[var(--muted-foreground)]">
+                                Plan <span className="mbx-mono text-[var(--foreground)]">{inv.plan_slug}</span> · Stripe{" "}
+                                <span className="mbx-mono">{inv.stripe_invoice_id}</span>
+                              </div>
                             </div>
-                            <div className="mt-1 text-[12px] text-[var(--muted-foreground)]">
-                              Plan: <span className="mbx-mono">{inv.plan_slug}</span> · Stripe:{" "}
-                              <span className="mbx-mono">{inv.stripe_invoice_id}</span>
+                            <div className="text-right mbx-num">
+                              <div className="text-[16px] font-semibold">
+                                {formatCurrency(inv.total_cents, inv.currency)}
+                              </div>
+                              <div className="text-[12px] text-[var(--muted-foreground)]">
+                                Subtotal {formatCurrency(inv.subtotal_cents, inv.currency)} − Credits{" "}
+                                {formatCurrency(inv.credits_applied_cents, inv.currency)}
+                              </div>
                             </div>
                           </div>
-                          <div className="text-right mbx-num">
-                            <div className="text-[16px] font-semibold">
-                              {formatCurrency(inv.total_cents, inv.currency)}
-                            </div>
-                            <div className="text-[11.5px] text-[var(--muted-foreground)]">
-                              Subtotal {formatCurrency(inv.subtotal_cents, inv.currency)} − Credits{" "}
-                              {formatCurrency(inv.credits_applied_cents, inv.currency)}
-                            </div>
-                          </div>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                   {subjectInvoices.length > 0 && (
@@ -828,7 +776,7 @@ export const CustomersView: React.FC = () => {
             />
           </Field>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawer(null)}>
+            <Button variant="secondary" onClick={() => setDrawer(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -860,7 +808,7 @@ export const CustomersView: React.FC = () => {
             <select
               value={entMeter}
               onChange={(e) => setEntMeter(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {snapshot.meters.map((m) => (
                 <option key={m.slug} value={m.slug}>
@@ -874,21 +822,22 @@ export const CustomersView: React.FC = () => {
               mono
               type="number"
               required
+              placeholder="e.g. 100000"
               value={entLimit}
               onChange={(e) => setEntLimit(e.target.value)}
             />
           </Field>
-          <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+          <label className="flex items-center gap-2.5 text-[13px] cursor-pointer py-1">
             <input
               type="checkbox"
               checked={entSoft}
               onChange={(e) => setEntSoft(e.target.checked)}
-              className="rounded border-[var(--border)]"
+              className="w-4 h-4 rounded border-[var(--border)] shrink-0"
             />
-            <span>Soft limit (allow usage above quota and bill overages)</span>
+            <span>Soft limit — allow usage above quota and bill overages</span>
           </label>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawer(null)}>
+            <Button variant="secondary" onClick={() => setDrawer(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -910,7 +859,7 @@ export const CustomersView: React.FC = () => {
             <select
               value={grantEntId}
               onChange={(e) => setGrantEntId(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {subjectEntitlements.map((e) => (
                 <option key={e.id} value={e.id}>
@@ -922,6 +871,7 @@ export const CustomersView: React.FC = () => {
           <Field label="Grant name">
             <Input
               required
+              placeholder="e.g. Q2 Promotional Credits"
               value={grantName}
               onChange={(e) => setGrantName(e.target.value)}
             />
@@ -932,6 +882,7 @@ export const CustomersView: React.FC = () => {
                 mono
                 type="number"
                 required
+                placeholder="e.g. 100000"
                 value={grantAmount}
                 onChange={(e) => setGrantAmount(e.target.value)}
               />
@@ -943,13 +894,14 @@ export const CustomersView: React.FC = () => {
                 min={1}
                 max={10}
                 required
+                placeholder="1"
                 value={grantPriority}
                 onChange={(e) => setGrantPriority(e.target.value)}
               />
             </Field>
           </div>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawer(null)}>
+            <Button variant="secondary" onClick={() => setDrawer(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -957,6 +909,77 @@ export const CustomersView: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Drawer>
+      {/* Drawer: Sub-5ms Edge Quota Evaluator */}
+      <Drawer
+        open={drawer === "evaluator"}
+        onClose={() => setDrawer(null)}
+        title={`Sub-5ms Edge Quota Evaluator · ${activeSubject?.display_name || ""}`}
+        subtitle="Test the synchronous write-through Redis/Edge entitlement check endpoint"
+      >
+        <div className="space-y-4">
+          <Field label="Feature entitlement to evaluate">
+            <div className="flex items-center gap-2">
+              <select
+                value={evalFeature}
+                onChange={(e) => setEvalFeature(e.target.value)}
+                className="flex-1 h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
+              >
+                {subjectEntitlements.map((e) => (
+                  <option key={e.feature_key} value={e.feature_key}>
+                    {e.feature_key}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="primary"
+                disabled={!evalFeature || evaluating || !activeSubject}
+                onClick={() => activeSubject && runEdgeEval(activeSubject.key, evalFeature)}
+              >
+                <Gauge className="w-3.5 h-3.5" />
+                {evaluating ? "Checking…" : "Evaluate now"}
+              </Button>
+            </div>
+          </Field>
+
+          {evalResult && (
+            <div className="divide-y divide-[var(--border)] border border-[var(--border)] rounded-xl">
+              <div className="flex items-center justify-between px-4 py-3 text-[13px]">
+                <span className="text-[var(--muted-foreground)]">Decision</span>
+                <span className="inline-flex items-center gap-1.5 font-semibold">
+                  <StatusDot tone={evalResult.has_access ? "ok" : "err"} live />
+                  {evalResult.has_access ? "ALLOW (200 OK)" : "DENY (429 Quota)"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 text-[13px] mbx-num">
+                <span className="text-[var(--muted-foreground)]">Edge evaluation latency</span>
+                <span className="font-semibold">{formatLatencyUs(evalResult.latency_us)}</span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 text-[13px] mbx-num">
+                <span className="text-[var(--muted-foreground)]">Period usage / limit</span>
+                <span className="font-semibold">
+                  {formatCompact(evalResult.usage)} / {formatCompact(evalResult.limit)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 text-[13px] mbx-num">
+                <span className="text-[var(--muted-foreground)]">Remaining credit balance</span>
+                <span className="font-semibold">{formatCompact(evalResult.credit_balance)} units</span>
+              </div>
+            </div>
+          )}
+
+          {activeSubject && evalFeature && (
+            <div>
+              <div className="text-[12px] font-semibold text-[var(--muted-foreground)] mb-1.5">
+                Edge Check Request (`GET /api/v1/subjects/:subject/entitlements/:feature/value`)
+              </div>
+              <pre className="p-3.5 rounded-xl bg-[var(--background)] border border-[var(--border)] mbx-mono text-[11.5px] overflow-x-auto leading-relaxed">
+{`curl -s "${typeof window !== "undefined" ? window.location.origin.replace(":6070", ":8090") : "http://localhost:8090"}/api/v1/subjects/${activeSubject.key}/entitlements/${evalFeature}/value" \\
+  -H "X-Meterbox-Namespace: ${namespace}"`}
+              </pre>
+            </div>
+          )}
+        </div>
       </Drawer>
     </div>
   );

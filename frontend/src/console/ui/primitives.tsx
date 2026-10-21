@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 /* ----------------------------------------------------------------------------
  * Layout primitives
@@ -27,7 +29,7 @@ export const CardHeader: React.FC<{
 }> = ({ title, subtitle, actions, className = "" }) => (
   <header className={`flex items-start justify-between gap-4 px-5 pt-4 pb-3 ${className}`}>
     <div className="min-w-0">
-      <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-[var(--foreground)]">{title}</h2>
+      <h2 className="text-[15px] font-semibold tracking-[-0.012em] text-[var(--foreground)]">{title}</h2>
       {subtitle && <p className="mt-0.5 text-[12.5px] text-[var(--muted-foreground)]">{subtitle}</p>}
     </div>
     {actions && <div className="flex items-center gap-2 shrink-0">{actions}</div>}
@@ -144,7 +146,7 @@ export function Segmented<T extends string>({
     <div
       role="radiogroup"
       aria-label={ariaLabel}
-      className="inline-flex items-center p-0.5 rounded-lg bg-[var(--surface-subtle)] border border-[var(--border)]"
+      className="inline-flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--surface-subtle)] border border-[var(--border)]"
     >
       {options.map((o) => {
         const active = o.value === value;
@@ -155,10 +157,10 @@ export function Segmented<T extends string>({
             role="radio"
             aria-checked={active}
             onClick={() => onChange(o.value)}
-            className={`h-6 px-2.5 rounded-md text-[12px] font-medium whitespace-nowrap transition-all ${
+            className={`h-7 px-2.5 rounded-md text-[12px] whitespace-nowrap transition-all ${
               active
-                ? "bg-[var(--card)] text-[var(--foreground)] shadow-sm"
-                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                ? "bg-[var(--card)] text-[var(--primary)] font-semibold border border-[var(--border-strong)] shadow-sm"
+                : "font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
             }`}
           >
             {o.label}
@@ -176,20 +178,10 @@ export const Select: React.FC<
     <span className="sr-only">{label}</span>
     <select
       {...rest}
-      className="appearance-none h-7 pl-2.5 pr-7 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[12.5px] font-medium text-[var(--foreground)] hover:border-[var(--border-strong)] cursor-pointer outline-none focus-visible:border-[var(--primary)]"
+      className="h-8 pl-2.5 pr-7 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[12.5px] font-medium text-[var(--foreground)] hover:border-[var(--border-strong)] cursor-pointer outline-none focus-visible:border-[var(--primary)]"
     >
       {children}
     </select>
-    <svg
-      className="pointer-events-none absolute right-2 w-3 h-3 text-[var(--muted-foreground)]"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      aria-hidden="true"
-    >
-      <path d="M3 4.5 6 7.5 9 4.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   </label>
 );
 
@@ -293,15 +285,11 @@ export const PageHeader: React.FC<{
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   actions?: React.ReactNode;
-}> = ({ orgName, envType, envName, title, subtitle, actions }) => (
+}> = ({ title, subtitle, actions }) => (
   <header className="mbx-enter flex flex-col md:flex-row md:items-end justify-between gap-4">
     <div className="min-w-0">
-      <div className="flex items-center gap-2 text-[12.5px] text-[var(--muted-foreground)]">
-        <span className="truncate">{orgName || " "}</span>
-        {envType && <EnvBadge type={envType} label={envName} />}
-      </div>
-      <h1 className="mt-1 text-[24px] font-semibold tracking-[-0.025em]">{title}</h1>
-      {subtitle && <p className="mt-0.5 text-[13px] text-[var(--muted-foreground)]">{subtitle}</p>}
+      <h1 className="text-[24px] font-semibold tracking-[-0.022em] text-[var(--foreground)]">{title}</h1>
+      {subtitle && <p className="mt-1 text-[13.5px] text-[var(--muted-foreground)] leading-[1.55]">{subtitle}</p>}
     </div>
     {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
   </header>
@@ -314,7 +302,13 @@ export const Drawer: React.FC<{
   subtitle?: React.ReactNode;
   width?: string;
   children: React.ReactNode;
-}> = ({ open, onClose, title, subtitle, width = "max-w-[520px]", children }) => {
+}> = ({ open, onClose, title, subtitle, width = "max-w-[500px]", children }) => {
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   React.useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -324,31 +318,37 @@ export const Drawer: React.FC<{
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/35 backdrop-blur-[2px]" onClick={onClose}>
+  if (!open || !mounted) return null;
+
+  const overlay = (
+    <div
+      className="mbx-console fixed inset-0 z-50 !m-0 flex justify-end bg-black/40 backdrop-blur-[2px]"
+      onClick={onClose}
+    >
       <aside
         className={`relative w-full ${width} h-full bg-[var(--card)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[var(--border)]">
           <div className="min-w-0">
-            <h2 className="text-[16px] font-semibold tracking-[-0.015em]">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-[12.5px] text-[var(--muted-foreground)]">{subtitle}</p>}
+            <h2 className="text-[16px] font-semibold tracking-[-0.015em] text-[var(--foreground)]">{title}</h2>
+            {subtitle && <p className="mt-1 text-[13px] text-[var(--muted-foreground)] leading-snug">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] mbx-hover"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] mbx-hover shrink-0"
             aria-label="Close drawer"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-6 py-5 mbx-scroll">{children}</div>
       </aside>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(overlay, document.body) : overlay;
 };
 
 export const Field: React.FC<{
@@ -358,7 +358,7 @@ export const Field: React.FC<{
 }> = ({ label, hint, children }) => (
   <label className="block space-y-1.5">
     <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[12.5px] font-medium text-[var(--foreground)]">{label}</span>
+      <span className="text-[13px] font-medium text-[var(--foreground)]">{label}</span>
       {hint && <span className="text-[11.5px] text-[var(--muted-foreground)]">{hint}</span>}
     </div>
     {children}
@@ -372,8 +372,8 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { mon
 }) => (
   <input
     {...rest}
-    className={`w-full h-8 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] text-[var(--foreground)] placeholder:text-[var(--placeholder)] outline-none focus:border-[var(--primary)] transition-colors ${
-      mono ? "mbx-mono text-[12px]" : ""
+    className={`w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] text-[var(--foreground)] placeholder:text-[var(--placeholder)] outline-none focus:border-[var(--primary)] transition-colors ${
+      mono ? "mbx-mono text-[12.5px]" : ""
     } ${className}`}
   />
 );
@@ -485,7 +485,7 @@ export const Pagination: React.FC<{
   className = "",
 }) => {
   const { page, setPage, pageSize, setPageSize, totalItems, totalPages, startIdx, endIdx } = state;
-  if (totalItems === 0) return null;
+  if (totalItems === 0 || (totalPages <= 1 && totalItems <= 5)) return null;
 
   const pages: number[] = [];
   const windowStart = Math.max(1, page - 2);
@@ -496,7 +496,7 @@ export const Pagination: React.FC<{
 
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-[var(--border)] bg-[var(--surface-subtle)]/50 text-[12px] text-[var(--muted-foreground)] ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 border-t border-[var(--border)] bg-[var(--surface-subtle)] rounded-b-[13px] text-[12px] text-[var(--muted-foreground)] ${className}`}
     >
       <div className="flex items-center gap-3 mbx-num">
         <span>

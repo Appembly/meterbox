@@ -253,9 +253,9 @@ export const AttentionPanel: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
         title="Needs attention"
         subtitle={status === "ready" ? (items.length ? `${items.length} item${items.length === 1 ? "" : "s"} to review` : "Nothing to review") : " "}
       />
-      <div className="flex-1 px-2 pb-2">
+      <div className="flex-1">
         {status === "loading" ? (
-          <div className="space-y-2 px-3 py-2">
+          <div className="space-y-2 px-5 pb-4">
             {[0, 1, 2].map((i) => (
               <Skeleton key={i} className="h-12 w-full" />
             ))}
@@ -264,10 +264,10 @@ export const AttentionPanel: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
           <EmptyState
             icon={<CircleCheck className="w-5 h-5" style={{ color: "var(--ok)" }} />}
             title="All clear"
-            description="No failed events, exhausted credits or customers near their limits."
+            description="No failed events, exhausted credits, or customers near their limits."
           />
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
             {items.slice(0, 6).map((item) => (
               <li key={item.id}>
                 <a
@@ -278,14 +278,14 @@ export const AttentionPanel: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
                       navigate(item.actionRoute);
                     }
                   }}
-                  className="group flex items-start gap-3 px-3 py-2.5 rounded-lg mbx-hover"
+                  className="group flex items-start gap-3 px-5 py-3 mbx-hover transition-colors"
                 >
                   <StatusDot tone={item.tone} className="mt-1.5" />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-medium leading-snug">{item.title}</div>
-                    <div className="mt-0.5 text-[12px] text-[var(--muted-foreground)] line-clamp-2">{item.detail}</div>
+                    <div className="text-[13.5px] font-medium leading-snug text-[var(--foreground)]">{item.title}</div>
+                    <div className="mt-0.5 text-[12.5px] text-[var(--muted-foreground)] line-clamp-1">{item.detail}</div>
                   </div>
-                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[12px] font-medium text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]">
+                  <span className="shrink-0 inline-flex items-center gap-0.5 text-[12.5px] font-medium text-[var(--muted-foreground)] group-hover:text-[var(--foreground)]">
                     {item.actionLabel}
                     <ArrowUpRight className="w-3 h-3" />
                   </span>
@@ -367,58 +367,48 @@ export const AllowancePanel: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
 };
 
 /* ----------------------------------------------------------------------------
- * Pipeline health strip
+ * Pipeline health strip (Single-Surface 5-Column Grid — 3-Second Scan)
  * --------------------------------------------------------------------------*/
 
 export const PipelineStrip: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
   const { snapshot, status } = useConsole();
   const t = snapshot.telemetry;
 
-  const stages: { id: string; name: string; tech: string; icon: React.ReactNode; tone: Tone; metric: string; detail: string }[] = [
+  const stages: { id: string; name: string; tone: Tone; metric: string; detail: string }[] = [
     {
       id: "gateway",
-      name: "Key gateway",
-      tech: "SHA-256 scoped keys",
-      icon: <KeyRound className="w-3.5 h-3.5" />,
+      name: "API key gateway",
       tone: snapshot.apiKeys.length > 0 ? "ok" : "neutral",
       metric: `${snapshot.apiKeys.length} key${snapshot.apiKeys.length === 1 ? "" : "s"}`,
-      detail: "Auth & namespace resolution",
+      detail: "Scoped credentials active",
     },
     {
       id: "dedup",
-      name: "Deduplication",
-      tech: "48h idempotency",
-      icon: <ShieldCheck className="w-3.5 h-3.5" />,
+      name: "Idempotency guard",
       tone: "ok",
       metric: `${formatCompact(t?.dedupHits || 0)} absorbed`,
       detail: "Retries never double-count",
     },
     {
       id: "lanes",
-      name: "Lane router",
-      tech: "Realtime · bulk · DLQ",
-      icon: <GitBranch className="w-3.5 h-3.5" />,
+      name: "Ingestion router",
       tone: (t?.dlqPending || 0) > 0 ? "warn" : "ok",
       metric: `${formatCompact(t?.realtimeEvents || 0)} / ${formatCompact(t?.bulkEvents || 0)}`,
-      detail: `${t?.dlqPending || 0} in dead-letter`,
+      detail: `${t?.dlqPending || 0} in dead-letter queue`,
     },
     {
       id: "rollups",
-      name: "Rollups",
-      tech: "1-minute aggregates",
-      icon: <Database className="w-3.5 h-3.5" />,
+      name: "OLAP rollups",
       tone: t?.clickhouseConnected === false ? "warn" : "ok",
       metric: `${snapshot.meters.length} meter${snapshot.meters.length === 1 ? "" : "s"}`,
       detail: t?.clickhouseConnected === false ? "Fallback store active" : "ClickHouse connected",
     },
     {
       id: "quotas",
-      name: "Edge quotas",
-      tech: "Write-through cache",
-      icon: <Gauge className="w-3.5 h-3.5" />,
+      name: "Edge quota checks",
       tone: "ok",
       metric: formatLatencyUs(t?.avgCheckLatencyUs || 0),
-      detail: `${formatPercent(t?.cacheHitRatio || 0)} cache hits · ${formatCompact(t?.entitlementChecks || 0)} checks`,
+      detail: `${formatPercent(t?.cacheHitRatio || 0)} cache hit rate`,
     },
   ];
 
@@ -428,7 +418,7 @@ export const PipelineStrip: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
     <Card delay={delay}>
       <CardHeader
         title="Pipeline health"
-        subtitle="From API key to invoice, live"
+        subtitle="End-to-end posture from event ingestion to edge quota evaluation"
         actions={
           status === "ready" ? (
             <Pill tone={degraded ? "warn" : "ok"}>
@@ -438,44 +428,26 @@ export const PipelineStrip: React.FC<{ delay?: number }> = ({ delay = 0 }) => {
           ) : null
         }
       />
-      <div className="px-5 pb-5 overflow-x-auto mbx-scroll">
-        <div className="relative min-w-[860px]">
-          {/* Connector with travelling packets */}
-          <div className="absolute left-[10%] right-[10%] top-[22px] h-px bg-[var(--border)]" aria-hidden="true">
-            {[0, 1.3, 2.6].map((d) => (
-              <span
-                key={d}
-                className="mbx-packet absolute -top-[2.5px] w-1.5 h-1.5 rounded-full bg-[var(--primary)]"
-                style={{ animationDelay: `${d}s` }}
-              />
-            ))}
-          </div>
-          <ol className="relative grid grid-cols-5 gap-3">
-            {stages.map((s, i) => (
-              <li key={s.id} className="flex flex-col items-center text-center">
-                <span
-                  className="relative z-10 w-11 h-11 rounded-full flex items-center justify-center border bg-[var(--card)]"
-                  style={{ borderColor: `color-mix(in srgb, ${toneColor(s.tone)} 45%, var(--border))`, color: toneColor(s.tone) }}
-                >
-                  {s.icon}
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[var(--card)]" style={{ background: toneColor(s.tone) }} />
-                </span>
-                <div className="mt-2.5 text-[11px] font-medium text-[var(--placeholder)] mbx-num">0{i + 1}</div>
-                <div className="text-[13px] font-semibold">{s.name}</div>
-                <div className="text-[11.5px] text-[var(--muted-foreground)]">{s.tech}</div>
-                {status === "loading" ? (
-                  <Skeleton className="mt-2 h-5 w-20" />
-                ) : (
-                  <>
-                    <div className="mt-2 text-[15px] font-semibold mbx-num">{s.metric}</div>
-                    <div className="text-[11.5px] text-[var(--muted-foreground)]">{s.detail}</div>
-                  </>
-                )}
-              </li>
-            ))}
-          </ol>
-        </div>
-      </div>
+      <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[var(--border)] border-t border-[var(--border)]">
+        {stages.map((s) => (
+          <li key={s.id} className="px-5 py-4 flex flex-col justify-between gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[13px] font-medium text-[var(--muted-foreground)] truncate">{s.name}</span>
+              <StatusDot tone={s.tone} live={s.tone === "ok"} />
+            </div>
+            {status === "loading" ? (
+              <Skeleton className="h-6 w-20" />
+            ) : (
+              <>
+                <div className="text-[20px] font-semibold tracking-[-0.02em] mbx-num text-[var(--foreground)]">
+                  {s.metric}
+                </div>
+                <div className="text-[12px] text-[var(--muted-foreground)] truncate">{s.detail}</div>
+              </>
+            )}
+          </li>
+        ))}
+      </ol>
     </Card>
   );
 };

@@ -204,29 +204,31 @@ export const PlansView: React.FC = () => {
                     </span>
                   </div>
 
-                  {/* Metered rate cards */}
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] space-y-2.5">
-                    <div className="text-[11.5px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                  {/* Metered rate cards (Single Surface) */}
+                  <div className="mt-4 pt-4 border-t border-[var(--border)]">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-2">
                       Metered Rate Cards ({p.components?.length || 0})
                     </div>
                     {(!p.components || p.components.length === 0) ? (
                       <p className="text-[12.5px] text-[var(--muted-foreground)]">Flat subscription only</p>
                     ) : (
-                      p.components.map((comp, idx) => (
-                        <div
-                          key={`${comp.meter_slug}-${idx}`}
-                          className="p-3 rounded-xl bg-[var(--surface-subtle)] border border-[var(--border)] text-[12px]"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{comp.name || comp.meter_slug}</span>
-                            <Pill mono>{comp.model || "flat_per_unit"}</Pill>
+                      <div className="divide-y divide-[var(--border)]">
+                        {p.components.map((comp, idx) => (
+                          <div
+                            key={`${comp.meter_slug}-${idx}`}
+                            className="py-2.5 first:pt-1 last:pb-0 text-[12.5px]"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium text-[var(--foreground)]">{comp.name || comp.meter_slug}</span>
+                              <Pill mono>{comp.model || "flat_per_unit"}</Pill>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between text-[var(--muted-foreground)] mbx-num text-[12px]">
+                              <span className="mbx-mono">meter: {comp.meter_slug}</span>
+                              <span>Included: {formatCompact(comp.included_units || 0)} units</span>
+                            </div>
                           </div>
-                          <div className="mt-1 flex items-center justify-between text-[var(--muted-foreground)] mbx-num">
-                            <span className="mbx-mono">meter: {comp.meter_slug}</span>
-                            <span>Included: {formatCompact(comp.included_units || 0)} units</span>
-                          </div>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -337,6 +339,7 @@ export const PlansView: React.FC = () => {
               mono
               type="number"
               required
+              placeholder="e.g. 49900"
               value={planBaseFeeCents}
               onChange={(e) => setPlanBaseFeeCents(e.target.value)}
             />
@@ -345,7 +348,7 @@ export const PlansView: React.FC = () => {
             <select
               value={planMeter}
               onChange={(e) => setPlanMeter(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px] mbx-mono"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {snapshot.meters.map((m) => (
                 <option key={m.slug} value={m.slug}>
@@ -359,6 +362,7 @@ export const PlansView: React.FC = () => {
               <Input
                 mono
                 type="number"
+                placeholder="e.g. 1000000"
                 value={planIncluded}
                 onChange={(e) => setPlanIncluded(e.target.value)}
               />
@@ -367,13 +371,14 @@ export const PlansView: React.FC = () => {
               <Input
                 mono
                 type="number"
+                placeholder="e.g. 2"
                 value={planUnitPriceCents}
                 onChange={(e) => setPlanUnitPriceCents(e.target.value)}
               />
             </Field>
           </div>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawer(null)}>
+            <Button variant="secondary" onClick={() => setDrawer(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>
@@ -395,7 +400,7 @@ export const PlansView: React.FC = () => {
             <select
               value={subSubject}
               onChange={(e) => setSubSubject(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -408,7 +413,7 @@ export const PlansView: React.FC = () => {
             <select
               value={subPlan}
               onChange={(e) => setSubPlan(e.target.value)}
-              className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
+              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.plans.map((p) => (
                 <option key={p.slug} value={p.slug}>
@@ -418,7 +423,7 @@ export const PlansView: React.FC = () => {
             </select>
           </Field>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawer(null)}>
+            <Button variant="secondary" onClick={() => setDrawer(null)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>

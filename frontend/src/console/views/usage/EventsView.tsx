@@ -239,7 +239,7 @@ export const EventsView: React.FC = () => {
         envType={env?.type}
         envName={env?.name}
         title="Events Stream"
-        subtitle="Real-time CloudEvents v1.0 ingestion stream, 48-hour SETNX idempotency telemetry, and interactive ingest playground."
+        subtitle="Real-time CloudEvents ingestion stream, idempotency protection, and interactive test playground."
         actions={
           <>
             <Button variant="secondary" onClick={() => setPaused((p) => !p)}>
@@ -272,12 +272,12 @@ export const EventsView: React.FC = () => {
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-[12.5px] text-[var(--muted-foreground)]">
-            <span>48h SETNX duplicates absorbed</span>
+            <span>Duplicates prevented</span>
             <ShieldCheck className="w-4 h-4 text-[var(--primary)]" />
           </div>
           <div className="mt-2 text-[24px] font-semibold mbx-num">{formatNumber(t?.dedupHits || 0)}</div>
           <div className="mt-1 text-[12px] text-[var(--muted-foreground)]">
-            Idempotent retries dropped before Kafka / ClickHouse
+            Idempotent retries absorbed without double-counting
           </div>
         </Card>
 
@@ -288,7 +288,7 @@ export const EventsView: React.FC = () => {
           </div>
           <div className="mt-2 flex items-center gap-2 text-[18px] font-semibold">
             <StatusDot tone={paused ? "warn" : "ok"} live={!paused} />
-            {paused ? "Stream Paused" : "Listening Live (5s poll)"}
+            {paused ? "Stream Paused" : "Listening Live"}
           </div>
           <div className="mt-1 text-[12px] text-[var(--muted-foreground)]">
             Showing {filtered.length} of {frozenEvents.length} recent events

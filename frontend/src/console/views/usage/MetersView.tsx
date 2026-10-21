@@ -195,15 +195,19 @@ export const MetersView: React.FC = () => {
 
       {/* Main Split Workbench */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Meter Catalog */}
+        {/* Left: Meter Catalog (Single Surface — 3-Second Scan) */}
         <Card className="lg:col-span-5 flex flex-col">
           <CardHeader
             title="Meter catalog"
             subtitle={`${snapshot.meters.length} active definition${snapshot.meters.length === 1 ? "" : "s"}`}
           />
-          <div className="px-3 pb-3 space-y-2">
+          <div className="flex-1">
             {status === "loading" ? (
-              [0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full" />)
+              <div className="px-5 pb-4 space-y-2">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
             ) : snapshot.meters.length === 0 ? (
               <EmptyState
                 title="No meters defined"
@@ -215,47 +219,41 @@ export const MetersView: React.FC = () => {
                 }
               />
             ) : (
-              meterPagination.pageItems.map((m) => {
-                const selected = m.slug === activeMeter?.slug;
-                const dims = Object.entries(m.group_by || {});
-                return (
-                  <button
-                    key={m.slug}
-                    type="button"
-                    onClick={() => handleSelectMeter(m)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition-all ${
-                      selected
-                        ? "border-[var(--primary)] bg-[var(--accent)] shadow-xs"
-                        : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-strong)]"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="text-[13.5px] font-semibold text-[var(--foreground)] truncate">{m.name}</div>
-                        <div className="mt-0.5 text-[11.5px] mbx-mono text-[var(--muted-foreground)]">{m.slug}</div>
+              <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+                {meterPagination.pageItems.map((m) => {
+                  const selected = m.slug === activeMeter?.slug;
+                  const dims = Object.keys(m.group_by || {});
+                  return (
+                    <button
+                      key={m.slug}
+                      type="button"
+                      data-active={selected}
+                      onClick={() => handleSelectMeter(m)}
+                      className="mbx-list-item px-5 py-3.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div
+                            className={`text-[14px] font-semibold truncate ${
+                              selected ? "text-[var(--primary)]" : "text-[var(--foreground)]"
+                            }`}
+                          >
+                            {m.name}
+                          </div>
+                          <div className="mt-0.5 text-[12px] mbx-mono text-[var(--muted-foreground)]">{m.slug}</div>
+                        </div>
+                        <Pill tone={selected ? "ok" : "neutral"} mono>
+                          {m.aggregation}
+                        </Pill>
                       </div>
-                      <Pill tone={selected ? "ok" : "neutral"} mono>
-                        {m.aggregation}
-                      </Pill>
-                    </div>
-                    <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-[var(--muted-foreground)]">
-                      <span className="px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] mbx-mono text-[var(--foreground)]">
-                        type: {m.event_type}
-                      </span>
-                      {m.value_property && (
-                        <span className="px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] mbx-mono">
-                          val: {m.value_property}
-                        </span>
-                      )}
-                      {dims.map(([k, v]) => (
-                        <span key={k} className="px-1.5 py-0.5 rounded bg-[var(--surface-subtle)] mbx-mono">
-                          {k}={v}
-                        </span>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })
+                      <div className="mt-1.5 text-[12.5px] text-[var(--muted-foreground)] truncate">
+                        Event <span className="mbx-mono text-[var(--foreground)]">{m.event_type}</span>
+                        {dims.length > 0 && ` · Grouped by ${dims.join(", ")}`}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </div>
           <Pagination state={meterPagination} pageSizeOptions={[3, 5, 10]} itemLabel="meters" compact />
@@ -378,7 +376,7 @@ export const MetersView: React.FC = () => {
               <select
                 value={agg}
                 onChange={(e) => setAgg(e.target.value as Meter["aggregation"])}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
+                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 <option value="SUM">SUM</option>
                 <option value="COUNT">COUNT</option>
@@ -431,7 +429,7 @@ export const MetersView: React.FC = () => {
           </div>
 
           <div className="pt-3 flex items-center justify-end gap-2 border-t border-[var(--border)]">
-            <Button variant="ghost" onClick={() => setDrawerOpen(false)}>
+            <Button variant="secondary" onClick={() => setDrawerOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={submitting}>

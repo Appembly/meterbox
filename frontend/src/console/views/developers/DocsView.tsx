@@ -43,46 +43,49 @@ export const DocsView: React.FC = () => {
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left: Chapter Navigation */}
+        {/* Left: Chapter Navigation (Single Surface) */}
         <Card className="lg:col-span-4 flex flex-col self-start">
           <CardHeader
             title="Architecture chapters"
             subtitle={`${DOC_CHAPTERS.length} specification modules`}
           />
-          <div className="px-3 pb-3 space-y-2">
+          <div className="px-4 pb-3">
             <Input
               placeholder="Filter chapters…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <div className="space-y-1.5 pt-1">
-              {filteredChapters.map((ch) => {
-                const active = ch.id === chapter?.id;
-                return (
-                  <button
-                    key={ch.id}
-                    type="button"
-                    onClick={() => handleSelectChapter(ch.id)}
-                    className={`w-full text-left p-3 rounded-xl border transition-all ${
-                      active
-                        ? "border-[var(--primary)] bg-[var(--accent)]"
-                        : "border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-strong)]"
+          </div>
+          <div className="divide-y divide-[var(--border)] border-t border-[var(--border)]">
+            {filteredChapters.map((ch) => {
+              const active = ch.id === chapter?.id;
+              return (
+                <button
+                  key={ch.id}
+                  type="button"
+                  data-active={active}
+                  onClick={() => handleSelectChapter(ch.id)}
+                  className="mbx-list-item px-4 py-3.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold mbx-mono text-[var(--primary)]">
+                      CHAPTER {ch.num}
+                    </span>
+                    <Pill tone={active ? "ok" : "neutral"} mono>
+                      {ch.tag}
+                    </Pill>
+                  </div>
+                  <div
+                    className={`mt-1 text-[14px] font-semibold ${
+                      active ? "text-[var(--primary)]" : "text-[var(--foreground)]"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold mbx-mono text-[var(--primary)]">
-                        CHAPTER {ch.num}
-                      </span>
-                      <Pill tone={active ? "ok" : "neutral"} mono>
-                        {ch.tag}
-                      </Pill>
-                    </div>
-                    <div className="mt-1 text-[13.5px] font-semibold">{ch.title}</div>
-                    <p className="mt-0.5 text-[12px] text-[var(--muted-foreground)] line-clamp-2">{ch.summary}</p>
-                  </button>
-                );
-              })}
-            </div>
+                    {ch.title}
+                  </div>
+                  <p className="mt-0.5 text-[12.5px] text-[var(--muted-foreground)] line-clamp-2">{ch.summary}</p>
+                </button>
+              );
+            })}
           </div>
         </Card>
 
@@ -134,16 +137,16 @@ export const DocsView: React.FC = () => {
                 </div>
               )}
 
-              {/* Sections */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Sections (Single Surface Dividers) */}
+              <div className="divide-y divide-[var(--border)] border-y border-[var(--border)]">
                 {chapter.sections.map((sec) => (
                   <div
                     key={sec.num}
-                    className="p-4 rounded-xl border border-[var(--border)] bg-[var(--background)] space-y-1.5"
+                    className="py-4 space-y-1"
                   >
                     <div className="text-[11px] font-semibold mbx-mono text-[var(--primary)]">SECTION {sec.num}</div>
-                    <h3 className="text-[14px] font-semibold">{sec.heading}</h3>
-                    <p className="text-[12.5px] text-[var(--muted-foreground)] leading-relaxed">{sec.body}</p>
+                    <h3 className="text-[14.5px] font-semibold text-[var(--foreground)]">{sec.heading}</h3>
+                    <p className="text-[13px] text-[var(--muted-foreground)] leading-relaxed">{sec.body}</p>
                   </div>
                 ))}
               </div>

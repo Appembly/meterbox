@@ -1,15 +1,8 @@
 /*
  * Meterbox Console (new UI) — scoped styles.
  * Only Tailwind *utilities* are generated (no preflight), so the classic console's CSS is untouched.
- * Resets use :where() for zero specificity, so utility classes always win.
+ * Resets use :where() for zero specificity and precede @tailwind utilities so utility classes always win.
  */
-@tailwind utilities;
-
-:root {
-  --mbx-ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --mbx-sidebar-w: 248px;
-}
-
 :where(.mbx-console) {
   font-family: var(--font);
   font-size: 13.5px;
@@ -17,7 +10,7 @@
   letter-spacing: -0.006em;
   color: var(--foreground);
 }
-:where(.mbx-console) :is(h1, h2, h3, h4, p) {
+:where(.mbx-console :is(h1, h2, h3, h4, p)) {
   margin: 0;
   font-family: inherit;
   font-size: inherit;
@@ -27,29 +20,46 @@
 }
 /* Tailwind's border utilities assume preflight's solid border style. */
 :where(.mbx-console),
-:where(.mbx-console) *,
-:where(.mbx-console) ::before,
-:where(.mbx-console) ::after {
+:where(.mbx-console *),
+:where(.mbx-console ::before),
+:where(.mbx-console ::after) {
   border-width: 0;
   border-style: solid;
   border-color: var(--border);
 }
-:where(.mbx-console) :is(ul, ol) {
+:where(.mbx-console :is(ul, ol)) {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-:where(.mbx-console) :is(svg, img) {
+:where(.mbx-console :is(svg, img)) {
   display: block;
   vertical-align: middle;
 }
-:where(.mbx-console) :is(input, select, textarea) {
+:where(.mbx-console :is(input, select, textarea)) {
   font: inherit;
   color: inherit;
 }
-:where(.mbx-console) button {
+:where(.mbx-console select) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%236B7470' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  background-size: 12px 12px;
+}
+:where(.mbx-console input[type="checkbox"]) {
+  accent-color: var(--primary);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+:where(.mbx-console button) {
   background: none;
-  border: 0;
+  border-width: 0;
+  border-style: solid;
+  border-color: var(--border);
   padding: 0;
   margin: 0;
   color: inherit;
@@ -57,15 +67,196 @@
   cursor: pointer;
   text-align: inherit;
 }
-:where(.mbx-console) table {
+:where(.mbx-console table) {
   border-collapse: collapse;
   width: 100%;
 }
-:where(.mbx-console) :is(th, td) {
+:where(.mbx-console :is(th, td)) {
   padding: 0;
   text-align: left;
   font-weight: inherit;
 }
+
+@tailwind utilities;
+
+:root {
+  --mbx-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --mbx-sidebar-w: 256px;
+  --mbx-rail-w: 60px;
+}
+
+/* ---------- Appembly Calm UI Shell & Collapsible Sidebar (256px ↔ 60px Rail) ---------- */
+.mbx-app-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: var(--background);
+}
+
+.mbx-sidebar-wrap {
+  width: var(--mbx-sidebar-w);
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mbx-sidebar-wrap.collapsed {
+  width: var(--mbx-rail-w);
+}
+
+.mbx-sidebar-fixed {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--mbx-sidebar-w);
+  z-index: 30;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+  transition: width 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.mbx-sidebar-fixed.collapsed {
+  width: var(--mbx-rail-w);
+}
+
+.mbx-topbar {
+  height: 60px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  -webkit-backdrop-filter: saturate(160%) blur(12px);
+}
+
+/* Expanded Sidebar Mode (Flat Section Headers + Single Active Pill) */
+.mbx-sb-head {
+  height: 60px;
+  padding: 0 14px 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.mbx-sb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mbx-sb-icon-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--placeholder);
+  transition: background 0.12s, color 0.12s;
+}
+.mbx-sb-icon-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: var(--foreground);
+}
+.mbx-sb-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mbx-sb-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--placeholder);
+  padding: 18px 12px 6px;
+}
+.mbx-sb-item {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  font-size: 14px;
+  font-weight: 450;
+  color: var(--muted-foreground);
+  background: transparent;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.mbx-sb-item:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  color: var(--foreground);
+}
+.mbx-sb-item.active {
+  background: color-mix(in srgb, var(--primary) 13%, var(--card));
+  color: var(--foreground);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 0 var(--primary);
+}
+.mbx-sb-item.active svg {
+  color: var(--primary);
+}
+
+/* Collapsed 60px Mini Icon Rail Mode */
+.mbx-sb-rail {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+}
+.mbx-sb-rail-div {
+  width: 22px;
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+  flex-shrink: 0;
+}
+.mbx-sb-rail-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--placeholder);
+  transition: background 0.14s, color 0.14s;
+}
+.mbx-sb-rail-btn:hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.mbx-sb-rail-btn.active {
+  background: color-mix(in srgb, var(--primary) 15%, var(--card));
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+.mbx-sb-rail-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+}
+
 .mbx-mono {
   font-family: var(--font-mono);
   font-size: 0.92em;
@@ -75,7 +266,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Surfaces ---------- */
+/* ---------- Surfaces & Selectable Master-Detail List Items ---------- */
 .mbx-card {
   background: var(--card);
   border: 1px solid var(--border);
@@ -88,6 +279,29 @@
 .mbx-active {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--foreground);
+}
+.mbx-list-item {
+  position: relative;
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.mbx-list-item:last-child {
+  border-bottom-left-radius: 13px;
+  border-bottom-right-radius: 13px;
+}
+.mbx-list-item:hover {
+  background: color-mix(in srgb, var(--foreground) 3.5%, transparent);
+}
+.mbx-list-item[data-active="true"] {
+  background: var(--accent);
+  box-shadow: inset 3px 0 0 0 var(--primary);
+}
+html.dark .mbx-list-item[data-active="true"] {
+  background: color-mix(in srgb, var(--primary) 16%, var(--card));
+  box-shadow: inset 3px 0 0 0 var(--primary);
 }
 .mbx-scroll::-webkit-scrollbar {
   width: 8px;

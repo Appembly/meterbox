@@ -287,10 +287,34 @@ export function saveSauthenSession(payload: SauthenAuthPayload) {
   }
 }
 
+function isSauthenJwtExpired(rawToken?: string): boolean {
+  if (!rawToken || typeof rawToken !== 'string') return true;
+  const clean = rawToken.trim().replace(/^st_(sess|agt)_/, '');
+  const parts = clean.split('.');
+  if (parts.length !== 3) return true;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { exp?: number };
+    if (typeof payload.exp === 'number' && payload.exp > 0) {
+      return Math.floor(Date.now() / 1000) >= payload.exp - 5;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export function loadSauthenSession(): SauthenAuthPayload | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as SauthenAuthPayload) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SauthenAuthPayload;
+    if (isSauthenJwtExpired(parsed?.access_token)) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -454,12 +478,16 @@ export interface SauthenAuthCardProps {
   onCancel?: () => void;
 }
 
-const DEMO_ACCOUNTS = [
-  { id: 'usr_aria_dev', name: 'Aria Lin', email: 'aria@demo-ai.dev', role: 'org:owner' },
-  { id: 'usr_demo_architect', name: 'Alex Mercer', email: 'alex@appembly.dev', role: 'org:owner' },
-  { id: 'usr_elena_finops', name: 'Elena Rostova', email: 'elena@appembly.dev', role: 'meterbox:finops' },
-  { id: 'usr_marcus_sec', name: 'Marcus Vance', email: 'marcus@appembly.dev', role: 'sauthen:secops' },
-];
+export const DEMO_ACCOUNT = {
+  id: 'usr_demo_ai',
+  name: 'Aria Lin · Demo AI',
+  email: 'demo@demo-ai.dev',
+  orgName: 'Demo AI',
+  namespace: 'ns_live_demo',
+  role: 'org:owner',
+};
+
+const DEMO_ACCOUNTS = [DEMO_ACCOUNT];
 
 export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
   brand = 'sauthen',
@@ -470,7 +498,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
   redirectUri,
   showAppSwitcher = false,
   allowBrandSwitch = false,
-  showDemoAccounts = false,
+  showDemoAccounts = true,
   onSuccess,
   onAuthenticated,
   onCancel,
@@ -519,10 +547,11 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
     }
   };
 
-  const handleSignIn = async (method: string, overrideEmail?: string) => {
+  const handleSignIn = async (method: string, overrideEmail?: string, overrideNamespace?: string) => {
     setBusy(true);
     setError(null);
     const targetEmail = (overrideEmail || email).trim();
+    const targetNamespace = overrideNamespace || namespace;
     if (!targetEmail) {
       setError('Enter your work email.');
       setBusy(false);
@@ -534,7 +563,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          'X-OpenMeter-Namespace': namespace,
+          'X-OpenMeter-Namespace': targetNamespace,
         },
         body: JSON.stringify({
           email: targetEmail,
@@ -841,34 +870,24 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
 
                 {showDemoAccounts && (
                   <div className="sag-demo">
-                    <span className="sag-demo-label">Demo accounts</span>
-                    <div className="sag-demo-row">
-                      {DEMO_ACCOUNTS.map((acc) => (
-                        <button
-                          key={acc.id}
-                          type="button"
-                          disabled={busy}
-                          className="sag-chip"
-                          title={`${acc.email} · ${acc.role}`}
-                          onClick={() => {
-                            setEmail(acc.email);
-                            handleSignIn('passkey', acc.email);
-                          }}
-                        >
-                          <span className="sag-avatar">
-                            {acc.name
-                              .split(' ')
-                              .map((p) => p[0])
-                              .join('')
-                              .slice(0, 2)}
-                          </span>
-                          <span className="sag-chip-text">
-                            <span className="sag-chip-name">{acc.name.split(' ')[0]}</span>
-                            <span className="sag-chip-role sag-mono">{acc.role}</span>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="sag-demo-btn"
+                      title={`${DEMO_ACCOUNT.email} · Isolated Demo AI workspace (${DEMO_ACCOUNT.namespace})`}
+                      onClick={() => {
+                        setEmail(DEMO_ACCOUNT.email);
+                        handleSignIn('passkey', DEMO_ACCOUNT.email, DEMO_ACCOUNT.namespace);
+                      }}
+                    >
+                      <span className="sag-demo-btn-left">
+                        <Sparkles size={15} />
+                        <span>Try interactive demo</span>
+                      </span>
+                      <span className="sag-demo-btn-meta sag-mono">
+                        {DEMO_ACCOUNT.orgName} · {DEMO_ACCOUNT.email}
+                      </span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -1723,15 +1742,14 @@ const SAG_CSS = `
 .sag-input:focus{border-color:var(--sag-accent);box-shadow:0 0 0 3px var(--sag-accent-soft);background:var(--sag-card)}
 .sag-sso-link{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:14px;border:0;background:none;color:var(--sag-muted);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
 .sag-sso-link:hover{color:var(--sag-text)}
-.sag-demo{margin-top:20px;padding-top:16px;border-top:1px dashed var(--sag-border)}
-.sag-demo-label{display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sag-faint);margin-bottom:8px}
-.sag-demo-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.sag-chip{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 8px;border-radius:10px;border:1px solid var(--sag-border);background:transparent;color:var(--sag-text);font:inherit;cursor:pointer;text-align:left;transition:border-color .15s,background .15s}
-.sag-chip:hover{border-color:color-mix(in srgb,var(--sag-accent) 50%,var(--sag-border));background:var(--sag-accent-soft)}
-.sag-avatar{width:24px;height:24px;border-radius:7px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;background:var(--sag-input);border:1px solid var(--sag-border);color:var(--sag-text)}
-.sag-chip-text{display:flex;flex-direction:column;min-width:0;line-height:1.2}
-.sag-chip-name{font-size:12px;font-weight:600}
-.sag-chip-role{font-size:9.5px;color:var(--sag-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sag-demo{margin-top:18px;padding-top:16px;border-top:1px dashed var(--sag-border)}
+.sag-demo-btn{width:100%;min-height:42px;padding:8px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--sag-accent) 38%,var(--sag-border));background:var(--sag-accent-soft);color:var(--sag-text);font:inherit;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:border-color .15s,filter .15s,transform .06s}
+.sag-demo-btn:hover{border-color:var(--sag-accent);filter:brightness(1.05)}
+.sag-demo-btn:active{transform:translateY(1px)}
+.sag-demo-btn:disabled{opacity:.6;cursor:progress}
+.sag-demo-btn-left{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:650}
+.sag-demo-btn-left svg{color:var(--sag-accent);flex-shrink:0}
+.sag-demo-btn-meta{font-size:10.5px;color:var(--sag-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sag-org{border:1px solid var(--sag-border);border-radius:12px;background:var(--sag-input);overflow:hidden;transition:border-color .15s}
 .sag-org[data-open=true]{border-color:color-mix(in srgb,var(--sag-accent) 35%,var(--sag-border))}
 .sag-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;cursor:pointer}
