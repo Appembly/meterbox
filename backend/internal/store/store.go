@@ -1125,6 +1125,53 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 	}
 	s.subscriptions[subRecord.ID] = subRecord
 
+	demoInv := models.Invoice{
+		ID:                   s.NextID("inv"),
+		Namespace:            ns,
+		SubjectKey:           sub1.Key,
+		PlanSlug:             proPlan.Slug,
+		Currency:             "USD",
+		SubtotalCents:        24675,
+		CreditsAppliedCents:  1250,
+		TaxCents:             0,
+		TotalCents:           23425,
+		Status:               "synced_stripe",
+		StripeInvoiceID:      fmt.Sprintf("in_stripe_hyperion_%s_01", ns),
+		LineItems: []models.InvoiceLineItem{
+			{
+				Description:    "AI Scale Hybrid ($199/mo + Graduated Tokens & GPU) — Base Subscription (MONTH)",
+				Quantity:       1,
+				IncludedUnits:  0,
+				BillableUnits:  1,
+				UnitPriceCents: 19900,
+				AmountCents:    19900,
+			},
+			{
+				Description:    "LLM Token Consumption (graduated)",
+				MeterSlug:      "llm_tokens_total",
+				Quantity:       62700,
+				IncludedUnits:  25000,
+				BillableUnits:  37700,
+				UnitPriceCents: 0.05,
+				AmountCents:    1885,
+			},
+			{
+				Description:    "H100 GPU Compute Seconds (flat_per_unit)",
+				MeterSlug:      "gpu_compute_seconds",
+				Quantity:       440,
+				IncludedUnits:  100,
+				BillableUnits:  340,
+				UnitPriceCents: 8.5,
+				AmountCents:    2890,
+			},
+		},
+		PeriodStart: periodStart,
+		PeriodEnd:   periodStart.AddDate(0, 1, 0),
+		IssuedAt:    now.Add(-2 * time.Hour),
+		CreatedAt:   now.Add(-2 * time.Hour),
+	}
+	s.invoices[demoInv.ID] = demoInv
+
 	// 5. Seed initial CloudEvents so charts, Cost Intelligence, and PostHog profiles are immediately live
 	sampleEvents := []models.CloudEvent{
 		{
@@ -3255,6 +3302,62 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 		s.seedNamespaceEntities("ns_test_demo", periodStart, now)
 		s.seedPaymentOrchestrationEntities("ns_live_demo", now)
 		s.seedPaymentOrchestrationEntities("ns_test_demo", now)
+		dirty = true
+	}
+	hasDemoInvoice := false
+	for _, inv := range s.invoices {
+		if inv.Namespace == "ns_live_demo" {
+			hasDemoInvoice = true
+			break
+		}
+	}
+	if !hasDemoInvoice {
+		demoInv := models.Invoice{
+			ID:                   s.NextID("inv"),
+			Namespace:            "ns_live_demo",
+			SubjectKey:           "cust_hyperion_labs",
+			PlanSlug:             "ai_scale_hybrid",
+			Currency:             "USD",
+			SubtotalCents:        24675,
+			CreditsAppliedCents:  1250,
+			TaxCents:             0,
+			TotalCents:           23425,
+			Status:               "synced_stripe",
+			StripeInvoiceID:      "in_stripe_hyperion_ns_live_demo_01",
+			LineItems: []models.InvoiceLineItem{
+				{
+					Description:    "AI Scale Hybrid ($199/mo + Graduated Tokens & GPU) — Base Subscription (MONTH)",
+					Quantity:       1,
+					IncludedUnits:  0,
+					BillableUnits:  1,
+					UnitPriceCents: 19900,
+					AmountCents:    19900,
+				},
+				{
+					Description:    "LLM Token Consumption (graduated)",
+					MeterSlug:      "llm_tokens_total",
+					Quantity:       62700,
+					IncludedUnits:  25000,
+					BillableUnits:  37700,
+					UnitPriceCents: 0.05,
+					AmountCents:    1885,
+				},
+				{
+					Description:    "H100 GPU Compute Seconds (flat_per_unit)",
+					MeterSlug:      "gpu_compute_seconds",
+					Quantity:       440,
+					IncludedUnits:  100,
+					BillableUnits:  340,
+					UnitPriceCents: 8.5,
+					AmountCents:    2890,
+				},
+			},
+			PeriodStart: periodStart,
+			PeriodEnd:   periodStart.AddDate(0, 1, 0),
+			IssuedAt:    now.Add(-2 * time.Hour),
+			CreatedAt:   now.Add(-2 * time.Hour),
+		}
+		s.invoices[demoInv.ID] = demoInv
 		dirty = true
 	}
 
