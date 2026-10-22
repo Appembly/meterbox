@@ -24,6 +24,16 @@
   --ui-accent: #4E8067;
   --ui-accent-fg: #F6F7F5;
 
+  /* Brand Mark Adaptive Tokens (Light Mode) */
+  --mbx-mark-arch-1: #569475;
+  --mbx-mark-arch-2: #234233;
+  --mbx-mark-arch-3: #9FA9A3;
+  --mbx-mark-ink: #111618;
+  --sth-mark-top-hi: #C6CCDE;
+  --sth-mark-top-mid: #A3ABBF;
+  --sth-mark-top-lo: #838CA4;
+  --sth-mark-top-bevel: #717A94;
+
   /* Aliases */
   --appembly-bg: var(--ui-bg-canvas);
   --appembly-surface: var(--ui-bg-surface);
@@ -46,6 +56,16 @@
   --ui-text-muted: #A9AFAB;
   --ui-accent: #5C9679;
   --ui-accent-fg: #111618;
+
+  /* Brand Mark Adaptive Tokens (Dark Mode) */
+  --mbx-mark-arch-1: #66BD8E;
+  --mbx-mark-arch-2: #4A8065;
+  --mbx-mark-arch-3: #2B4F3E;
+  --mbx-mark-ink: #F4F6F4;
+  --sth-mark-top-hi: #F6F7F5;
+  --sth-mark-top-mid: #DCE0EC;
+  --sth-mark-top-lo: #AEB5C9;
+  --sth-mark-top-bevel: #9AA2BA;
 
   /* Aliases */
   --appembly-bg: var(--ui-bg-canvas);

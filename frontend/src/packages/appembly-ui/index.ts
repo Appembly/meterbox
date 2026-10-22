@@ -1,6 +1,7 @@
 export * from './types';
 export * from './context/ThemeContext';
 export * from './components/brand/AppemblyLogo';
+export * from './components/brand/AdapptyIcon';
 export * from './components/brand/CyclodeIcon';
 export * from './components/brand/MeterboxIcon';
 export * from './components/brand/SauthenIcon';

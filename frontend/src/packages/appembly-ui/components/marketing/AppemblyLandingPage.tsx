@@ -23,6 +23,7 @@ import {
   AppemblyLogo,
   orthoLoopsToSvgPath,
 } from '../brand/AppemblyLogo';
+import { AdapptyIcon } from '../brand/AdapptyIcon';
 import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
 import { SauthenIcon } from '../brand/SauthenIcon';
@@ -48,9 +49,9 @@ export interface AppemblyLandingPageProps {
 /* -------------------------------------------------------------------------- */
 
 const DEFAULT_CONTACT_EMAIL = 'hello@appembly.com';
-const SHOT_CYCLODE = '/showcase/cyclode-workstation.png';
-const SHOT_METERBOX = '/showcase/meterbox-control-plane.png?v=2';
-const SHOT_SAUTHEN = '/showcase/sauthen-trust-graph.png?v=2';
+const SHOT_CYCLODE = '/showcase/cyclode-workstation.png?v=3';
+const SHOT_METERBOX = '/showcase/meterbox-control-plane.png?v=3';
+const SHOT_SAUTHEN = '/showcase/sauthen-trust-graph.png?v=3';
 const SHOT_WIDTH = 1024;
 const SHOT_HEIGHT = 585;
 
@@ -89,7 +90,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Sandboxed previews, terminal and diffs side by side',
     ],
     accentColor: '#4E8067',
-    icon: <CyclodeIcon monochrome className="w-[24px] h-[24px]" />,
+    icon: <CyclodeIcon className="w-[26px] h-[26px]" />,
   },
   {
     id: 'meterbox',
@@ -105,7 +106,7 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Rollups, dead-letter replay and Stripe invoicing',
     ],
     accentColor: '#4E8067',
-    icon: <MeterboxIcon className="w-[22px] h-[22px]" />,
+    icon: <MeterboxIcon className="w-[24px] h-[24px]" />,
   },
   {
     id: 'sauthen',
@@ -121,7 +122,19 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
       'Zero-knowledge LLM vault proxy & human step-up approval gates',
     ],
     accentColor: '#4E8067',
-    icon: <SauthenIcon className="w-[22px] h-[22px]" />,
+    icon: <SauthenIcon className="w-[24px] h-[24px]" />,
+  },
+  {
+    id: 'adappty',
+    name: 'Adappty',
+    status: 'soon',
+    categoryLabel: 'Autonomic Operations',
+    tagline: 'Adaptive, self-healing and evolving production systems.',
+    description:
+      'Tune runtime knobs within hard bounds, execute verified remediation reflexes, and ship shadow-replayed cures.',
+    capabilities: [],
+    accentColor: '#4E8067',
+    icon: <AdapptyIcon className="w-[22px] h-[22px]" />,
   },
   {
     id: 'valiscale',
@@ -199,7 +212,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'Chat with an agent that understands your whole repository, while docs, terminal, previews and diffs sit right beside the conversation.',
     image: SHOT_CYCLODE,
     accent: '#4E8067',
-    icon: <CyclodeIcon compact monochrome className="w-[18px] h-[18px]" />,
+    icon: <CyclodeIcon compact className="w-[20px] h-[20px]" />,
     bullets: [
       'Step-by-step reasoning and auditable actions',
       'Web & Docs reader that can operate live pages',
@@ -219,7 +232,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'A live metering pipeline — from scoped keys to deduplication, rollups and invoicing — designed so usage is never dropped or billed twice.',
     image: SHOT_METERBOX,
     accent: '#4E8067',
-    icon: <MeterboxIcon compact className="w-[18px] h-[18px]" />,
+    icon: <MeterboxIcon compact className="w-[20px] h-[20px]" />,
     bullets: [
       'CloudEvents ingestion with idempotent deduplication',
       'Edge quota checks and prepaid credit burndown',
@@ -239,7 +252,7 @@ const SHOWCASE: ShowcaseItem[] = [
       'Unified OIDC & Passkey sign-in for humans, 15-minute RFC 8693 scoped tokens for agents, an AES-256-GCM secret vault, and human step-up gates.',
     image: SHOT_SAUTHEN,
     accent: '#4E8067',
-    icon: <SauthenIcon className="w-[18px] h-[18px]" />,
+    icon: <SauthenIcon className="w-[20px] h-[20px]" />,
     bullets: [
       'Ed25519 OIDC sessions & 1:1 Meterbox namespace provisioning',
       'RFC 8693 scoped agent tokens with 15-minute TTLs',
@@ -905,7 +918,7 @@ const ProductMarquee: React.FC = () => {
         <div className="inline-flex items-center gap-3 text-[12.5px] font-medium text-[var(--ui-text-muted)] shrink-0 md:w-64">
           <AppemblyLogo variant="app-icon" size={28} animated />
           <span>
-            One ecosystem. Seven products.
+            One ecosystem. Eight products.
             <br className="hidden md:block" /> One shared foundation.
           </span>
         </div>
@@ -987,8 +1000,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                       className="w-full flex items-center gap-3 text-left cursor-pointer"
                     >
                       <span
-                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: item.accent }}
+                        className="w-9 h-9 rounded-xl flex items-center justify-center bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)] shrink-0"
                       >
                         {item.icon}
                       </span>
@@ -1116,8 +1128,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
             >
               <div className="flex items-center justify-between">
                 <span
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
-                  style={{ backgroundColor: product.accentColor }}
+                  className="w-12 h-12 rounded-xl flex items-center justify-center bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)] shadow-sm transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
                 >
                   {product.icon}
                 </span>
@@ -1165,14 +1176,18 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
         </h3>
         <span className="h-px flex-1 bg-[var(--ui-border)]" />
       </Reveal>
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-5">
         {SOON_PRODUCTS.map((product, idx) => (
-          <Reveal key={product.id} delay={idx * 80}>
+          <Reveal
+            key={product.id}
+            delay={idx * 80}
+            className={idx < 2 ? 'lg:col-span-3' : 'lg:col-span-2'}
+          >
             <article className="ap-lift group h-full rounded-3xl border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/60 p-6 flex flex-col hover:bg-[var(--ui-bg-surface)]">
               <div className="flex items-center justify-between">
                 <span
-                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: `${product.accentColor}1F`, color: product.accentColor }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)]"
+                  style={{ color: product.accentColor }}
                 >
                   {product.icon}
                 </span>
@@ -1199,7 +1214,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
   </section>
 );
 
-/** Animated hub diagram: Appembly core → shared foundation → six products (beta products animate). */
+/** Animated hub diagram: Appembly core → shared foundation → seven products (beta products animate). */
 const PlatformDiagram: React.FC = () => {
   const [ref, inView] = useInView<HTMLDivElement>(0.25);
   const cx = 320;
@@ -1209,7 +1224,7 @@ const PlatformDiagram: React.FC = () => {
     const angle = (-90 + i * (360 / outerProducts.length)) * (Math.PI / 180);
     return { ...p, x: cx + Math.cos(angle) * 236, y: cy + Math.sin(angle) * 178 };
   });
-  // Foundation nodes sit at 0°/180° — symmetrically between the product flow lines (every 60° from -90°).
+  // Foundation nodes sit at 0°/180° — symmetrically between the product flow lines.
   const foundation = FOUNDATION.map((f, i) => {
     const angle = (i * (360 / FOUNDATION.length)) * (Math.PI / 180);
     return { ...f, x: cx + Math.cos(angle) * 108, y: cy + Math.sin(angle) * 92 };
@@ -1217,7 +1232,7 @@ const PlatformDiagram: React.FC = () => {
 
   return (
     <div ref={ref} className={inView ? 'is-visible' : ''}>
-      <svg viewBox="0 0 640 480" className="w-full h-auto" role="img" aria-label="Appembly platform architecture: a shared core and foundation connecting six products">
+      <svg viewBox="0 0 640 480" className="w-full h-auto" role="img" aria-label="Appembly platform architecture: a shared core and foundation connecting seven products">
         <defs>
           <radialGradient id="ap-core-glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#4E8067" stopOpacity="0.45" />

@@ -202,10 +202,10 @@
   color: var(--foreground);
 }
 .mbx-sb-item.active {
-  background: color-mix(in srgb, var(--primary) 13%, var(--card));
+  background: color-mix(in srgb, var(--primary) 12%, var(--card));
   color: var(--foreground);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 0 var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent);
 }
 .mbx-sb-item.active svg {
   color: var(--primary);
@@ -296,12 +296,10 @@
   background: color-mix(in srgb, var(--foreground) 3.5%, transparent);
 }
 .mbx-list-item[data-active="true"] {
-  background: var(--accent);
-  box-shadow: inset 3px 0 0 0 var(--primary);
+  background: color-mix(in srgb, var(--primary) 10%, var(--card));
 }
 html.dark .mbx-list-item[data-active="true"] {
   background: color-mix(in srgb, var(--primary) 16%, var(--card));
-  box-shadow: inset 3px 0 0 0 var(--primary);
 }
 .mbx-scroll::-webkit-scrollbar {
   width: 8px;
