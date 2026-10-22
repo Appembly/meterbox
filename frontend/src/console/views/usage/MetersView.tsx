@@ -61,7 +61,13 @@ export const MetersView: React.FC = () => {
 
   const timeFmt = useMemo(() => {
     const opts: Intl.DateTimeFormatOptions =
-      range === "24h" ? { hour: "numeric" } : range === "7d" ? { weekday: "short", hour: "numeric" } : { month: "short", day: "numeric" };
+      range === "1h" || range === "6h"
+        ? { hour: "numeric", minute: "2-digit" }
+        : range === "24h"
+        ? { hour: "numeric" }
+        : range === "7d"
+        ? { weekday: "short", hour: "numeric" }
+        : { month: "short", day: "numeric" };
     const axis = new Intl.DateTimeFormat("en-US", range === "7d" ? { weekday: "short" } : opts);
     const tip = new Intl.DateTimeFormat("en-US", range === "30d" ? { dateStyle: "medium" } : { dateStyle: "medium", timeStyle: "short" });
     return { axis: (t: number) => axis.format(t), tip: (t: number) => tip.format(t) };
@@ -373,17 +379,17 @@ export const MetersView: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Aggregation">
-              <select
+              <Select
+                mono
                 value={agg}
                 onChange={(e) => setAgg(e.target.value as Meter["aggregation"])}
-                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 <option value="SUM">SUM</option>
                 <option value="COUNT">COUNT</option>
                 <option value="AVG">AVG</option>
                 <option value="UNIQUE_COUNT">UNIQUE_COUNT</option>
                 <option value="MAX">MAX</option>
-              </select>
+              </Select>
             </Field>
 
             <Field label="CloudEvents type" hint="Matches event.type">

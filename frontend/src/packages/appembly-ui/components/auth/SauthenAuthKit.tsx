@@ -103,7 +103,12 @@ export interface SauthenAuthPayload {
 }
 
 const STORAGE_KEY = 'sth.auth.session.v2';
-const DEFAULT_SAUTHEN_API = 'http://localhost:6021';
+const DEFAULT_SAUTHEN_API =
+  typeof window !== 'undefined' &&
+  window.location.hostname !== 'localhost' &&
+  window.location.hostname !== '127.0.0.1'
+    ? 'https://auth.appembly.com'
+    : 'http://localhost:6021';
 
 export const SAUTHEN_BRAND_PRESETS: Record<SauthenPresetApp, SauthenBrandConfig> = {
   cyclode: {

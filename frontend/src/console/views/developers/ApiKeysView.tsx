@@ -18,6 +18,7 @@ import {
   Pagination,
   Pill,
   ProgressBar,
+  Select,
   Skeleton,
   Tone,
   usePagination,
@@ -267,17 +268,18 @@ export const ApiKeysView: React.FC = () => {
             }
             subtitle="Read-only tenant-locked payload returned by GET /api/portal/v1/summary"
             actions={
-              <select
+              <Select
+                size="sm"
                 value={portalSubject}
                 onChange={(e) => setPortalSubject(e.target.value)}
-                className="h-7 px-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[12px]"
+                className="min-w-[160px]"
               >
                 {snapshot.subjects.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.display_name}
+                    {s.display_name} ({s.key})
                   </option>
                 ))}
-              </select>
+              </Select>
             }
           />
           <div className="flex-1">
@@ -351,30 +353,28 @@ export const ApiKeysView: React.FC = () => {
             />
           </Field>
           <Field label="Permission scope">
-            <select
+            <Select
               value={keyScope}
               onChange={(e) => setKeyScope(e.target.value as APIKey["scope"])}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               <option value="ingest">ingest (mb_ing_*) — Write-only CloudEvents & PostHog</option>
               <option value="entitlement">entitlement (mb_ent_*) — Sub-5ms edge quota checks</option>
               <option value="portal">portal (mb_portal_*) — Customer-locked read-only portal</option>
               <option value="admin">admin (mb_sk_*) — Full control-plane administration</option>
-            </select>
+            </Select>
           </Field>
           {keyScope === "portal" && (
             <Field label="Locked customer subject" hint="Portal token can only read this customer">
-              <select
+              <Select
                 value={keySubject}
                 onChange={(e) => setKeySubject(e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
               >
                 {snapshot.subjects.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.display_name} ({s.key})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           )}
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">

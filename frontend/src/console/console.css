@@ -449,6 +449,76 @@ html.dark .mbx-list-item[data-active="true"] {
   }
 }
 
+/* ---------- Modal Dialog Cards & Form Controls ---------- */
+.mbx-dialog {
+  box-shadow:
+    0 24px 64px -12px rgba(10, 16, 14, 0.28),
+    0 4px 16px -2px rgba(10, 16, 14, 0.1),
+    0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.mbx-dialog input:not([type="checkbox"]):not([type="radio"]),
+.mbx-dialog select,
+.mbx-dialog textarea,
+.mbx-control {
+  background: color-mix(in srgb, var(--surface-subtle) 42%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--foreground) 13%, var(--border));
+  border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(17, 22, 24, 0.03);
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.mbx-dialog input:not([type="checkbox"]):not([type="radio"]),
+.mbx-dialog select {
+  height: 38px;
+}
+
+.mbx-dialog input:not([type="checkbox"]):not([type="radio"]):hover,
+.mbx-dialog select:hover,
+.mbx-dialog textarea:hover,
+.mbx-control:hover {
+  border-color: color-mix(in srgb, var(--foreground) 22%, var(--border));
+}
+
+.mbx-dialog input:not([type="checkbox"]):not([type="radio"]):focus,
+.mbx-dialog select:focus,
+.mbx-dialog textarea:focus,
+.mbx-control:focus {
+  outline: none;
+  background: var(--card);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 15%, transparent);
+}
+
+/* Custom SVG Chevron for Select controls */
+.mbx-console select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B7470' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  background-size: 14px 14px;
+}
+
+/* Remove raw browser spin buttons inside modal number inputs */
+.mbx-dialog input[type="number"]::-webkit-inner-spin-button,
+.mbx-dialog input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.mbx-dialog input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Grounded architectural footer bar for modal forms */
+.mbx-dialog form > div.border-t:last-child {
+  margin: 20px -24px -20px;
+  padding: 14px 24px;
+  background: color-mix(in srgb, var(--surface-subtle) 68%, var(--card));
+  border-top: 1px solid var(--border);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mbx-enter,
   .mbx-pop,

@@ -553,8 +553,8 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 		ID:              s.NextID("pln"),
 		Namespace:       ns,
 		Slug:            "appembly_autonomous_pro",
-		Name:            "Appembly Autonomous Pro ($299/mo + Token & Sandbox Usage)",
-		Description:     "Includes 5M LLM tokens across Cyclode, Swarmteam & Valiscale with graduated overage",
+		Name:            "Appembly Autonomous Pro ($299/mo + Token & Graviton Sandbox Usage)",
+		Description:     "Includes 5M LLM tokens & 50 hrs (180,000s) of AWS Graviton sandbox compute across Cyclode, Swarmteam & Valiscale",
 		Currency:        "USD",
 		BasePriceCents:  29900,
 		BillingCadence:  "MONTH",
@@ -574,11 +574,11 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 			{
 				FeatureKey:       "sandbox_compute",
 				MeterSlug:        "sandbox_compute_seconds",
-				Name:             "Isolated Docker Sandbox Seconds",
+				Name:             "AWS Graviton Sandbox Seconds (2 vCPU / 4 GB)",
 				PricingModel:     "flat_per_unit",
-				IncludedQuantity: 3600,
+				IncludedQuantity: 180000,
 				Tiers: []models.RateCardTier{
-					{UpToAmount: nil, UnitPriceCents: 1.2, FlatFeeCents: 0},
+					{UpToAmount: nil, UnitPriceCents: 0.009, FlatFeeCents: 0},
 				},
 			},
 		},
@@ -689,6 +689,45 @@ func (s *MultiTenantStore) seedAppemblyNamespaceEntities(ns string, periodStart,
 			Namespace:   ns,
 			IngestedAt:  now.Add(-15 * time.Minute),
 			StoredAt:    now.Add(-15 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_sbx_cyclode_01", ns),
+			Source:      "urn:appembly:cyclode:graviton-sandbox",
+			Type:        "infra.sandbox.seconds",
+			Subject:     subCyclode.Key,
+			Time:        now.Add(-80 * time.Minute),
+			Data:        map[string]interface{}{"duration_sec": 1840.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "IssueResolver", "tool": "sandbox_exec"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-80 * time.Minute),
+			StoredAt:    now.Add(-80 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_sbx_swarm_01", ns),
+			Source:      "urn:appembly:swarmteam:graviton-sandbox",
+			Type:        "infra.sandbox.seconds",
+			Subject:     subSwarm.Key,
+			Time:        now.Add(-42 * time.Minute),
+			Data:        map[string]interface{}{"duration_sec": 3120.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "ArchitectPod", "tool": "worktree_pod"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-42 * time.Minute),
+			StoredAt:    now.Add(-42 * time.Minute),
+			Lane:        "realtime",
+		},
+		{
+			SpecVersion: "1.0",
+			ID:          fmt.Sprintf("evt_seed_%s_sbx_valiscale_01", ns),
+			Source:      "urn:appembly:valiscale:graviton-sandbox",
+			Type:        "infra.sandbox.seconds",
+			Subject:     subValiscale.Key,
+			Time:        now.Add(-12 * time.Minute),
+			Data:        map[string]interface{}{"duration_sec": 960.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "RapidPrototyper", "tool": "preview_sandbox"},
+			Namespace:   ns,
+			IngestedAt:  now.Add(-12 * time.Minute),
+			StoredAt:    now.Add(-12 * time.Minute),
 			Lane:        "realtime",
 		},
 		{
@@ -1104,7 +1143,7 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 				PricingModel:     "flat_per_unit",
 				IncludedQuantity: 100,
 				Tiers: []models.RateCardTier{
-					{UpToAmount: nil, UnitPriceCents: 8.5, FlatFeeCents: 0},
+					{UpToAmount: nil, UnitPriceCents: 0.11, FlatFeeCents: 0},
 				},
 			},
 		},
@@ -1131,10 +1170,10 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 		SubjectKey:           sub1.Key,
 		PlanSlug:             proPlan.Slug,
 		Currency:             "USD",
-		SubtotalCents:        24675,
+		SubtotalCents:        21822,
 		CreditsAppliedCents:  1250,
 		TaxCents:             0,
-		TotalCents:           23425,
+		TotalCents:           20572,
 		Status:               "synced_stripe",
 		StripeInvoiceID:      fmt.Sprintf("in_stripe_hyperion_%s_01", ns),
 		LineItems: []models.InvoiceLineItem{
@@ -1161,8 +1200,8 @@ func (s *MultiTenantStore) seedNamespaceEntities(ns string, periodStart, now tim
 				Quantity:       440,
 				IncludedUnits:  100,
 				BillableUnits:  340,
-				UnitPriceCents: 8.5,
-				AmountCents:    2890,
+				UnitPriceCents: 0.11,
+				AmountCents:    37,
 			},
 		},
 		PeriodStart: periodStart,
@@ -2610,6 +2649,18 @@ func (s *MultiTenantStore) hydrateSubjectFromEventLocked(ev models.CloudEvent) {
 			ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
 			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+(toks/1_000_000.0)*ratePerM)*10000) / 10000
 		}
+	} else if ev.Type == "infra.sandbox.seconds" {
+		sec := extractMapFloat(ev.Data, "duration_sec")
+		if sec > 0 {
+			// AWS Graviton (c7g/m7g 2vCPU/4GB) upstream COGS: $0.0648/hr = $0.000018/sec (0.0018¢/sec)
+			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.000018)*10000) / 10000
+		}
+	} else if ev.Type == "infra.gpu.seconds" {
+		sec := extractMapFloat(ev.Data, "duration_sec")
+		if sec > 0 {
+			// H100 80GB wholesale COGS: $1.62/hr = $0.00045/sec (0.045¢/sec)
+			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.00045)*10000) / 10000
+		}
 	}
 
 	s.subjects[key] = sub
@@ -2719,13 +2770,13 @@ func (s *MultiTenantStore) ListAllGrants(ns, subjectFilter string) []models.Enti
 	return out
 }
 
-// GetCostIntelligence aggregates real-time AI token usage, provider cost, billed revenue, and gross margins
-// across token types (input, cached, reasoning, output), models, tools, personas, and subjects.
+// GetCostIntelligence aggregates real-time AI token usage, AWS Graviton / GPU sandbox compute,
+// provider COGS, billed revenue, and gross margins across models/runtimes, tools, personas, and subjects.
 func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenceReport {
 	s.mu.RLock()
 	eventsCopy := make([]models.CloudEvent, 0)
 	for _, ev := range s.events {
-		if ev.Namespace == ns && ev.Type == "ai.llm.tokens" {
+		if ev.Namespace == ns && (ev.Type == "ai.llm.tokens" || ev.Type == "infra.sandbox.seconds" || ev.Type == "infra.gpu.seconds") {
 			eventsCopy = append(eventsCopy, ev)
 		}
 	}
@@ -2745,12 +2796,15 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 	s.mu.RUnlock()
 
 	var totalTokens, inputTokens, cachedTokens, reasoningTokens, outputTokens float64
+	var sandboxSeconds, sandboxCostUSD, sandboxBilledUSD float64
 	var totalCostUSD float64
 
 	type aggBucket struct {
-		tokens  float64
-		costUSD float64
-		events  int
+		tokens         float64
+		sandboxSeconds float64
+		costUSD        float64
+		billedUSD      float64
+		events         int
 	}
 	byModel := make(map[string]*aggBucket)
 	byTool := make(map[string]*aggBucket)
@@ -2758,6 +2812,83 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 	bySubject := make(map[string]*aggBucket)
 
 	for _, ev := range eventsCopy {
+		if ev.Type == "infra.sandbox.seconds" || ev.Type == "infra.gpu.seconds" {
+			sec := extractMapFloat(ev.Data, "duration_sec")
+			if sec <= 0 {
+				continue
+			}
+			isGPU := ev.Type == "infra.gpu.seconds"
+			runtimeName := extractMapStr(ev.Data, "runtime", "gpu_class")
+			if runtimeName == "" {
+				if isGPU {
+					runtimeName = "nvidia-h100-80gb"
+				} else {
+					runtimeName = "graviton-c7g-2vcpu-4gb"
+				}
+			}
+			toolName := extractMapStr(ev.Data, "tool")
+			if toolName == "" {
+				if isGPU {
+					toolName = "gpu_container_exec"
+				} else {
+					toolName = "sandbox_exec"
+				}
+			}
+			personaName := extractMapStr(ev.Data, "persona")
+			if personaName == "" {
+				personaName = "AutonomousAgent"
+			}
+
+			// AWS Graviton (2vCPU/4GB): COGS $0.000018/s ($0.0648/hr), Billed $0.00009/s ($0.324/hr -> 80% margin)
+			// H100 GPU (80GB):         COGS $0.00045/s  ($1.62/hr),   Billed $0.0011/s  ($3.96/hr  -> 59% margin)
+			cogsPerSec := 0.000018
+			billedPerSec := 0.00009
+			if isGPU {
+				cogsPerSec = 0.00045
+				billedPerSec = 0.0011
+			}
+			evCost := sec * cogsPerSec
+			evBilled := sec * billedPerSec
+
+			sandboxSeconds += sec
+			sandboxCostUSD += evCost
+			sandboxBilledUSD += evBilled
+			totalCostUSD += evCost
+
+			if byModel[runtimeName] == nil {
+				byModel[runtimeName] = &aggBucket{}
+			}
+			byModel[runtimeName].sandboxSeconds += sec
+			byModel[runtimeName].costUSD += evCost
+			byModel[runtimeName].billedUSD += evBilled
+			byModel[runtimeName].events++
+
+			if byTool[toolName] == nil {
+				byTool[toolName] = &aggBucket{}
+			}
+			byTool[toolName].sandboxSeconds += sec
+			byTool[toolName].costUSD += evCost
+			byTool[toolName].billedUSD += evBilled
+			byTool[toolName].events++
+
+			if byPersona[personaName] == nil {
+				byPersona[personaName] = &aggBucket{}
+			}
+			byPersona[personaName].sandboxSeconds += sec
+			byPersona[personaName].costUSD += evCost
+			byPersona[personaName].billedUSD += evBilled
+			byPersona[personaName].events++
+
+			if bySubject[ev.Subject] == nil {
+				bySubject[ev.Subject] = &aggBucket{}
+			}
+			bySubject[ev.Subject].sandboxSeconds += sec
+			bySubject[ev.Subject].costUSD += evCost
+			bySubject[ev.Subject].billedUSD += evBilled
+			bySubject[ev.Subject].events++
+			continue
+		}
+
 		toks := extractMapFloat(ev.Data, "tokens")
 		if toks <= 0 {
 			continue
@@ -2793,6 +2924,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 
 		ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
 		evCost := (toks / 1_000_000.0) * ratePerM
+		evBilled := evCost * 2.65
 		totalCostUSD += evCost
 
 		if byModel[modelName] == nil {
@@ -2800,6 +2932,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		}
 		byModel[modelName].tokens += toks
 		byModel[modelName].costUSD += evCost
+		byModel[modelName].billedUSD += evBilled
 		byModel[modelName].events++
 
 		if byTool[toolName] == nil {
@@ -2807,6 +2940,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		}
 		byTool[toolName].tokens += toks
 		byTool[toolName].costUSD += evCost
+		byTool[toolName].billedUSD += evBilled
 		byTool[toolName].events++
 
 		if byPersona[personaName] == nil {
@@ -2814,6 +2948,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		}
 		byPersona[personaName].tokens += toks
 		byPersona[personaName].costUSD += evCost
+		byPersona[personaName].billedUSD += evBilled
 		byPersona[personaName].events++
 
 		if bySubject[ev.Subject] == nil {
@@ -2821,16 +2956,18 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		}
 		bySubject[ev.Subject].tokens += toks
 		bySubject[ev.Subject].costUSD += evCost
+		bySubject[ev.Subject].billedUSD += evBilled
 		bySubject[ev.Subject].events++
 	}
 
 	// Calculate cache savings vs uncached input rate ($3.00 / 1M tokens)
 	cacheSavingsUSD := (cachedTokens / 1_000_000.0) * (3.00 - 0.30)
 
-	// Billed revenue across active plan rate cards ($12.00 / 1M blended billable rate + base allocation share when subscribed)
-	totalBilledUSD := totalCostUSD * 2.65
-	if hasSubscriptions && totalTokens > 0 && totalBilledUSD < 45.0 {
-		totalBilledUSD = math.Round((49.0+totalCostUSD*2.4)*100) / 100
+	// Billed revenue across active plan rate cards (LLM token markup + Graviton/GPU sandbox billing + base allocation share)
+	llmCostUSD := totalCostUSD - sandboxCostUSD
+	totalBilledUSD := (llmCostUSD * 2.65) + sandboxBilledUSD
+	if hasSubscriptions && (totalTokens > 0 || sandboxSeconds > 0) && totalBilledUSD < 45.0 {
+		totalBilledUSD = math.Round((49.0+llmCostUSD*2.4+sandboxBilledUSD)*100) / 100
 	}
 	grossMarginPct := 0.0
 	if totalBilledUSD > 0 {
@@ -2840,10 +2977,12 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 	modelsOut := make([]models.DimensionCostBreakdown, 0, len(byModel))
 	for k, b := range byModel {
 		share := 0.0
-		if totalTokens > 0 {
+		if totalCostUSD > 0 {
+			share = math.Round((b.costUSD/totalCostUSD)*1000) / 10
+		} else if totalTokens > 0 {
 			share = math.Round((b.tokens/totalTokens)*1000) / 10
 		}
-		rev := math.Round(b.costUSD*2.65*10000) / 10000
+		rev := math.Round(b.billedUSD*10000) / 10000
 		margin := 0.0
 		if rev > 0 {
 			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
@@ -2858,12 +2997,14 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 			EventCount: b.events,
 		})
 	}
-	sort.Slice(modelsOut, func(i, j int) bool { return modelsOut[i].Tokens > modelsOut[j].Tokens })
+	sort.Slice(modelsOut, func(i, j int) bool { return modelsOut[i].CostUSD > modelsOut[j].CostUSD })
 
 	toolsOut := make([]models.DimensionCostBreakdown, 0, len(byTool))
 	for k, b := range byTool {
 		share := 0.0
-		if totalTokens > 0 {
+		if totalCostUSD > 0 {
+			share = math.Round((b.costUSD/totalCostUSD)*1000) / 10
+		} else if totalTokens > 0 {
 			share = math.Round((b.tokens/totalTokens)*1000) / 10
 		}
 		toolsOut = append(toolsOut, models.DimensionCostBreakdown{
@@ -2874,12 +3015,14 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 			EventCount: b.events,
 		})
 	}
-	sort.Slice(toolsOut, func(i, j int) bool { return toolsOut[i].Tokens > toolsOut[j].Tokens })
+	sort.Slice(toolsOut, func(i, j int) bool { return toolsOut[i].CostUSD > toolsOut[j].CostUSD })
 
 	personasOut := make([]models.DimensionCostBreakdown, 0, len(byPersona))
 	for k, b := range byPersona {
 		share := 0.0
-		if totalTokens > 0 {
+		if totalCostUSD > 0 {
+			share = math.Round((b.costUSD/totalCostUSD)*1000) / 10
+		} else if totalTokens > 0 {
 			share = math.Round((b.tokens/totalTokens)*1000) / 10
 		}
 		personasOut = append(personasOut, models.DimensionCostBreakdown{
@@ -2890,7 +3033,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 			EventCount: b.events,
 		})
 	}
-	sort.Slice(personasOut, func(i, j int) bool { return personasOut[i].Tokens > personasOut[j].Tokens })
+	sort.Slice(personasOut, func(i, j int) bool { return personasOut[i].CostUSD > personasOut[j].CostUSD })
 
 	subjectsOut := make([]models.SubjectMarginBreakdown, 0, len(bySubject))
 	for subjKey, b := range bySubject {
@@ -2902,7 +3045,7 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 		if hasSubscriptions {
 			baseFee = 29.0
 		}
-		rev := math.Round((baseFee+b.costUSD*2.5)*100) / 100
+		rev := math.Round((baseFee+b.billedUSD)*100) / 100
 		margin := 0.0
 		if rev > 0 {
 			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
@@ -2914,32 +3057,36 @@ func (s *MultiTenantStore) GetCostIntelligence(ns string) models.CostIntelligenc
 			status = "watch"
 		}
 		subjectsOut = append(subjectsOut, models.SubjectMarginBreakdown{
-			SubjectKey:  subjKey,
-			DisplayName: disp,
-			Tokens:      b.tokens,
-			CostUSD:     math.Round(b.costUSD*10000) / 10000,
-			RevenueUSD:  rev,
-			MarginPct:   margin,
-			Status:      status,
+			SubjectKey:     subjKey,
+			DisplayName:    disp,
+			Tokens:         b.tokens,
+			SandboxSeconds: b.sandboxSeconds,
+			CostUSD:        math.Round(b.costUSD*10000) / 10000,
+			RevenueUSD:     rev,
+			MarginPct:      margin,
+			Status:         status,
 		})
 	}
-	sort.Slice(subjectsOut, func(i, j int) bool { return subjectsOut[i].Tokens > subjectsOut[j].Tokens })
+	sort.Slice(subjectsOut, func(i, j int) bool { return subjectsOut[i].CostUSD > subjectsOut[j].CostUSD })
 
 	return models.CostIntelligenceReport{
-		Namespace:       ns,
-		TotalTokens:     totalTokens,
-		InputTokens:     inputTokens,
-		CachedTokens:    cachedTokens,
-		ReasoningTokens: reasoningTokens,
-		OutputTokens:    outputTokens,
-		TotalCostUSD:    math.Round(totalCostUSD*10000) / 10000,
-		TotalBilledUSD:  math.Round(totalBilledUSD*100) / 100,
-		GrossMarginPct:  grossMarginPct,
-		CacheSavingsUSD: math.Round(cacheSavingsUSD*10000) / 10000,
-		ByModel:         modelsOut,
-		ByTool:          toolsOut,
-		ByPersona:       personasOut,
-		BySubject:       subjectsOut,
+		Namespace:        ns,
+		TotalTokens:      totalTokens,
+		InputTokens:      inputTokens,
+		CachedTokens:     cachedTokens,
+		ReasoningTokens:  reasoningTokens,
+		OutputTokens:     outputTokens,
+		SandboxSeconds:   sandboxSeconds,
+		SandboxCostUSD:   math.Round(sandboxCostUSD*10000) / 10000,
+		SandboxBilledUSD: math.Round(sandboxBilledUSD*10000) / 10000,
+		TotalCostUSD:     math.Round(totalCostUSD*10000) / 10000,
+		TotalBilledUSD:   math.Round(totalBilledUSD*100) / 100,
+		GrossMarginPct:   grossMarginPct,
+		CacheSavingsUSD:  math.Round(cacheSavingsUSD*10000) / 10000,
+		ByModel:          modelsOut,
+		ByTool:           toolsOut,
+		ByPersona:        personasOut,
+		BySubject:        subjectsOut,
 	}
 }
 
@@ -3318,10 +3465,10 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 			SubjectKey:           "cust_hyperion_labs",
 			PlanSlug:             "ai_scale_hybrid",
 			Currency:             "USD",
-			SubtotalCents:        24675,
+			SubtotalCents:        21822,
 			CreditsAppliedCents:  1250,
 			TaxCents:             0,
-			TotalCents:           23425,
+			TotalCents:           20572,
 			Status:               "synced_stripe",
 			StripeInvoiceID:      "in_stripe_hyperion_ns_live_demo_01",
 			LineItems: []models.InvoiceLineItem{
@@ -3348,8 +3495,8 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 					Quantity:       440,
 					IncludedUnits:  100,
 					BillableUnits:  340,
-					UnitPriceCents: 8.5,
-					AmountCents:    2890,
+					UnitPriceCents: 0.11,
+					AmountCents:    37,
 				},
 			},
 			PeriodStart: periodStart,
@@ -3359,6 +3506,84 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 		}
 		s.invoices[demoInv.ID] = demoInv
 		dirty = true
+	}
+
+	// Migrate legacy sandbox/GPU rate cards in persisted state to calibrated AWS Graviton / H100 pricing
+	for pKey, p := range s.plans {
+		updated := false
+		for i, rc := range p.RateCards {
+			if rc.MeterSlug == "sandbox_compute_seconds" && len(rc.Tiers) > 0 && rc.Tiers[0].UnitPriceCents > 0.1 {
+				p.Name = "Appembly Autonomous Pro ($299/mo + Token & Graviton Sandbox Usage)"
+				p.Description = "Includes 5M LLM tokens & 50 hrs (180,000s) of AWS Graviton sandbox compute across Cyclode, Swarmteam & Valiscale"
+				p.RateCards[i].Name = "AWS Graviton Sandbox Seconds (2 vCPU / 4 GB)"
+				p.RateCards[i].IncludedQuantity = 180000
+				p.RateCards[i].Tiers[0].UnitPriceCents = 0.009
+				updated = true
+			}
+			if rc.MeterSlug == "gpu_compute_seconds" && len(rc.Tiers) > 0 && rc.Tiers[0].UnitPriceCents > 1.0 {
+				p.RateCards[i].Tiers[0].UnitPriceCents = 0.11
+				updated = true
+			}
+		}
+		if updated {
+			s.plans[pKey] = p
+			dirty = true
+		}
+	}
+
+	// Ensure Appembly namespaces have seeded AWS Graviton sandbox events
+	for _, appNS := range []string{"ns_live_appembly", "ns_test_appembly"} {
+		hasSbxEvents := false
+		for _, ev := range s.events {
+			if ev.Namespace == appNS && ev.Type == "infra.sandbox.seconds" {
+				hasSbxEvents = true
+				break
+			}
+		}
+		if !hasSbxEvents {
+			s.events = append(s.events,
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_sbx_cyclode_01", appNS),
+					Source:      "urn:appembly:cyclode:graviton-sandbox",
+					Type:        "infra.sandbox.seconds",
+					Subject:     "ws_cyclode_default",
+					Time:        now.Add(-80 * time.Minute),
+					Data:        map[string]interface{}{"duration_sec": 1840.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "IssueResolver", "tool": "sandbox_exec"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-80 * time.Minute),
+					StoredAt:    now.Add(-80 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_sbx_swarm_01", appNS),
+					Source:      "urn:appembly:swarmteam:graviton-sandbox",
+					Type:        "infra.sandbox.seconds",
+					Subject:     "ws_swarmteam_pods",
+					Time:        now.Add(-42 * time.Minute),
+					Data:        map[string]interface{}{"duration_sec": 3120.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "ArchitectPod", "tool": "worktree_pod"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-42 * time.Minute),
+					StoredAt:    now.Add(-42 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_sbx_valiscale_01", appNS),
+					Source:      "urn:appembly:valiscale:graviton-sandbox",
+					Type:        "infra.sandbox.seconds",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-12 * time.Minute),
+					Data:        map[string]interface{}{"duration_sec": 960.0, "runtime": "graviton-c7g-2vcpu-4gb", "persona": "RapidPrototyper", "tool": "preview_sandbox"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-12 * time.Minute),
+					StoredAt:    now.Add(-12 * time.Minute),
+					Lane:        "realtime",
+				},
+			)
+			dirty = true
+		}
 	}
 
 	// 2. Purge any previously seeded demo/default entities from customer organizations so they start 100% clean

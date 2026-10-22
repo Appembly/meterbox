@@ -28,6 +28,7 @@ import {
   Pill,
   ProgressBar,
   Segmented,
+  Select,
   Skeleton,
   StatusDot,
   Tone,
@@ -805,17 +806,17 @@ export const CustomersView: React.FC = () => {
             />
           </Field>
           <Field label="Backing meter">
-            <select
+            <Select
+              mono
               value={entMeter}
               onChange={(e) => setEntMeter(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {snapshot.meters.map((m) => (
                 <option key={m.slug} value={m.slug}>
                   {m.name} ({m.slug})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Period allowance limit" hint="Resets monthly">
             <Input
@@ -856,17 +857,17 @@ export const CustomersView: React.FC = () => {
       >
         <form onSubmit={handleCreateGrant} className="space-y-4">
           <Field label="Target entitlement">
-            <select
+            <Select
+              mono
               value={grantEntId}
               onChange={(e) => setGrantEntId(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {subjectEntitlements.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.feature_key} ({e.id})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Grant name">
             <Input
@@ -920,17 +921,19 @@ export const CustomersView: React.FC = () => {
         <div className="space-y-4">
           <Field label="Feature entitlement to evaluate">
             <div className="flex items-center gap-2">
-              <select
-                value={evalFeature}
-                onChange={(e) => setEvalFeature(e.target.value)}
-                className="flex-1 h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
-              >
-                {subjectEntitlements.map((e) => (
-                  <option key={e.feature_key} value={e.feature_key}>
-                    {e.feature_key}
-                  </option>
-                ))}
-              </select>
+              <div className="flex-1 min-w-0">
+                <Select
+                  mono
+                  value={evalFeature}
+                  onChange={(e) => setEvalFeature(e.target.value)}
+                >
+                  {subjectEntitlements.map((e) => (
+                    <option key={e.feature_key} value={e.feature_key}>
+                      {e.feature_key}
+                    </option>
+                  ))}
+                </Select>
+              </div>
               <Button
                 variant="primary"
                 disabled={!evalFeature || evaluating || !activeSubject}

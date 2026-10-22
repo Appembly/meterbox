@@ -421,6 +421,7 @@ export const EventsView: React.FC = () => {
         onClose={() => setSelectedEvent(null)}
         title="CloudEvent Inspector"
         subtitle={selectedEvent ? `ID: ${selectedEvent.id}` : ""}
+        variant="sheet"
       >
         {selectedEvent && (
           <div className="space-y-4">
@@ -492,17 +493,16 @@ export const EventsView: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Customer (subject)">
-              <select
+              <Select
                 value={evSubject}
                 onChange={(e) => setEvSubject(e.target.value)}
-                className="w-full h-8 px-2.5 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[12.5px]"
               >
                 {snapshot.subjects.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.display_name} ({s.key})
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label="Event type">
               <Input mono value={evType} onChange={(e) => setEvType(e.target.value)} />

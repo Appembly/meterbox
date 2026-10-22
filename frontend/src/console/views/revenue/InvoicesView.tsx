@@ -30,6 +30,7 @@ import {
   PageHeader,
   Pagination,
   Pill,
+  Select,
   Skeleton,
   usePagination,
 } from "../../ui/primitives";
@@ -38,7 +39,7 @@ import type { Invoice } from "../../../types/meterbox";
 type RevenueTab = "invoices" | "cards" | "recharge" | "webhooks";
 
 export const InvoicesView: React.FC = () => {
-  const { org, env, namespace, snapshot, status, refresh } = useConsole();
+  const { org, env, namespace, snapshot, status, refresh, navigate } = useConsole();
   const [activeTab, setActiveTab] = useState<RevenueTab>("invoices");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
@@ -51,15 +52,15 @@ export const InvoicesView: React.FC = () => {
 
   // Form states
   const [genSubject, setGenSubject] = useState("");
-  const [genPlan, setGenPlan] = useState("");
+  const [genPlan, setGenPlan] = useState("pay_as_you_go");
   const [submitting, setSubmitting] = useState(false);
 
   const [cardSubject, setCardSubject] = useState("");
   const [cardProvider, setCardProvider] = useState("stripe");
   const [cardBrand, setCardBrand] = useState("visa");
-  const [cardLast4, setCardLast4] = useState("4242");
-  const [cardExpMonth, setCardExpMonth] = useState("12");
-  const [cardExpYear, setCardExpYear] = useState("2029");
+  const [cardLast4, setCardLast4] = useState("");
+  const [cardExpMonth, setCardExpMonth] = useState("");
+  const [cardExpYear, setCardExpYear] = useState("");
 
   const [topupSubject, setTopupSubject] = useState("");
   const [topupUnits, setTopupUnits] = useState("2500000");
@@ -89,7 +90,7 @@ export const InvoicesView: React.FC = () => {
       if (!ruleSubject) setRuleSubject(defSub);
       if (!whSubject) setWhSubject(defSub);
     }
-    if (!genPlan && snapshot.plans.length > 0) {
+    if ((!genPlan || genPlan === "pay_as_you_go") && snapshot.plans.length > 0) {
       setGenPlan(snapshot.plans[0].slug);
     }
   }, [snapshot.subjects, snapshot.plans, genSubject, cardSubject, topupSubject, ruleSubject, whSubject, genPlan]);
@@ -99,7 +100,11 @@ export const InvoicesView: React.FC = () => {
     [snapshot.subjects],
   );
   const planNameMap = useMemo(
-    () => new Map(snapshot.plans.map((p) => [p.slug, p.name])),
+    () =>
+      new Map([
+        ["pay_as_you_go", "Pay-as-you-go (Direct Metered Usage)"],
+        ...snapshot.plans.map((p) => [p.slug, p.name] as [string, string]),
+      ]),
     [snapshot.plans],
   );
 
@@ -120,14 +125,14 @@ export const InvoicesView: React.FC = () => {
 
   const handleGenerateInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!genSubject || !genPlan) return;
+    if (!genSubject) return;
     setSubmitting(true);
     try {
       const raw = await apiPost<Record<string, unknown>>(
         "/api/v1/invoices/generate",
         {
           subject_key: genSubject,
-          plan_slug: genPlan,
+          plan_slug: genPlan || "pay_as_you_go",
           sync_to_stripe: true,
         },
         namespace,
@@ -183,6 +188,9 @@ export const InvoicesView: React.FC = () => {
 
   const handleAttachCard = async (e: React.FormEvent) => {
     e.preventDefault();
+    const resolvedLast4 = cardLast4.trim() || "4242";
+    const resolvedExpMonth = Number(cardExpMonth) || 12;
+    const resolvedExpYear = Number(cardExpYear) || 2029;
     setSubmitting(true);
     try {
       const raw = await apiPost<Record<string, unknown>>(
@@ -191,18 +199,21 @@ export const InvoicesView: React.FC = () => {
           subject_key: cardSubject,
           provider: cardProvider,
           brand: cardBrand,
-          last4: cardLast4,
-          exp_month: Number(cardExpMonth) || 12,
-          exp_year: Number(cardExpYear) || 2029,
+          last4: resolvedLast4,
+          exp_month: resolvedExpMonth,
+          exp_year: resolvedExpYear,
           is_default: true,
         },
         namespace,
       );
       setCardOpen(false);
+      setCardLast4("");
+      setCardExpMonth("");
+      setCardExpYear("");
       await refresh();
       setNotice({
         tone: "ok",
-        title: `Vaulted ${cardBrand.toUpperCase()} •••• ${cardLast4} (${String(raw.id || "pm_mbx")})`,
+        title: `Vaulted ${cardBrand.toUpperCase()} •••• ${resolvedLast4} (${String(raw.id || "pm_mbx")})`,
         detail: `Token: ${String(raw.provider_payment_method_id || "pm_live")} set as default for ${cardSubject}`,
       });
     } catch (err) {
@@ -596,84 +607,137 @@ export const InvoicesView: React.FC = () => {
 
       {/* TAB 2: SAVED PAYMENT METHODS */}
       {activeTab === "cards" && (
-        <Card>
-          <CardHeader
-            title="Vaulted customer payment methods"
-            subtitle="Non-PCI payment tokens (`pm_...`) stored via Stripe / Paystack SetupIntents for off-session charges"
-            actions={
-              <Button variant="primary" size="sm" onClick={() => setCardOpen(true)}>
-                <Plus className="w-3.5 h-3.5" /> Vault payment method
-              </Button>
-            }
-          />
-          <div className="overflow-x-auto mbx-scroll">
-            {snapshot.paymentMethods.length === 0 ? (
-              <EmptyState
-                icon={<CreditCard className="w-5 h-5" />}
-                title="No saved payment methods"
-                description="Vault a customer card via Stripe or Paystack SetupIntent to enable off-session billing and auto-recharge."
-                action={
-                  <Button variant="primary" size="sm" onClick={() => setCardOpen(true)}>
-                    <Plus className="w-3.5 h-3.5" /> Vault payment method
-                  </Button>
-                }
-              />
-            ) : (
-              <table className="min-w-[780px] w-full text-[12.5px]">
-                <thead>
-                  <tr className="border-y border-[var(--border)] bg-[var(--surface-subtle)] text-[11.5px] font-medium text-[var(--muted-foreground)]">
-                    <th className="px-5 py-2.5 text-left">Card / Method</th>
-                    <th className="px-3 py-2.5 text-left">Customer (Subject)</th>
-                    <th className="px-3 py-2.5 text-left">Provider Token</th>
-                    <th className="px-3 py-2.5 text-left">Customer ID</th>
-                    <th className="px-3 py-2.5 text-left">Expires</th>
-                    <th className="px-3 py-2.5 text-left">Status</th>
-                    <th className="px-5 py-2.5 text-right">Default</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cardsPagination.pageItems.map((pm) => (
-                    <tr key={pm.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-subtle)]">
-                      <td className="px-5 py-2.5 font-semibold">
-                        <span className="uppercase">{pm.brand}</span> •••• {pm.last4}
-                      </td>
-                      <td className="px-3 py-2.5 font-medium">
-                        {subjectNameMap.get(pm.subject_key) || pm.subject_key}
-                        <div className="text-[11px] mbx-mono text-[var(--muted-foreground)]">{pm.subject_key}</div>
-                      </td>
-                      <td className="px-3 py-2.5 mbx-mono text-[12px] text-[var(--muted-foreground)]">
-                        {pm.provider_payment_method_id}
-                      </td>
-                      <td className="px-3 py-2.5 mbx-mono text-[12px] text-[var(--muted-foreground)]">
-                        {pm.provider_customer_id}
-                      </td>
-                      <td className="px-3 py-2.5 mbx-num">
-                        {String(pm.exp_month).padStart(2, "0")}/{pm.exp_year}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <Pill tone="ok" mono>
-                          {pm.provider.toUpperCase()} · {pm.status.toUpperCase()}
-                        </Pill>
-                      </td>
-                      <td className="px-5 py-2.5 text-right">
-                        {pm.is_default ? (
-                          <Pill tone="ok">Default card</Pill>
-                        ) : (
-                          <Button variant="ghost" size="sm" onClick={() => handleSetDefaultCard(pm.id)}>
-                            Set default
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+        <div className="space-y-4">
           {snapshot.paymentMethods.length > 0 && (
-            <Pagination state={cardsPagination} pageSizeOptions={[5, 10, 20]} itemLabel="payment methods" />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {snapshot.paymentMethods.slice(0, 6).map((pm) => (
+                <div
+                  key={pm.id}
+                  className={`relative rounded-[14px] p-4 border transition-all ${
+                    pm.is_default
+                      ? "bg-[var(--card)] border-[var(--primary)]/45 shadow-sm"
+                      : "bg-[var(--card)] border-[var(--border)] hover:border-[var(--border-strong)]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-[var(--surface-subtle)] border border-[var(--border)] text-[11px] font-bold uppercase tracking-wider mbx-mono text-[var(--foreground)]">
+                        {pm.brand}
+                      </span>
+                      <span className="text-[11px] font-medium uppercase tracking-wider mbx-mono text-[var(--muted-foreground)]">
+                        {pm.provider}
+                      </span>
+                    </div>
+                    {pm.is_default ? (
+                      <Pill tone="ok">Default card</Pill>
+                    ) : (
+                      <Button variant="ghost" size="sm" onClick={() => handleSetDefaultCard(pm.id)}>
+                        Set default
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="mt-3.5 flex items-baseline justify-between">
+                    <div className="text-[16px] font-semibold tracking-[0.12em] mbx-mono text-[var(--foreground)]">
+                      •••• •••• •••• {pm.last4}
+                    </div>
+                    <div className="text-[12px] mbx-mono text-[var(--muted-foreground)]">
+                      Exp {String(pm.exp_month).padStart(2, "0")}/{String(pm.exp_year).slice(-2)}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-[var(--border)] flex items-center justify-between text-[12px]">
+                    <span className="font-medium text-[var(--foreground)] truncate">
+                      {subjectNameMap.get(pm.subject_key) || pm.subject_key}
+                    </span>
+                    <span className="text-[11px] mbx-mono text-[var(--muted-foreground)] truncate max-w-[150px]">
+                      {pm.provider_payment_method_id}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
-        </Card>
+
+          <Card>
+            <CardHeader
+              title="Vaulted customer payment methods"
+              subtitle="Non-PCI payment tokens (`pm_...`) stored via Stripe / Paystack SetupIntents for off-session charges"
+              actions={
+                <Button variant="primary" size="sm" onClick={() => setCardOpen(true)}>
+                  <Plus className="w-3.5 h-3.5" /> Vault payment method
+                </Button>
+              }
+            />
+            <div className="overflow-x-auto mbx-scroll">
+              {snapshot.paymentMethods.length === 0 ? (
+                <EmptyState
+                  icon={<CreditCard className="w-5 h-5" />}
+                  title="No saved payment methods"
+                  description="Vault a customer card via Stripe or Paystack SetupIntent to enable off-session billing and auto-recharge."
+                  action={
+                    <Button variant="primary" size="sm" onClick={() => setCardOpen(true)}>
+                      <Plus className="w-3.5 h-3.5" /> Vault payment method
+                    </Button>
+                  }
+                />
+              ) : (
+                <table className="min-w-[780px] w-full text-[12.5px]">
+                  <thead>
+                    <tr className="border-y border-[var(--border)] bg-[var(--surface-subtle)] text-[11.5px] font-medium text-[var(--muted-foreground)]">
+                      <th className="px-5 py-2.5 text-left">Card / Method</th>
+                      <th className="px-3 py-2.5 text-left">Customer (Subject)</th>
+                      <th className="px-3 py-2.5 text-left">Provider Token</th>
+                      <th className="px-3 py-2.5 text-left">Customer ID</th>
+                      <th className="px-3 py-2.5 text-left">Expires</th>
+                      <th className="px-3 py-2.5 text-left">Status</th>
+                      <th className="px-5 py-2.5 text-right">Default</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cardsPagination.pageItems.map((pm) => (
+                      <tr key={pm.id} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--surface-subtle)]">
+                        <td className="px-5 py-2.5 font-semibold">
+                          <span className="uppercase">{pm.brand}</span> •••• {pm.last4}
+                        </td>
+                        <td className="px-3 py-2.5 font-medium">
+                          {subjectNameMap.get(pm.subject_key) || pm.subject_key}
+                          <div className="text-[11px] mbx-mono text-[var(--muted-foreground)]">{pm.subject_key}</div>
+                        </td>
+                        <td className="px-3 py-2.5 mbx-mono text-[12px] text-[var(--muted-foreground)]">
+                          {pm.provider_payment_method_id}
+                        </td>
+                        <td className="px-3 py-2.5 mbx-mono text-[12px] text-[var(--muted-foreground)]">
+                          {pm.provider_customer_id}
+                        </td>
+                        <td className="px-3 py-2.5 mbx-num">
+                          {String(pm.exp_month).padStart(2, "0")}/{pm.exp_year}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <Pill tone="ok" mono>
+                            {pm.provider.toUpperCase()} · {pm.status.toUpperCase()}
+                          </Pill>
+                        </td>
+                        <td className="px-5 py-2.5 text-right">
+                          {pm.is_default ? (
+                            <Pill tone="ok">Default card</Pill>
+                          ) : (
+                            <Button variant="ghost" size="sm" onClick={() => handleSetDefaultCard(pm.id)}>
+                              Set default
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {snapshot.paymentMethods.length > 0 && (
+              <Pagination state={cardsPagination} pageSizeOptions={[5, 10, 20]} itemLabel="payment methods" />
+            )}
+          </Card>
+        </div>
       )}
 
       {/* TAB 3: TOP-UPS & AUTO-RECHARGE */}
@@ -883,6 +947,7 @@ export const InvoicesView: React.FC = () => {
         title={selectedInvoice ? `Invoice ${selectedInvoice.id}` : "Invoice Sheet"}
         subtitle={selectedInvoice ? `Stripe Invoice ID: ${selectedInvoice.stripe_invoice_id}` : ""}
         width="max-w-[580px]"
+        variant="sheet"
       >
         {selectedInvoice && (
           <div className="space-y-5">
@@ -995,36 +1060,53 @@ export const InvoicesView: React.FC = () => {
       >
         <form onSubmit={handleGenerateInvoice} className="space-y-4">
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={genSubject}
               onChange={(e) => setGenSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
-          <Field label="Pricing plan">
-            <select
-              value={genPlan}
+          <Field
+            label="Pricing plan"
+            hint={snapshot.plans.length === 0 ? "Optional — rates raw metered usage when no plan is selected" : "Select a plan or bill pay-as-you-go"}
+          >
+            <Select
+              value={genPlan || "pay_as_you_go"}
               onChange={(e) => setGenPlan(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
+              <option value="pay_as_you_go">Pay-as-you-go · Direct Metered Usage (no base plan)</option>
               {snapshot.plans.map((p) => (
                 <option key={p.slug} value={p.slug}>
                   {p.name} ({p.slug})
                 </option>
               ))}
-            </select>
+            </Select>
+            {snapshot.plans.length === 0 && (
+              <div className="pt-1 flex items-center justify-between text-[11.5px] text-[var(--muted-foreground)]">
+                <span>No custom subscription plans defined in this workspace yet.</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGenOpen(false);
+                    navigate("plans");
+                  }}
+                  className="font-medium text-[var(--primary)] hover:underline cursor-pointer"
+                >
+                  + Create plan →
+                </button>
+              </div>
+            )}
           </Field>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
             <Button variant="secondary" onClick={() => setGenOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" variant="primary" disabled={submitting}>
+            <Button type="submit" variant="primary" disabled={submitting || !genSubject}>
               {submitting ? "Rating & syncing…" : "Generate & sync to Stripe"}
             </Button>
           </div>
@@ -1037,56 +1119,168 @@ export const InvoicesView: React.FC = () => {
         onClose={() => setCardOpen(false)}
         title="Vault customer payment method"
         subtitle="Store a tokenized card from a completed Stripe or Paystack SetupIntent."
+        width="max-w-[500px]"
       >
         <form onSubmit={handleAttachCard} className="space-y-4">
+          {/* Live Interactive Payment Card Preview (explicit inline surface so it never renders white-on-white) */}
+          <div
+            style={{
+              background: "linear-gradient(135deg, #131D18 0%, #1E3229 55%, #2B473B 100%)",
+              color: "#F6F7F5",
+              borderColor: "rgba(255, 255, 255, 0.14)",
+              boxShadow: "0 16px 36px -14px rgba(17, 24, 20, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12)",
+            }}
+            className="relative overflow-hidden rounded-2xl p-5 border"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span
+                  style={{
+                    background: "rgba(255, 255, 255, 0.14)",
+                    color: "#FFFFFF",
+                    border: "1px solid rgba(255, 255, 255, 0.16)",
+                  }}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[10.5px] font-semibold tracking-wider uppercase mbx-mono"
+                >
+                  {cardProvider}
+                </span>
+                <span style={{ color: "rgba(246, 247, 245, 0.72)" }} className="text-[11.5px] inline-flex items-center gap-1">
+                  <ShieldCheck className="w-3.5 h-3.5" style={{ color: "#78B898" }} />
+                  SetupIntent Verified
+                </span>
+              </div>
+              <span
+                style={{
+                  background: "rgba(255, 255, 255, 0.1)",
+                  color: "#FFFFFF",
+                }}
+                className="text-[11.5px] font-bold tracking-wider uppercase mbx-mono px-2.5 py-0.5 rounded-md"
+              >
+                {cardBrand === "amex" ? "AMEX" : cardBrand === "mastercard" ? "MASTERCARD" : "VISA"}
+              </span>
+            </div>
+
+            <div className="mt-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {/* Metallic EMV Chip */}
+                <span
+                  style={{
+                    width: 34,
+                    height: 24,
+                    borderRadius: 5,
+                    background: "linear-gradient(135deg, #E6C687 0%, #B8924A 100%)",
+                    border: "1px solid rgba(255, 255, 255, 0.35)",
+                    boxShadow: "inset 0 1px 2px rgba(0, 0, 0, 0.25)",
+                  }}
+                  className="inline-block shrink-0"
+                />
+                <div
+                  style={{ color: "#FFFFFF", letterSpacing: "0.14em" }}
+                  className="text-[17px] font-semibold mbx-mono"
+                >
+                  •••• •••• •••• {(cardLast4 || "••••").padEnd(4, "•")}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{ borderColor: "rgba(255, 255, 255, 0.14)" }}
+              className="mt-4 pt-3 border-t flex items-center justify-between text-[11.5px]"
+            >
+              <div className="truncate max-w-[270px]">
+                <span style={{ color: "rgba(246, 247, 245, 0.55)" }} className="uppercase text-[10px] mr-2 tracking-wider">
+                  Customer
+                </span>
+                <span style={{ color: "#FFFFFF" }} className="font-medium">
+                  {subjectNameMap.get(cardSubject) || cardSubject || "Select customer"}
+                </span>
+              </div>
+              <div className="mbx-mono">
+                <span style={{ color: "rgba(246, 247, 245, 0.55)" }} className="mr-1.5 text-[10px]">
+                  EXP
+                </span>
+                <span style={{ color: "#FFFFFF" }} className="font-semibold">
+                  {cardExpMonth ? String(cardExpMonth).padStart(2, "0") : "MM"}/
+                  {cardExpYear ? String(cardExpYear).slice(-2) : "YY"}
+                </span>
+              </div>
+            </div>
+          </div>
+
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={cardSubject}
               onChange={(e) => setCardSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
+
+          <div className="grid grid-cols-2 gap-3.5">
             <Field label="Payment provider">
-              <select
-                value={cardProvider}
-                onChange={(e) => setCardProvider(e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
-              >
-                <option value="stripe">Stripe</option>
-                <option value="paystack">Paystack</option>
-                <option value="paddle">Paddle</option>
-              </select>
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-[10px] bg-[var(--surface-subtle)] border border-[var(--border)]">
+                {(["stripe", "paystack", "paddle"] as const).map((prov) => {
+                  const active = cardProvider === prov;
+                  return (
+                    <button
+                      key={prov}
+                      type="button"
+                      onClick={() => setCardProvider(prov)}
+                      className={`h-7 px-2 rounded-[7px] text-[12px] font-medium capitalize inline-flex items-center justify-center text-center transition-all cursor-pointer ${
+                        active
+                          ? "bg-[var(--card)] text-[var(--primary)] font-semibold shadow-xs border border-[var(--border)]"
+                          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent"
+                      }`}
+                    >
+                      {prov}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
-            <Field label="Card brand">
-              <select
-                value={cardBrand}
-                onChange={(e) => setCardBrand(e.target.value)}
-                className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
-              >
-                <option value="visa">Visa</option>
-                <option value="mastercard">Mastercard</option>
-                <option value="amex">American Express</option>
-              </select>
+
+            <Field label="Card network">
+              <div className="grid grid-cols-3 gap-1 p-1 rounded-[10px] bg-[var(--surface-subtle)] border border-[var(--border)]">
+                {[
+                  { id: "visa", label: "Visa" },
+                  { id: "mastercard", label: "Master" },
+                  { id: "amex", label: "Amex" },
+                ].map((b) => {
+                  const active = cardBrand === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setCardBrand(b.id)}
+                      className={`h-7 px-2 rounded-[7px] text-[12px] font-medium inline-flex items-center justify-center text-center transition-all cursor-pointer ${
+                        active
+                          ? "bg-[var(--card)] text-[var(--primary)] font-semibold shadow-xs border border-[var(--border)]"
+                          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent"
+                      }`}
+                    >
+                      {b.label}
+                    </button>
+                  );
+                })}
+              </div>
             </Field>
           </div>
+
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Last 4 digits">
+            <Field label="Last 4 digits" hint="e.g. 4242">
               <Input
                 mono
                 maxLength={4}
                 placeholder="4242"
                 value={cardLast4}
-                onChange={(e) => setCardLast4(e.target.value)}
+                onChange={(e) => setCardLast4(e.target.value.replace(/\D/g, "").slice(0, 4))}
               />
             </Field>
-            <Field label="Exp month">
+            <Field label="Exp month" hint="MM">
               <Input
                 mono
                 type="number"
@@ -1097,7 +1291,7 @@ export const InvoicesView: React.FC = () => {
                 onChange={(e) => setCardExpMonth(e.target.value)}
               />
             </Field>
-            <Field label="Exp year">
+            <Field label="Exp year" hint="YYYY">
               <Input
                 mono
                 type="number"
@@ -1126,52 +1320,137 @@ export const InvoicesView: React.FC = () => {
         onClose={() => setTopupOpen(false)}
         title="Prepaid credit top-up session"
         subtitle="Create a Stripe Checkout session or charge the customer's saved card to mint a Priority-1 credit grant."
+        width="max-w-[510px]"
       >
         <form onSubmit={handleCreateTopup} className="space-y-4">
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={topupSubject}
               onChange={(e) => setTopupSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Grant units (tokens)" hint="Default 2.5M">
+
+          {/* Quick-Select Package Presets */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-medium text-[var(--muted-foreground)]">Quick-select credit package</span>
+              <span className="text-[11px] mbx-mono text-[var(--muted-foreground)]">$20 / 1M tokens</span>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { label: "1M tokens", sub: "$20", units: "1000000", cents: "2000" },
+                { label: "2.5M tokens", sub: "$50", units: "2500000", cents: "5000" },
+                { label: "5M tokens", sub: "$100", units: "5000000", cents: "10000" },
+                { label: "10M tokens", sub: "$200", units: "10000000", cents: "20000" },
+              ].map((preset) => {
+                const active = topupUnits === preset.units && topupCents === preset.cents;
+                return (
+                  <button
+                    key={preset.units}
+                    type="button"
+                    onClick={() => {
+                      setTopupUnits(preset.units);
+                      setTopupCents(preset.cents);
+                    }}
+                    className={`px-2.5 py-2 rounded-[10px] border text-left transition-all ${
+                      active
+                        ? "bg-[var(--card)] border-[var(--primary)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_15%,transparent)]"
+                        : "bg-[var(--surface-subtle)]/50 border-[var(--border)] hover:border-[var(--border-strong)]"
+                    }`}
+                  >
+                    <div className={`text-[12px] font-semibold mbx-num ${active ? "text-[var(--primary)]" : "text-[var(--foreground)]"}`}>
+                      {preset.sub}
+                    </div>
+                    <div className="text-[11px] text-[var(--muted-foreground)] mbx-num">{preset.label}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3.5">
+            <Field label="Grant units">
               <Input
                 mono
                 type="number"
-                placeholder="e.g. 2500000"
+                placeholder="2500000"
+                suffix="tokens"
                 value={topupUnits}
                 onChange={(e) => setTopupUnits(e.target.value)}
               />
             </Field>
-            <Field label="Charge amount (cents)" hint="5000 = $50.00">
+            <Field label="Charge amount (cents)">
               <Input
                 mono
                 type="number"
-                placeholder="e.g. 5000"
+                placeholder="5000"
+                suffix={`$${((Number(topupCents) || 0) / 100).toFixed(2)}`}
                 value={topupCents}
                 onChange={(e) => setTopupCents(e.target.value)}
               />
             </Field>
           </div>
-          <label className="flex items-start gap-2.5 text-[13px] cursor-pointer pt-1">
-            <input
-              type="checkbox"
-              checked={topupInstant}
-              onChange={(e) => setTopupInstant(e.target.checked)}
-              className="mt-0.5 rounded border-[var(--border)]"
-            />
-            <span className="leading-snug text-[var(--foreground)]">
-              Charge saved default card immediately and mint Priority-1 credit grant
-            </span>
-          </label>
+
+          {/* Settlement Mode Selector Cards */}
+          <div className="space-y-1.5">
+            <span className="text-[12.5px] font-semibold text-[var(--foreground)]">Settlement method</span>
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setTopupInstant(true)}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  topupInstant
+                    ? "bg-[var(--card)] border-[var(--primary)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_14%,transparent)]"
+                    : "bg-[var(--surface-subtle)]/40 border-[var(--border)] hover:border-[var(--border-strong)]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[12.5px] font-semibold text-[var(--foreground)]">Instant card charge</span>
+                  <span
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      topupInstant ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--border-strong)]"
+                    }`}
+                  >
+                    {topupInstant && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] text-[var(--muted-foreground)] leading-snug">
+                  Charge saved default card off-session &amp; mint Priority-1 grant now.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTopupInstant(false)}
+                className={`p-3 rounded-xl border text-left transition-all ${
+                  !topupInstant
+                    ? "bg-[var(--card)] border-[var(--primary)] shadow-[0_0_0_2px_color-mix(in_srgb,var(--primary)_14%,transparent)]"
+                    : "bg-[var(--surface-subtle)]/40 border-[var(--border)] hover:border-[var(--border-strong)]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[12.5px] font-semibold text-[var(--foreground)]">Hosted Checkout URL</span>
+                  <span
+                    className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                      !topupInstant ? "border-[var(--primary)] bg-[var(--primary)] text-white" : "border-[var(--border-strong)]"
+                    }`}
+                  >
+                    {!topupInstant && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] text-[var(--muted-foreground)] leading-snug">
+                  Create a Stripe Checkout link; credits mint upon webhook callback.
+                </p>
+              </button>
+            </div>
+          </div>
+
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
             <Button variant="secondary" onClick={() => setTopupOpen(false)}>
               Cancel
@@ -1192,17 +1471,16 @@ export const InvoicesView: React.FC = () => {
       >
         <form onSubmit={handleSaveRule} className="space-y-4">
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={ruleSubject}
               onChange={(e) => setRuleSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Entitlement feature key">
             <Input
@@ -1213,20 +1491,22 @@ export const InvoicesView: React.FC = () => {
             />
           </Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Threshold units">
+            <Field label="Threshold">
               <Input
                 mono
                 type="number"
                 placeholder="500000"
+                suffix="units"
                 value={ruleThreshold}
                 onChange={(e) => setRuleThreshold(e.target.value)}
               />
             </Field>
-            <Field label="Recharge units">
+            <Field label="Recharge grant">
               <Input
                 mono
                 type="number"
                 placeholder="2500000"
+                suffix="units"
                 value={ruleRecharge}
                 onChange={(e) => setRuleRecharge(e.target.value)}
               />
@@ -1236,6 +1516,7 @@ export const InvoicesView: React.FC = () => {
                 mono
                 type="number"
                 placeholder="5000"
+                suffix={`$${((Number(ruleCents) || 0) / 100).toFixed(0)}`}
                 value={ruleCents}
                 onChange={(e) => setRuleCents(e.target.value)}
               />
@@ -1261,29 +1542,28 @@ export const InvoicesView: React.FC = () => {
       >
         <form onSubmit={handleSimulateWebhook} className="space-y-4">
           <Field label="Webhook event type">
-            <select
+            <Select
+              mono
               value={whType}
               onChange={(e) => setWhType(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               <option value="payment_intent.succeeded">payment_intent.succeeded (Mint credit grant)</option>
               <option value="invoice.paid">invoice.paid (Mark invoice paid)</option>
               <option value="invoice.payment_failed">invoice.payment_failed (Flag invoice failed)</option>
               <option value="setup_intent.succeeded">setup_intent.succeeded (Verify vaulted card)</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={whSubject}
               onChange={(e) => setWhSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Provider object ID" hint="Optional — e.g. in_stripe_... or pi_...">
             <Input
@@ -1294,11 +1574,12 @@ export const InvoicesView: React.FC = () => {
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Amount (cents)" hint="5000 = $50.00">
+            <Field label="Amount (cents)">
               <Input
                 mono
                 type="number"
                 placeholder="5000"
+                suffix={`$${((Number(whCents) || 0) / 100).toFixed(2)}`}
                 value={whCents}
                 onChange={(e) => setWhCents(e.target.value)}
               />
@@ -1308,6 +1589,7 @@ export const InvoicesView: React.FC = () => {
                 mono
                 type="number"
                 placeholder="2500000"
+                suffix="tokens"
                 value={whUnits}
                 onChange={(e) => setWhUnits(e.target.value)}
               />

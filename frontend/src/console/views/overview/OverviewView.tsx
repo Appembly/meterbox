@@ -37,7 +37,13 @@ export const OverviewView: React.FC = () => {
 
   const timeFmt = useMemo(() => {
     const opts: Intl.DateTimeFormatOptions =
-      range === "24h" ? { hour: "numeric" } : range === "7d" ? { weekday: "short", hour: "numeric" } : { month: "short", day: "numeric" };
+      range === "1h" || range === "6h"
+        ? { hour: "numeric", minute: "2-digit" }
+        : range === "24h"
+        ? { hour: "numeric" }
+        : range === "7d"
+        ? { weekday: "short", hour: "numeric" }
+        : { month: "short", day: "numeric" };
     const axis = new Intl.DateTimeFormat("en-US", range === "7d" ? { weekday: "short" } : opts);
     const tip = new Intl.DateTimeFormat("en-US", range === "30d" ? { dateStyle: "medium" } : { dateStyle: "medium", timeStyle: "short" });
     return { axis: (t: number) => axis.format(t), tip: (t: number) => tip.format(t) };

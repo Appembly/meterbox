@@ -2,7 +2,7 @@
 
 import React from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 
 /* ----------------------------------------------------------------------------
  * Layout primitives
@@ -171,19 +171,271 @@ export function Segmented<T extends string>({
   );
 }
 
-export const Select: React.FC<
-  React.SelectHTMLAttributes<HTMLSelectElement> & { label: string }
-> = ({ label, className = "", children, ...rest }) => (
-  <label className={`relative inline-flex items-center ${className}`}>
-    <span className="sr-only">{label}</span>
-    <select
-      {...rest}
-      className="h-8 pl-2.5 pr-7 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[12.5px] font-medium text-[var(--foreground)] hover:border-[var(--border-strong)] cursor-pointer outline-none focus-visible:border-[var(--primary)]"
-    >
-      {children}
-    </select>
-  </label>
-);
+export interface SelectOptionItem {
+  value: string;
+  label: string;
+  disabled?: boolean;
+}
+
+function extractSelectOptions(children: React.ReactNode): SelectOptionItem[] {
+  const out: SelectOptionItem[] = [];
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return;
+    if (child.type === React.Fragment) {
+      out.push(...extractSelectOptions((child.props as { children?: React.ReactNode }).children));
+      return;
+    }
+    if (child.type === "option" || (typeof child.type === "string" && child.type.toLowerCase() === "option")) {
+      const props = child.props as { value?: string | number; disabled?: boolean; children?: React.ReactNode };
+      const rawText = React.Children.toArray(props.children)
+        .map((c) => (typeof c === "string" || typeof c === "number" ? String(c) : ""))
+        .join("")
+        .trim();
+      const val = props.value !== undefined ? String(props.value) : rawText;
+      out.push({ value: val, label: rawText || val, disabled: Boolean(props.disabled) });
+    }
+  });
+  return out;
+}
+
+function splitOptionLabel(text: string): { main: string; meta?: string } {
+  const match = text.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  if (match && match[1].trim()) {
+    return { main: match[1].trim(), meta: match[2].trim() };
+  }
+  return { main: text };
+}
+
+export const Select: React.FC<{
+  label?: string;
+  value?: string | number;
+  onChange?: (e: { target: { value: string }; currentTarget: { value: string } }) => void;
+  onValueChange?: (val: string) => void;
+  options?: SelectOptionItem[];
+  placeholder?: string;
+  disabled?: boolean;
+  mono?: boolean;
+  size?: "sm" | "md";
+  className?: string;
+  children?: React.ReactNode;
+}> = ({
+  label,
+  value,
+  onChange,
+  onValueChange,
+  options: propOptions,
+  placeholder = "Select an option…",
+  disabled = false,
+  mono = false,
+  size,
+  className = "",
+  children,
+}) => {
+  const options = React.useMemo(
+    () => propOptions || extractSelectOptions(children),
+    [propOptions, children],
+  );
+  const strVal = value !== undefined && value !== null ? String(value) : options[0]?.value ?? "";
+  const selectedOpt = options.find((o) => o.value === strVal) || options[0];
+
+  const [open, setOpen] = React.useState(false);
+  const [highlightIdx, setHighlightIdx] = React.useState<number>(-1);
+  const btnRef = React.useRef<HTMLButtonElement | null>(null);
+  const menuRef = React.useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; width: number; placeAbove: boolean }>({
+    top: 0,
+    left: 0,
+    width: 220,
+    placeAbove: false,
+  });
+
+  const isFullWidth = className.includes("w-full") || (!label && !className.includes("w-"));
+  const effectiveSize = size || (isFullWidth ? "md" : "sm");
+
+  const updatePosition = React.useCallback(() => {
+    const el = btnRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const menuHeight = Math.min(options.length * 36 + 12, 268);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < menuHeight + 12 && rect.top > menuHeight;
+    setPos({
+      top: placeAbove ? rect.top - 6 : rect.bottom + 6,
+      left: rect.left,
+      width: Math.max(rect.width, 180),
+      placeAbove,
+    });
+  }, [options.length]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const curIdx = Math.max(
+      0,
+      options.findIndex((o) => o.value === strVal),
+    );
+    setHighlightIdx(curIdx);
+
+    const onPointerDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        setOpen(false);
+        btnRef.current?.focus();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightIdx((i) => (options.length ? (i + 1) % options.length : -1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightIdx((i) => (options.length ? (i - 1 + options.length) % options.length : -1));
+      } else if (e.key === "Enter" && highlightIdx >= 0 && options[highlightIdx]) {
+        e.preventDefault();
+        const chosen = options[highlightIdx];
+        if (!chosen.disabled) {
+          const synth = { target: { value: chosen.value }, currentTarget: { value: chosen.value } };
+          onChange?.(synth);
+          onValueChange?.(chosen.value);
+          setOpen(false);
+          btnRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [open, options, strVal, highlightIdx, onChange, onValueChange, updatePosition]);
+
+  const handleSelect = (opt: SelectOptionItem) => {
+    if (opt.disabled) return;
+    const synth = { target: { value: opt.value }, currentTarget: { value: opt.value } };
+    onChange?.(synth);
+    onValueChange?.(opt.value);
+    setOpen(false);
+  };
+
+  const parsedSelected = selectedOpt ? splitOptionLabel(selectedOpt.label) : null;
+
+  return (
+    <div className={`relative ${isFullWidth ? "w-full block" : "inline-flex items-center"} ${className}`}>
+      {label && <span className="sr-only">{label}</span>}
+      <button
+        ref={btnRef}
+        type="button"
+        disabled={disabled || options.length === 0}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          borderColor: open ? "var(--primary)" : undefined,
+          boxShadow: open ? "0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent)" : undefined,
+        }}
+        className={`w-full ${
+          effectiveSize === "md" ? "h-[38px] px-3 rounded-[10px] text-[13px]" : "h-8 pl-2.5 pr-2 rounded-lg text-[12.5px]"
+        } bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] hover:border-[var(--border-strong)] inline-flex items-center justify-between gap-2 text-left transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+          mono ? "mbx-mono text-[12.5px]" : "font-medium"
+        }`}
+      >
+        <span className="truncate flex items-center gap-1.5 min-w-0">
+          {parsedSelected ? (
+            <>
+              <span className="truncate">{parsedSelected.main}</span>
+              {parsedSelected.meta && (
+                <span className="mbx-mono text-[11.5px] text-[var(--muted-foreground)] font-normal truncate">
+                  ({parsedSelected.meta})
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-[var(--muted-foreground)]">{placeholder}</span>
+          )}
+        </span>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-[var(--muted-foreground)] shrink-0 transition-transform duration-150 ${
+            open ? "rotate-180 text-[var(--primary)]" : ""
+          }`}
+        />
+      </button>
+
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            aria-label={label}
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.width,
+              maxWidth: "min(440px, 92vw)",
+              transform: pos.placeAbove ? "translateY(-100%)" : undefined,
+              zIndex: 9999,
+              background: "var(--card, #FFFFFF)",
+              borderColor: "var(--border, #DCE0DC)",
+              color: "var(--foreground, #111618)",
+              boxShadow: "0 14px 34px -10px rgba(16, 24, 20, 0.24), 0 0 0 1px rgba(16, 24, 20, 0.04)",
+            }}
+            className="mbx-console rounded-xl border p-1 max-h-[264px] overflow-y-auto mbx-scroll"
+          >
+            {options.map((opt, idx) => {
+              const isSelected = opt.value === strVal;
+              const isHighlighted = idx === highlightIdx;
+              const parts = splitOptionLabel(opt.label);
+              return (
+                <button
+                  key={`${opt.value}-${idx}`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  disabled={opt.disabled}
+                  onMouseEnter={() => setHighlightIdx(idx)}
+                  onClick={() => handleSelect(opt)}
+                  style={{
+                    background: isSelected
+                      ? "color-mix(in srgb, var(--primary, #4E8067) 11%, transparent)"
+                      : isHighlighted
+                      ? "var(--surface-subtle, #F2F4F1)"
+                      : "transparent",
+                    color: isSelected ? "var(--primary, #4E8067)" : "var(--foreground, #111618)",
+                  }}
+                  className={`w-full min-h-[34px] px-2.5 py-1.5 rounded-lg text-[12.5px] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-40 ${
+                    mono ? "mbx-mono" : ""
+                  }`}
+                >
+                  <span className="truncate flex items-baseline gap-1.5 min-w-0">
+                    <span className={`truncate ${isSelected ? "font-semibold" : "font-medium"}`}>{parts.main}</span>
+                    {parts.meta && (
+                      <span
+                        style={{ color: isSelected ? "var(--primary, #4E8067)" : "var(--muted-foreground, #5A625E)" }}
+                        className="mbx-mono text-[11px] opacity-80 truncate"
+                      >
+                        ({parts.meta})
+                      </span>
+                    )}
+                  </span>
+                  {isSelected && <Check className="w-3.5 h-3.5 shrink-0" style={{ color: "var(--primary, #4E8067)" }} />}
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+};
 
 export const Kbd: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <kbd className="inline-flex items-center h-5 px-1.5 rounded border border-[var(--border)] bg-[var(--surface-subtle)] text-[10.5px] font-medium text-[var(--muted-foreground)]">
@@ -301,8 +553,9 @@ export const Drawer: React.FC<{
   title: React.ReactNode;
   subtitle?: React.ReactNode;
   width?: string;
+  variant?: "modal" | "sheet";
   children: React.ReactNode;
-}> = ({ open, onClose, title, subtitle, width = "max-w-[500px]", children }) => {
+}> = ({ open, onClose, title, subtitle, width = "max-w-[500px]", variant = "modal", children }) => {
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -320,25 +573,33 @@ export const Drawer: React.FC<{
 
   if (!open || !mounted) return null;
 
+  const isSheet = variant === "sheet";
+
   const overlay = (
     <div
-      className="mbx-console fixed inset-0 z-50 !m-0 flex justify-end bg-black/40 backdrop-blur-[2px]"
+      className={`mbx-console fixed inset-0 z-50 !m-0 flex ${
+        isSheet ? "justify-end p-2.5 sm:p-3.5" : "items-center justify-center p-4 sm:p-6"
+      } bg-black/45 backdrop-blur-[3px]`}
       onClick={onClose}
     >
       <aside
-        className={`relative w-full ${width} h-full bg-[var(--card)] border-l border-[var(--border)] shadow-2xl flex flex-col overflow-hidden`}
+        role="dialog"
+        aria-modal="true"
+        className={`mbx-dialog mbx-enter relative w-full ${width} ${
+          isSheet ? "h-full" : "max-h-[90vh]"
+        } rounded-[18px] bg-[var(--card)] border border-[var(--border)] shadow-2xl flex flex-col overflow-hidden`}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-3 px-6 py-4 border-b border-[var(--border)]">
+        <header className="flex items-start justify-between gap-3.5 px-6 py-4 border-b border-[var(--border)] bg-[var(--surface-subtle)]/45">
           <div className="min-w-0">
-            <h2 className="text-[16px] font-semibold tracking-[-0.015em] text-[var(--foreground)]">{title}</h2>
-            {subtitle && <p className="mt-1 text-[13px] text-[var(--muted-foreground)] leading-snug">{subtitle}</p>}
+            <h2 className="text-[16px] font-semibold tracking-[-0.016em] text-[var(--foreground)]">{title}</h2>
+            {subtitle && <p className="mt-1 text-[12.5px] text-[var(--muted-foreground)] leading-relaxed">{subtitle}</p>}
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] mbx-hover shrink-0"
-            aria-label="Close drawer"
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] border border-transparent hover:border-[var(--border)] mbx-hover shrink-0 transition-colors"
+            aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
           </button>
@@ -356,27 +617,55 @@ export const Field: React.FC<{
   hint?: string;
   children: React.ReactNode;
 }> = ({ label, hint, children }) => (
-  <label className="block space-y-1.5">
-    <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[13px] font-medium text-[var(--foreground)]">{label}</span>
-      {hint && <span className="text-[11.5px] text-[var(--muted-foreground)]">{hint}</span>}
+  <div className="flex flex-col justify-end space-y-1.5 min-w-0">
+    <div className="flex items-baseline justify-between gap-2 min-h-[19px] overflow-hidden">
+      <span className="text-[12.5px] font-semibold tracking-[-0.008em] text-[var(--foreground)] whitespace-nowrap">
+        {label}
+      </span>
+      {hint && (
+        <span className="text-[11px] font-medium text-[var(--muted-foreground)] whitespace-nowrap truncate">
+          {hint}
+        </span>
+      )}
     </div>
     {children}
-  </label>
+  </div>
 );
 
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { mono?: boolean }> = ({
-  mono = false,
-  className = "",
-  ...rest
-}) => (
-  <input
-    {...rest}
-    className={`w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] text-[var(--foreground)] placeholder:text-[var(--placeholder)] outline-none focus:border-[var(--primary)] transition-colors ${
-      mono ? "mbx-mono text-[12.5px]" : ""
-    } ${className}`}
-  />
-);
+export const Input: React.FC<
+  React.InputHTMLAttributes<HTMLInputElement> & {
+    mono?: boolean;
+    suffix?: React.ReactNode;
+    prefix?: React.ReactNode;
+  }
+> = ({ mono = false, suffix, prefix, className = "", ...rest }) => {
+  const inputEl = (
+    <input
+      {...rest}
+      className={`mbx-control w-full h-[38px] px-3 rounded-[10px] bg-[var(--card)] border border-[var(--border)] text-[13px] text-[var(--foreground)] placeholder:text-[var(--placeholder)] outline-none focus:border-[var(--primary)] transition-all ${
+        mono ? "mbx-mono text-[12.5px]" : ""
+      } ${prefix ? "pl-8" : ""} ${suffix ? "pr-20" : ""} ${className}`}
+    />
+  );
+
+  if (!suffix && !prefix) return inputEl;
+
+  return (
+    <div className="relative flex items-center w-full">
+      {prefix && (
+        <span className="absolute left-3 text-[12px] font-medium text-[var(--muted-foreground)] pointer-events-none select-none">
+          {prefix}
+        </span>
+      )}
+      {inputEl}
+      {suffix && (
+        <span className="absolute right-2 px-1.5 py-0.5 rounded-md bg-[var(--surface-subtle)] border border-[var(--border)] text-[11px] font-medium mbx-mono text-[var(--muted-foreground)] pointer-events-none select-none">
+          {suffix}
+        </span>
+      )}
+    </div>
+  );
+};
 
 export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { mono?: boolean }> = ({
   mono = false,
@@ -505,13 +794,13 @@ export const Pagination: React.FC<{
           <strong className="text-[var(--foreground)]">{totalItems}</strong> {itemLabel}
         </span>
         {!compact && (
-          <label className="inline-flex items-center gap-1.5">
+          <div className="inline-flex items-center gap-1.5">
             <span className="text-[11.5px]">Rows:</span>
-            <select
+            <Select
+              label="Rows per page"
+              size="sm"
               value={pageSize}
               onChange={(e) => setPageSize(Number(e.target.value))}
-              aria-label="Rows per page"
-              className="h-6 px-1.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[11.5px] font-medium text-[var(--foreground)] cursor-pointer"
             >
               {Array.from(new Set([...pageSizeOptions, pageSize]))
                 .sort((a, b) => a - b)
@@ -520,8 +809,8 @@ export const Pagination: React.FC<{
                     {sz}
                   </option>
                 ))}
-            </select>
-          </label>
+            </Select>
+          </div>
         )}
       </div>
 

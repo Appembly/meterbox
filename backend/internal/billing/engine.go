@@ -24,7 +24,39 @@ func NewEngine(s *store.MultiTenantStore) *Engine {
 func (e *Engine) GenerateInvoice(namespace, subjectKey, planSlug string, syncToStripe bool) (models.Invoice, error) {
 	plan, ok := e.store.GetPlan(namespace, planSlug)
 	if !ok {
-		return models.Invoice{}, fmt.Errorf("plan %q not found in namespace %q", planSlug, namespace)
+		if planSlug == "" || planSlug == "pay_as_you_go" {
+			meters := e.store.ListMeters(namespace)
+			cards := make([]models.RateCard, 0, len(meters))
+			for _, m := range meters {
+				unitCents := 0.1
+				if m.Slug == "llm_tokens_total" {
+					unitCents = 0.03
+				} else if m.Slug == "sandbox_compute_seconds" || m.Slug == "gpu_compute_seconds" {
+					unitCents = 1.2
+				}
+				cards = append(cards, models.RateCard{
+					FeatureKey:       m.Slug,
+					MeterSlug:        m.Slug,
+					Name:             m.Name,
+					PricingModel:     "flat_per_unit",
+					IncludedQuantity: 0,
+					Tiers: []models.RateCardTier{
+						{UpToAmount: nil, UnitPriceCents: unitCents, FlatFeeCents: 0},
+					},
+				})
+			}
+			plan = models.Plan{
+				Namespace:      namespace,
+				Slug:           "pay_as_you_go",
+				Name:           "Pay-as-you-go (Direct Metered Usage)",
+				Currency:       "USD",
+				BasePriceCents: 0,
+				BillingCadence: "MONTH",
+				RateCards:      cards,
+			}
+		} else {
+			return models.Invoice{}, fmt.Errorf("plan %q not found in namespace %q", planSlug, namespace)
+		}
 	}
 
 	now := time.Now().UTC()

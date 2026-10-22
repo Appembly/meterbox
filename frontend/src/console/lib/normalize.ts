@@ -204,16 +204,34 @@ export function normalizeSnapshot(snap: Raw, namespace: string): Snapshot {
     : [];
 
   const plans: Plan[] = Array.isArray(snap.plans)
-    ? (snap.plans as Raw[]).map((p) => ({
-        id: str(p.id),
-        namespace: str(p.namespace, namespace),
-        slug: str(p.slug),
-        name: str(p.name),
-        currency: str(p.currency, "USD"),
-        base_fee_cents: num(p.base_fee_cents ?? p.base_price_cents),
-        billing_cadence: str(p.billing_cadence, "MONTH"),
-        components: Array.isArray(p.components) ? (p.components as Plan["components"]) : [],
-      }))
+    ? (snap.plans as Raw[]).map((p) => {
+        const rawCards = Array.isArray(p.components)
+          ? (p.components as Raw[])
+          : Array.isArray(p.rate_cards)
+          ? (p.rate_cards as Raw[])
+          : [];
+        return {
+          id: str(p.id),
+          namespace: str(p.namespace, namespace),
+          slug: str(p.slug),
+          name: str(p.name),
+          currency: str(p.currency, "USD"),
+          base_fee_cents: num(p.base_fee_cents ?? p.base_price_cents),
+          billing_cadence: str(p.billing_cadence, "MONTH"),
+          components: rawCards.map((rc, idx) => {
+            const tiers = Array.isArray(rc.tiers) ? (rc.tiers as Raw[]) : [];
+            const firstTierUnit = tiers.length > 0 ? num(tiers[0].unit_price_cents) : 0;
+            return {
+              id: str(rc.id, `${str(rc.meter_slug)}_${idx}`),
+              name: str(rc.name, str(rc.meter_slug)),
+              meter_slug: str(rc.meter_slug),
+              model: (str(rc.model || rc.pricing_model, "flat_per_unit") as Plan["components"][number]["model"]),
+              unit_price_cents: num(rc.unit_price_cents, firstTierUnit),
+              included_units: num(rc.included_units ?? rc.included_quantity),
+            };
+          }),
+        };
+      })
     : [];
 
   const invoices: Invoice[] = Array.isArray(snap.invoices)

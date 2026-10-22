@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { apiGet } from "../../lib/api";
 import type { ChartBucket, ChartSeries } from "../../ui/StackedAreaChart";
 
-export type RangeKey = "24h" | "7d" | "30d";
+export type RangeKey = "1h" | "6h" | "24h" | "7d" | "30d";
 
-export const RANGES: Record<RangeKey, { label: string; window: "1h" | "1d"; buckets: number; stepMs: number }> = {
+export const RANGES: Record<RangeKey, { label: string; window: "1m" | "5m" | "1h" | "1d"; buckets: number; stepMs: number }> = {
+  "1h": { label: "1h", window: "1m", buckets: 60, stepMs: 60_000 },
+  "6h": { label: "6h", window: "5m", buckets: 72, stepMs: 300_000 },
   "24h": { label: "24h", window: "1h", buckets: 24, stepMs: 3_600_000 },
   "7d": { label: "7d", window: "1h", buckets: 168, stepMs: 3_600_000 },
   "30d": { label: "30d", window: "1d", buckets: 30, stepMs: 86_400_000 },

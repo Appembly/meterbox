@@ -2,7 +2,13 @@ import { API_BASE } from "../../types/meterbox";
 
 export { API_BASE };
 
-const SAUTHEN_API_BASE = process.env.NEXT_PUBLIC_SAUTHEN_URL || "http://localhost:6021";
+const SAUTHEN_API_BASE =
+  process.env.NEXT_PUBLIC_SAUTHEN_URL ||
+  (typeof window !== "undefined" &&
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1"
+    ? "https://auth.appembly.com"
+    : "http://localhost:6021");
 const SESSION_STORAGE_KEY = "sth.auth.session.v2";
 
 export class ApiError extends Error {

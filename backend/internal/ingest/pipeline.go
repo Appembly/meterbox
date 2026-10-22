@@ -100,7 +100,8 @@ func (p *Pipeline) IngestBatch(tc *models.TenantContext, rawEvents []map[string]
 		p.store.AppendEvents(accepted)
 
 		// 6. Dogfood Self-Metering: Emit `meterbox.events.ingested` into `ns_meterbox_internal`
-		if tc.Namespace != models.InternalDogfoodNamespace && tc.OrgID != "" {
+		// Exclude sandbox test-environment (`ns_test_*`) traffic so developer CI & 1-click resets are not billed.
+		if tc.Namespace != models.InternalDogfoodNamespace && tc.OrgID != "" && tc.EnvType != "sandbox" && !strings.HasPrefix(tc.Namespace, "ns_test_") {
 			dogfoodEvent := models.CloudEvent{
 				SpecVersion: "1.0",
 				ID:          fmt.Sprintf("dogfood_%s_%d", tc.Namespace, now.UnixNano()),

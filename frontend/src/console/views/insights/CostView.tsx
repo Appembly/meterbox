@@ -77,7 +77,7 @@ export const CostView: React.FC = () => {
 
         <Card className="p-4">
           <div className="flex items-center justify-between text-[12.5px] text-[var(--muted-foreground)]">
-            <span>Upstream LLM COGS</span>
+            <span>Upstream LLM & Graviton COGS</span>
             <Cpu className="w-4 h-4 text-[var(--warn)]" />
           </div>
           {status === "loading" ? (
@@ -86,7 +86,8 @@ export const CostView: React.FC = () => {
             <>
               <div className="mt-2 text-[26px] font-semibold mbx-num">{usd(report?.total_cost_usd || 0)}</div>
               <div className="mt-1 text-[12px] text-[var(--muted-foreground)]">
-                {formatCompact(report?.total_tokens || 0)} total tokens metered
+                {formatCompact(report?.total_tokens || 0)} tok
+                {report?.sandbox_seconds ? ` · ${formatCompact(report.sandbox_seconds)}s Graviton sbx` : ""}
               </div>
             </>
           )}
@@ -192,8 +193,8 @@ export const CostView: React.FC = () => {
                 <thead>
                   <tr className="border-y border-[var(--border)] bg-[var(--surface-subtle)] text-[11.5px] font-medium text-[var(--muted-foreground)]">
                     <th className="px-5 py-2.5 text-left">Customer</th>
-                    <th className="px-3 py-2.5 text-right">Tokens</th>
-                    <th className="px-3 py-2.5 text-right">LLM COGS</th>
+                    <th className="px-3 py-2.5 text-right">Usage</th>
+                    <th className="px-3 py-2.5 text-right">Total COGS</th>
                     <th className="px-3 py-2.5 text-right">Billed Rev</th>
                     <th className="px-3 py-2.5 text-right">Margin</th>
                     <th className="px-5 py-2.5 text-right">Health</th>
@@ -208,7 +209,14 @@ export const CostView: React.FC = () => {
                           <div className="font-medium">{c.display_name}</div>
                           <div className="text-[11px] mbx-mono text-[var(--muted-foreground)]">{c.subject_key}</div>
                         </td>
-                        <td className="px-3 py-2.5 text-right mbx-num">{formatCompact(c.tokens)}</td>
+                        <td className="px-3 py-2.5 text-right mbx-num">
+                          <div>{formatCompact(c.tokens)} tok</div>
+                          {c.sandbox_seconds ? (
+                            <div className="text-[11px] text-[var(--muted-foreground)]">
+                              {formatCompact(c.sandbox_seconds)}s sbx
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="px-3 py-2.5 text-right mbx-num text-[var(--muted-foreground)]">
                           {usd(c.cost_usd)}
                         </td>
@@ -266,7 +274,7 @@ export const CostView: React.FC = () => {
                     <span className="mbx-num">
                       <strong>{usd(d.cost_usd)}</strong>{" "}
                       <span className="text-[var(--muted-foreground)]">
-                        · {formatCompact(d.tokens)} tok ({d.share_pct.toFixed(1)}%)
+                        · {d.tokens > 0 ? `${formatCompact(d.tokens)} tok ` : "compute "}({d.share_pct.toFixed(1)}%)
                       </span>
                     </span>
                   </div>

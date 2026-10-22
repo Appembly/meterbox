@@ -17,6 +17,7 @@ import {
   PageHeader,
   Pagination,
   Pill,
+  Select,
   Skeleton,
   usePagination,
 } from "../../ui/primitives";
@@ -224,7 +225,9 @@ export const PlansView: React.FC = () => {
                             </div>
                             <div className="mt-1 flex items-center justify-between text-[var(--muted-foreground)] mbx-num text-[12px]">
                               <span className="mbx-mono">meter: {comp.meter_slug}</span>
-                              <span>Included: {formatCompact(comp.included_units || 0)} units</span>
+                              <span>
+                                Included: {formatCompact(comp.included_units || 0)} · {comp.unit_price_cents}¢/unit
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -334,28 +337,29 @@ export const PlansView: React.FC = () => {
               onChange={(e) => setPlanName(e.target.value)}
             />
           </Field>
-          <Field label="Monthly base fee (cents)" hint="49900 = $499.00">
+          <Field label="Monthly base fee (cents)">
             <Input
               mono
               type="number"
               required
               placeholder="e.g. 49900"
+              suffix={`$${((Number(planBaseFeeCents) || 0) / 100).toFixed(2)}/mo`}
               value={planBaseFeeCents}
               onChange={(e) => setPlanBaseFeeCents(e.target.value)}
             />
           </Field>
           <Field label="Metered component">
-            <select
+            <Select
+              mono
               value={planMeter}
               onChange={(e) => setPlanMeter(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px] mbx-mono"
             >
               {snapshot.meters.map((m) => (
                 <option key={m.slug} value={m.slug}>
                   {m.name} ({m.slug})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Included monthly units">
@@ -363,6 +367,7 @@ export const PlansView: React.FC = () => {
                 mono
                 type="number"
                 placeholder="e.g. 1000000"
+                suffix="units"
                 value={planIncluded}
                 onChange={(e) => setPlanIncluded(e.target.value)}
               />
@@ -372,6 +377,7 @@ export const PlansView: React.FC = () => {
                 mono
                 type="number"
                 placeholder="e.g. 2"
+                suffix="¢ / unit"
                 value={planUnitPriceCents}
                 onChange={(e) => setPlanUnitPriceCents(e.target.value)}
               />
@@ -397,30 +403,28 @@ export const PlansView: React.FC = () => {
       >
         <form onSubmit={handleCreateSubscription} className="space-y-4">
           <Field label="Customer (subject)">
-            <select
+            <Select
               value={subSubject}
               onChange={(e) => setSubSubject(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.subjects.map((s) => (
                 <option key={s.key} value={s.key}>
                   {s.display_name} ({s.key})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <Field label="Pricing plan">
-            <select
+            <Select
               value={subPlan}
               onChange={(e) => setSubPlan(e.target.value)}
-              className="w-full h-9 px-3 rounded-lg bg-[var(--background)] border border-[var(--border)] text-[13px]"
             >
               {snapshot.plans.map((p) => (
                 <option key={p.slug} value={p.slug}>
                   {p.name} ({p.slug})
                 </option>
               ))}
-            </select>
+            </Select>
           </Field>
           <div className="pt-3 flex justify-end gap-2 border-t border-[var(--border)]">
             <Button variant="secondary" onClick={() => setDrawer(null)}>

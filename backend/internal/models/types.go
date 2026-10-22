@@ -451,30 +451,34 @@ type DimensionCostBreakdown struct {
 }
 
 type SubjectMarginBreakdown struct {
-	SubjectKey  string  `json:"subject_key"`
-	DisplayName string  `json:"display_name"`
-	Tokens      float64 `json:"tokens"`
-	CostUSD     float64 `json:"cost_usd"`
-	RevenueUSD  float64 `json:"revenue_usd"`
-	MarginPct   float64 `json:"margin_pct"`
-	Status      string  `json:"status"`
+	SubjectKey     string  `json:"subject_key"`
+	DisplayName    string  `json:"display_name"`
+	Tokens         float64 `json:"tokens"`
+	SandboxSeconds float64 `json:"sandbox_seconds"`
+	CostUSD        float64 `json:"cost_usd"`
+	RevenueUSD     float64 `json:"revenue_usd"`
+	MarginPct      float64 `json:"margin_pct"`
+	Status         string  `json:"status"`
 }
 
 type CostIntelligenceReport struct {
-	Namespace       string                   `json:"namespace"`
-	TotalTokens     float64                  `json:"total_tokens"`
-	InputTokens     float64                  `json:"input_tokens"`
-	CachedTokens    float64                  `json:"cached_tokens"`
-	ReasoningTokens float64                  `json:"reasoning_tokens"`
-	OutputTokens    float64                  `json:"output_tokens"`
-	TotalCostUSD    float64                  `json:"total_cost_usd"`
-	TotalBilledUSD  float64                  `json:"total_billed_usd"`
-	GrossMarginPct  float64                  `json:"gross_margin_pct"`
-	CacheSavingsUSD float64                  `json:"cache_savings_usd"`
-	ByModel         []DimensionCostBreakdown `json:"by_model"`
-	ByTool          []DimensionCostBreakdown `json:"by_tool"`
-	ByPersona       []DimensionCostBreakdown `json:"by_persona"`
-	BySubject       []SubjectMarginBreakdown `json:"by_subject"`
+	Namespace        string                   `json:"namespace"`
+	TotalTokens      float64                  `json:"total_tokens"`
+	InputTokens      float64                  `json:"input_tokens"`
+	CachedTokens     float64                  `json:"cached_tokens"`
+	ReasoningTokens  float64                  `json:"reasoning_tokens"`
+	OutputTokens     float64                  `json:"output_tokens"`
+	SandboxSeconds   float64                  `json:"sandbox_seconds"`
+	SandboxCostUSD   float64                  `json:"sandbox_cost_usd"`
+	SandboxBilledUSD float64                  `json:"sandbox_billed_usd"`
+	TotalCostUSD     float64                  `json:"total_cost_usd"`
+	TotalBilledUSD   float64                  `json:"total_billed_usd"`
+	GrossMarginPct   float64                  `json:"gross_margin_pct"`
+	CacheSavingsUSD  float64                  `json:"cache_savings_usd"`
+	ByModel          []DimensionCostBreakdown `json:"by_model"`
+	ByTool           []DimensionCostBreakdown `json:"by_tool"`
+	ByPersona        []DimensionCostBreakdown `json:"by_persona"`
+	BySubject        []SubjectMarginBreakdown `json:"by_subject"`
 }
 
 // ---------------------------------------------------------------------------

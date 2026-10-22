@@ -1,4 +1,10 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:6071";
+export const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL ||
+  (typeof window !== "undefined" &&
+  window.location.hostname !== "localhost" &&
+  window.location.hostname !== "127.0.0.1"
+    ? window.location.origin
+    : "http://localhost:6071");
 
 export interface Organization {
   id: string;
@@ -320,6 +326,7 @@ export interface SubjectMarginBreakdown {
   subject_key: string;
   display_name: string;
   tokens: number;
+  sandbox_seconds?: number;
   cost_usd: number;
   revenue_usd: number;
   margin_pct: number;
@@ -333,6 +340,9 @@ export interface CostIntelligenceReport {
   cached_tokens: number;
   reasoning_tokens: number;
   output_tokens: number;
+  sandbox_seconds?: number;
+  sandbox_cost_usd?: number;
+  sandbox_billed_usd?: number;
   total_cost_usd: number;
   total_billed_usd: number;
   gross_margin_pct: number;
