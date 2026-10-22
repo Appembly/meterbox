@@ -2300,6 +2300,16 @@ func (s *MultiTenantStore) CreateAPIKey(ns, name string, scope models.KeyScope, 
 		return models.APIKey{}, err
 	}
 
+	// If a real/provisioned key is minted for this scope, supersede any unvaulted auto-seeded "Default ..." key of the same scope
+	if !strings.HasPrefix(name, "Default ") {
+		for existingID, existing := range s.apiKeys {
+			if existing.OpenMeterNamespace == ns && existing.Scope == scope && strings.HasPrefix(existing.Name, "Default ") {
+				delete(s.hashToKeyID, existing.KeyHash)
+				delete(s.apiKeys, existingID)
+			}
+		}
+	}
+
 	id := s.NextID("key")
 	key := models.APIKey{
 		ID:                 id,
@@ -3708,7 +3718,9 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 					dirty = true
 				}
 			}
-			s.ensureNamespaceDefaultKeysLocked(env, now)
+			if s.ensureNamespaceDefaultKeysLocked(env, now) {
+				dirty = true
+			}
 		}
 	}
 
@@ -3773,7 +3785,23 @@ func (s *MultiTenantStore) ensureSubjectTokenEntitlementLocked(ns, subjectKey st
 	}
 }
 
-func (s *MultiTenantStore) ensureNamespaceDefaultKeysLocked(env models.Environment, now time.Time) {
+func (s *MultiTenantStore) ensureNamespaceDefaultKeysLocked(env models.Environment, now time.Time) bool {
+	changed := false
+	nonDefaultScopes := make(map[models.KeyScope]bool)
+	for _, k := range s.apiKeys {
+		if k.OpenMeterNamespace == env.OpenMeterNamespace && k.RevokedAt == nil && !strings.HasPrefix(k.Name, "Default ") {
+			nonDefaultScopes[k.Scope] = true
+		}
+	}
+	// Prune redundant auto-seeded "Default ..." keys when a provisioned key already exists for that scope
+	for id, k := range s.apiKeys {
+		if k.OpenMeterNamespace == env.OpenMeterNamespace && strings.HasPrefix(k.Name, "Default ") && nonDefaultScopes[k.Scope] {
+			delete(s.hashToKeyID, k.KeyHash)
+			delete(s.apiKeys, id)
+			changed = true
+		}
+	}
+
 	existingScopes := make(map[models.KeyScope]bool)
 	for _, k := range s.apiKeys {
 		if k.OpenMeterNamespace == env.OpenMeterNamespace && k.RevokedAt == nil {
@@ -3813,6 +3841,8 @@ func (s *MultiTenantStore) ensureNamespaceDefaultKeysLocked(env models.Environme
 		}
 		s.apiKeys[id] = k
 		s.hashToKeyID[hash] = id
+		changed = true
 	}
+	return changed
 }
 
