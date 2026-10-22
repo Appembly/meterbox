@@ -704,8 +704,8 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                 <ArrowRight size={15} />
               </a>
             ) : (
-              <div className="sag-redirecting">
-                <span className="sag-spinner" /> Opening {cfg.appName}…
+              <div className="sag-redirecting" style={{ display: 'flex', justifyContent: 'center', padding: '14px 0' }}>
+                <AppemblyLogo variant="mark" size={28} strokeColor={cfg.accent} animated speed="loader" />
               </div>
             )}
           </div>

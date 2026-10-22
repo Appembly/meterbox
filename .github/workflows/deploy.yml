@@ -1,0 +1,109 @@
+name: CI & AWS Graviton Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Deploy current commit to AWS Graviton production"
+        type: boolean
+        default: true
+
+concurrency:
+  group: meterbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify Go Backend & Next.js Build
+    if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'closed' && !github.event.pull_request.merged) }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.22
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: backend/go.mod
+
+      - name: Build Go Backend
+        working-directory: backend
+        run: go build -v ./cmd/meterbox
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install & Build Next.js Console
+        working-directory: frontend
+        run: |
+          npm ci || npm install
+          npm run build
+
+  deploy-graviton:
+    name: Deploy to AWS Graviton (ARM64)
+    needs: verify
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'push' && (
+        startsWith(github.event.head_commit.message, 'Merge pull request #') ||
+        contains(github.event.head_commit.message, '[deploy]')
+      ))
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+      CORE_HOST: ${{ secrets.GRAVITON_CORE_IP }}
+      BUILDER_HOST: ${{ secrets.GRAVITON_SANDBOX_IP }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.merge_commit_sha || github.sha }}
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Configure SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${CORE_HOST}" "${BUILDER_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Build Native ARM64 Images on Graviton3 & Roll Out Meterbox
+        run: |
+          ECR_PASS=$(aws ecr get-login-password --region us-east-1)
+
+          rsync -az --delete \
+            --exclude='.git' --exclude='node_modules' --exclude='.next' --exclude='data' \
+            ./ ubuntu@"${BUILDER_HOST}":/opt/appembly/src/meterbox/
+
+          ssh ubuntu@"${BUILDER_HOST}" "
+            set -euo pipefail
+            echo '${ECR_PASS}' | sudo docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            sudo docker build --target backend -t ${ECR_REGISTRY}/appembly/meterbox-backend:latest /opt/appembly/src/meterbox
+            sudo docker build --target frontend -t ${ECR_REGISTRY}/appembly/meterbox-frontend:latest /opt/appembly/src/meterbox
+            sudo docker push ${ECR_REGISTRY}/appembly/meterbox-backend:latest
+            sudo docker push ${ECR_REGISTRY}/appembly/meterbox-frontend:latest
+          "
+
+          ssh ubuntu@"${CORE_HOST}" "
+            set -euo pipefail
+            echo '${ECR_PASS}' | sudo docker login --username AWS --password-stdin ${ECR_REGISTRY}
+            cd /opt/appembly/compose
+            sudo docker compose --env-file .env -f node1-core.yml pull meterbox-api meterbox-web
+            sudo docker compose --env-file .env -f node1-core.yml up -d --no-deps meterbox-api meterbox-web
+          "

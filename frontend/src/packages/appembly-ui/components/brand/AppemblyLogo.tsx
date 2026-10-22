@@ -20,6 +20,12 @@ export interface AppemblyLogoProps {
    * 2×1 Top Visor -> Blink -> 1×1 Dot -> 1×2 Vertical Pill -> Filleted L-Core -> 90° Pivot.
    */
   animated?: boolean;
+  /**
+   * Animation cadence:
+   * - 'ambient' (default): 13.5s calm loop for persistent navbar/footer lockups
+   * - 'loader': 3.2s immediate-start loop (skips initial idle rest frame) for app entry & route transitions
+   */
+  speed?: 'ambient' | 'loader';
 }
 
 /**
@@ -186,16 +192,16 @@ const ANIMATED_CORE_STYLES = `
   }
   .ap-core-rot {
     transform-origin: 50px 50px;
-    animation: ap-bot-rot 13.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    animation: ap-bot-rot var(--ap-dur, 13.5s) cubic-bezier(0.65, 0, 0.35, 1) var(--ap-delay, 0s) infinite;
   }
   .ap-cell-a {
-    animation: ap-cell-a 13.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation: ap-cell-a var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
   }
   .ap-cell-b {
-    animation: ap-cell-b 13.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation: ap-cell-b var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
   }
   .ap-cell-bridge {
-    animation: ap-cell-bridge 13.5s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation: ap-cell-bridge var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
   }
   @media (prefers-reduced-motion: reduce) {
     .ap-core-rot, .ap-cell-a, .ap-cell-b, .ap-cell-bridge {
@@ -213,43 +219,53 @@ const ANIMATED_CORE_STYLES = `
 export const AnimatedModularMarkGraphic: React.FC<{
   fill: string;
   maskId: string;
-}> = ({ fill, maskId }) => (
-  <>
-    <style>{ANIMATED_CORE_STYLES}</style>
-    <defs>
-      <mask id={maskId}>
-        <path d={APPEMBLY_OUTER_FRAME_PATH} fill="white" />
-        <g className="ap-core-rot" fill="black">
-          <rect
-            className="ap-cell-a"
-            x="30.5"
-            y="30.5"
-            width="19.5"
-            height="19.5"
-            rx="7.5"
-          />
-          <rect
-            className="ap-cell-b"
-            x="50"
-            y="30.5"
-            width="19.5"
-            height="19.5"
-            rx="7.5"
-          />
-          <rect
-            className="ap-cell-bridge"
-            x="42"
-            y="30.5"
-            width="16"
-            height="19.5"
-            rx="3"
-          />
-        </g>
-      </mask>
-    </defs>
-    <path d={APPEMBLY_OUTER_FRAME_PATH} fill={fill} mask={`url(#${maskId})`} />
-  </>
-);
+  speed?: 'ambient' | 'loader';
+}> = ({ fill, maskId, speed = 'ambient' }) => {
+  const timingVars =
+    speed === 'loader'
+      ? ({ '--ap-dur': '3.2s', '--ap-delay': '-0.24s' } as React.CSSProperties)
+      : undefined;
+  return (
+    <>
+      <style>{ANIMATED_CORE_STYLES}</style>
+      <defs>
+        <mask id={maskId}>
+          <path d={APPEMBLY_OUTER_FRAME_PATH} fill="white" />
+          <g className="ap-core-rot" fill="black" style={timingVars}>
+            <rect
+              className="ap-cell-a"
+              style={timingVars}
+              x="30.5"
+              y="30.5"
+              width="19.5"
+              height="19.5"
+              rx="7.5"
+            />
+            <rect
+              className="ap-cell-b"
+              style={timingVars}
+              x="50"
+              y="30.5"
+              width="19.5"
+              height="19.5"
+              rx="7.5"
+            />
+            <rect
+              className="ap-cell-bridge"
+              style={timingVars}
+              x="42"
+              y="30.5"
+              width="16"
+              height="19.5"
+              rx="3"
+            />
+          </g>
+        </mask>
+      </defs>
+      <path d={APPEMBLY_OUTER_FRAME_PATH} fill={fill} mask={`url(#${maskId})`} />
+    </>
+  );
+};
 
 /**
  * Official Appembly Fused Modular Mark & App Icon Component.
@@ -264,6 +280,7 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
   strokeColor,
   squircleColor = '#4E8067',
   animated = false,
+  speed = 'ambient',
 }) => {
   const uid = React.useId().replace(/:/g, '');
   const isCompact = size <= 20;
@@ -292,6 +309,7 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
           <AnimatedModularMarkGraphic
             fill={strokeColor || 'currentColor'}
             maskId={`ap-mask-${uid}`}
+            speed={speed}
           />
         ) : (
           <path d={markPath} fill={strokeColor || 'currentColor'} fillRule="evenodd" />
@@ -312,6 +330,7 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
           <AnimatedModularMarkGraphic
             fill={strokeColor || '#4E8067'}
             maskId={`ap-mask-${uid}`}
+            speed={speed}
           />
         ) : (
           <path d={markPath} fill={strokeColor || '#4E8067'} fillRule="evenodd" />
@@ -332,6 +351,7 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
         <AnimatedModularMarkGraphic
           fill={strokeColor || '#F6F7F5'}
           maskId={`ap-mask-${uid}`}
+          speed={speed}
         />
       ) : (
         <path d={markPath} fill={strokeColor || '#F6F7F5'} fillRule="evenodd" />
