@@ -284,8 +284,15 @@ func parseSauthenClaims(rawToken string) (*sauthenClaims, error) {
 	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
 		return nil, fmt.Errorf("invalid Sauthen JWT claims")
 	}
-	if payload.Exp > 0 && time.Now().UTC().Unix() > payload.Exp {
-		return nil, fmt.Errorf("Sauthen JWT has expired")
+	if payload.Exp > 0 {
+		nowUnix := time.Now().UTC().Unix()
+		graceSec := int64(0)
+		if strings.HasPrefix(strings.TrimSpace(rawToken), "st_sess_") {
+			graceSec = 86400
+		}
+		if nowUnix > payload.Exp+graceSec {
+			return nil, fmt.Errorf("Sauthen JWT has expired")
+		}
 	}
 
 	resolvedScope := models.ScopeAdmin

@@ -292,7 +292,7 @@ export function saveSauthenSession(payload: SauthenAuthPayload) {
   }
 }
 
-function isSauthenJwtExpired(rawToken?: string): boolean {
+function isSauthenJwtExpired(rawToken?: string, graceSeconds = 86400): boolean {
   if (!rawToken || typeof rawToken !== 'string') return true;
   const clean = rawToken.trim().replace(/^st_(sess|agt)_/, '');
   const parts = clean.split('.');
@@ -302,7 +302,7 @@ function isSauthenJwtExpired(rawToken?: string): boolean {
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
     const payload = JSON.parse(atob(padded)) as { exp?: number };
     if (typeof payload.exp === 'number' && payload.exp > 0) {
-      return Math.floor(Date.now() / 1000) >= payload.exp - 5;
+      return Math.floor(Date.now() / 1000) >= payload.exp + graceSeconds;
     }
     return false;
   } catch {
@@ -315,7 +315,7 @@ export function loadSauthenSession(): SauthenAuthPayload | null {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SauthenAuthPayload;
-    if (isSauthenJwtExpired(parsed?.access_token)) {
+    if (isSauthenJwtExpired(parsed?.access_token, 86400)) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
@@ -374,14 +374,20 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
           setOrgs(data.organizations);
         }
         if (data.user && data.organization) {
+          const freshToken = data.access_token || data.session?.token_jwt || stored.access_token || '';
           const hydrated: SauthenAuthPayload = {
             ...stored,
             user: data.user,
             organization: data.organization,
             namespace: data.namespace || stored.namespace || ns,
-            access_token: stored.access_token || data.access_token || data.session?.token_jwt || '',
+            access_token: freshToken,
             session: data.session || stored.session,
           };
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
+          } catch {
+            /* ignore storage quota error */
+          }
           setSession(hydrated);
         }
       } else {
@@ -446,8 +452,21 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
         syncWithBackend();
       }
     };
+    const onFocusOrVisible = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        syncWithBackend();
+      }
+    };
+    const heartbeat = window.setInterval(syncWithBackend, 3 * 60 * 1000);
     window.addEventListener('sauthen-auth-change', onAuthChange);
-    return () => window.removeEventListener('sauthen-auth-change', onAuthChange);
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    return () => {
+      window.clearInterval(heartbeat);
+      window.removeEventListener('sauthen-auth-change', onAuthChange);
+      window.removeEventListener('focus', onFocusOrVisible);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+    };
   }, [syncWithBackend]);
 
   return {
@@ -621,7 +640,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
           org_slug: createOrgOnSignup ? orgSlug.trim() : '',
           app_client: cfg.appId,
           auth_method: password.trim() ? 'password_pkce' : 'passkey',
-          passkey: true,
+          passkey: !password.trim(),
         }),
       });
       const data = await res.json();
