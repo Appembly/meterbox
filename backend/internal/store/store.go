@@ -1897,14 +1897,32 @@ func (s *MultiTenantStore) ListEntitlements(ns, subjectFilter string) []models.E
 
 func (s *MultiTenantStore) GetEntitlementBySubjectFeature(ns, subjectKey, featureKey string) (models.Entitlement, []models.EntitlementGrant, bool) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	for _, ent := range s.entitlements {
 		if ent.Namespace == ns && ent.SubjectKey == subjectKey && ent.FeatureKey == featureKey {
 			grants := make([]models.EntitlementGrant, len(s.grants[ent.ID]))
 			copy(grants, s.grants[ent.ID])
+			s.mu.RUnlock()
 			return ent, grants, true
 		}
 	}
+	s.mu.RUnlock()
+
+	if featureKey == "ai_token_allowance" && ns != "" && ns != models.InternalDogfoodNamespace && (strings.HasPrefix(subjectKey, "usr_") || strings.HasPrefix(subjectKey, "ws_")) {
+		s.mu.Lock()
+		s.ensureMeterForEventLocked(ns, "ai.llm.tokens")
+		s.ensureSubjectTokenEntitlementLocked(ns, subjectKey)
+		for _, ent := range s.entitlements {
+			if ent.Namespace == ns && ent.SubjectKey == subjectKey && ent.FeatureKey == featureKey {
+				grants := make([]models.EntitlementGrant, len(s.grants[ent.ID]))
+				copy(grants, s.grants[ent.ID])
+				s.saveStateLocked()
+				s.mu.Unlock()
+				return ent, grants, true
+			}
+		}
+		s.mu.Unlock()
+	}
+
 	return models.Entitlement{}, nil, false
 }
 
@@ -2651,6 +2669,8 @@ func (s *MultiTenantStore) hydrateSubjectFromEventLocked(ev models.CloudEvent) {
 	}
 
 	if ev.Type == "ai.llm.tokens" {
+		s.ensureMeterForEventLocked(ev.Namespace, ev.Type)
+		s.ensureSubjectTokenEntitlementLocked(ev.Namespace, ev.Subject)
 		toks := extractMapFloat(ev.Data, "tokens")
 		if toks > 0 {
 			sub.TotalTokens += toks
@@ -2659,17 +2679,20 @@ func (s *MultiTenantStore) hydrateSubjectFromEventLocked(ev models.CloudEvent) {
 			ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
 			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+(toks/1_000_000.0)*ratePerM)*10000) / 10000
 		}
-	} else if ev.Type == "infra.sandbox.seconds" {
-		sec := extractMapFloat(ev.Data, "duration_sec")
-		if sec > 0 {
-			// AWS Graviton (c7g/m7g 2vCPU/4GB) upstream COGS: $0.0648/hr = $0.000018/sec (0.0018¢/sec)
-			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.000018)*10000) / 10000
-		}
-	} else if ev.Type == "infra.gpu.seconds" {
-		sec := extractMapFloat(ev.Data, "duration_sec")
-		if sec > 0 {
-			// H100 80GB wholesale COGS: $1.62/hr = $0.00045/sec (0.045¢/sec)
-			sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.00045)*10000) / 10000
+	} else {
+		s.ensureMeterForEventLocked(ev.Namespace, ev.Type)
+		if ev.Type == "infra.sandbox.seconds" {
+			sec := extractMapFloat(ev.Data, "duration_sec")
+			if sec > 0 {
+				// AWS Graviton (c7g/m7g 2vCPU/4GB) upstream COGS: $0.0648/hr = $0.000018/sec (0.0018¢/sec)
+				sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.000018)*10000) / 10000
+			}
+		} else if ev.Type == "infra.gpu.seconds" {
+			sec := extractMapFloat(ev.Data, "duration_sec")
+			if sec > 0 {
+				// H100 80GB wholesale COGS: $1.62/hr = $0.00045/sec (0.045¢/sec)
+				sub.TotalCostUSD = math.Round((sub.TotalCostUSD+sec*0.00045)*10000) / 10000
+			}
 		}
 	}
 
@@ -3724,9 +3747,118 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 		}
 	}
 
+	// Ensure meters & subject entitlements exist for any real events already stored
+	for _, ev := range s.events {
+		if ev.Namespace != "" && ev.Namespace != models.InternalDogfoodNamespace && ev.Namespace != "ns_live_demo" && ev.Namespace != "ns_test_demo" {
+			beforeMeters := len(s.meters)
+			beforeEnts := len(s.entitlements)
+			s.ensureMeterForEventLocked(ev.Namespace, ev.Type)
+			if ev.Type == "ai.llm.tokens" && ev.Subject != "" {
+				s.ensureSubjectTokenEntitlementLocked(ev.Namespace, ev.Subject)
+			}
+			if len(s.meters) != beforeMeters || len(s.entitlements) != beforeEnts {
+				dirty = true
+			}
+		}
+	}
+
 	if dirty {
 		s.rebuildSubjectProfilesLocked()
 		s.saveStateLocked()
+	}
+}
+
+func (s *MultiTenantStore) ensureMeterForEventLocked(ns, eventType string) {
+	if ns == "" || ns == models.InternalDogfoodNamespace {
+		return
+	}
+	now := time.Now().UTC()
+	switch eventType {
+	case "ai.llm.tokens":
+		key := ns + ":llm_tokens_total"
+		if _, ok := s.meters[key]; !ok {
+			s.meters[key] = models.Meter{
+				ID:            s.NextID("mtr"),
+				Namespace:     ns,
+				Slug:          "llm_tokens_total",
+				Name:          "LLM Tokens Consumed",
+				Description:   "Input, cached, reasoning, and output tokens across autonomous agent turns",
+				Aggregation:   models.AggregationSum,
+				EventType:     "ai.llm.tokens",
+				ValueProperty: "$.tokens",
+				GroupBy:       map[string]string{"model": "$.model", "type": "$.token_type", "persona": "$.persona", "tool": "$.tool"},
+				WindowSize:    "HOUR",
+				CreatedAt:     now,
+			}
+		}
+	case "ai.agent.tool_call":
+		key := ns + ":agent_tool_calls"
+		if _, ok := s.meters[key]; !ok {
+			s.meters[key] = models.Meter{
+				ID:            s.NextID("mtr"),
+				Namespace:     ns,
+				Slug:          "agent_tool_calls",
+				Name:          "Autonomous Tool Invocations",
+				Description:   "Checkpointed tool executions across Cyclode and Swarmteam pods",
+				Aggregation:   models.AggregationCount,
+				EventType:     "ai.agent.tool_call",
+				ValueProperty: "",
+				GroupBy:       map[string]string{"tool": "$.tool", "persona": "$.persona"},
+				WindowSize:    "HOUR",
+				CreatedAt:     now,
+			}
+		}
+	case "infra.sandbox.seconds":
+		key := ns + ":sandbox_compute_seconds"
+		if _, ok := s.meters[key]; !ok {
+			s.meters[key] = models.Meter{
+				ID:            s.NextID("mtr"),
+				Namespace:     ns,
+				Slug:          "sandbox_compute_seconds",
+				Name:          "Sandbox Execution Seconds",
+				Description:   "Isolated Docker & Git-worktree execution duration in seconds",
+				Aggregation:   models.AggregationSum,
+				EventType:     "infra.sandbox.seconds",
+				ValueProperty: "$.duration_sec",
+				GroupBy:       map[string]string{"runtime": "$.runtime"},
+				WindowSize:    "HOUR",
+				CreatedAt:     now,
+			}
+		}
+	case "posthog.event":
+		key := ns + ":posthog_events_total"
+		if _, ok := s.meters[key]; !ok {
+			s.meters[key] = models.Meter{
+				ID:            s.NextID("mtr"),
+				Namespace:     ns,
+				Slug:          "posthog_events_total",
+				Name:          "PostHog Product Events",
+				Description:   "Captured PostHog product telemetry and user actions",
+				Aggregation:   models.AggregationCount,
+				EventType:     "posthog.event",
+				ValueProperty: "",
+				GroupBy:       map[string]string{"event": "$.event", "country": "$.$geoip_country_code"},
+				WindowSize:    "HOUR",
+				CreatedAt:     now,
+			}
+		}
+	case "posthog.pageview":
+		key := ns + ":pageviews_total"
+		if _, ok := s.meters[key]; !ok {
+			s.meters[key] = models.Meter{
+				ID:            s.NextID("mtr"),
+				Namespace:     ns,
+				Slug:          "pageviews_total",
+				Name:          "PostHog Web Pageviews",
+				Description:   "Captured $pageview sessions grouped by pathname and visitor country",
+				Aggregation:   models.AggregationCount,
+				EventType:     "posthog.pageview",
+				ValueProperty: "",
+				GroupBy:       map[string]string{"pathname": "$.$pathname", "country": "$.$geoip_country_code"},
+				WindowSize:    "HOUR",
+				CreatedAt:     now,
+			}
+		}
 	}
 }
 
