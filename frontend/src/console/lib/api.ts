@@ -37,10 +37,21 @@ function isTokenExpiredOrInvalid(rawToken?: string): boolean {
 
 let ssoHydrationPromise: Promise<string | null> | null = null;
 
+function notifyUnauthorized(): void {
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent("sauthen-auth-change", { detail: null }));
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function hydrateSsoToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
   if (!ssoHydrationPromise) {
-    ssoHydrationPromise = fetch(`${SAUTHEN_API_BASE}/api/v1/auth/sso`, {
+    ssoHydrationPromise = fetch(`${SAUTHEN_API_BASE}/api/v1/auth/sso?app_client=meterbox`, {
       cache: "no-store",
       credentials: "include",
     })
@@ -97,15 +108,20 @@ export async function apiGet<T = unknown>(path: string, namespace?: string, sign
   });
   if (res.status === 401 && bearer.Authorization) {
     const retryBearer = await getStoredBearerHeader(true);
-    const retryHeaders: Record<string, string> = {
-      ...retryBearer,
-      ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
-    };
-    res = await fetch(`${API_BASE}${path}`, {
-      headers: retryHeaders,
-      signal,
-      cache: "no-store",
-    });
+    if (retryBearer.Authorization) {
+      const retryHeaders: Record<string, string> = {
+        ...retryBearer,
+        ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
+      };
+      res = await fetch(`${API_BASE}${path}`, {
+        headers: retryHeaders,
+        signal,
+        cache: "no-store",
+      });
+    }
+  }
+  if (res.status === 401) {
+    notifyUnauthorized();
   }
   if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`);
   return (await res.json()) as T;
@@ -132,17 +148,22 @@ export async function apiPost<T = unknown>(
   });
   if (res.status === 401 && bearer.Authorization) {
     const retryBearer = await getStoredBearerHeader(true);
-    const retryHeaders: Record<string, string> = {
-      "Content-Type": "application/json",
-      ...retryBearer,
-      ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
-      ...(extraHeaders ?? {}),
-    };
-    res = await fetch(`${API_BASE}${path}`, {
-      method: "POST",
-      headers: retryHeaders,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    if (retryBearer.Authorization) {
+      const retryHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...retryBearer,
+        ...(namespace ? { "X-OpenMeter-Namespace": namespace } : {}),
+        ...(extraHeaders ?? {}),
+      };
+      res = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: retryHeaders,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    }
+  }
+  if (res.status === 401) {
+    notifyUnauthorized();
   }
   const text = await res.text();
   let parsed: unknown = {};

@@ -339,7 +339,7 @@ export function clearSauthenSession() {
   }
 }
 
-export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: string) {
+export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: string, appClient?: string) {
   const [session, setSession] = useState<SauthenAuthPayload | null>(() =>
     typeof window !== 'undefined' ? loadSauthenSession() : null,
   );
@@ -351,12 +351,14 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
     try {
       const stored = loadSauthenSession();
       const ns = namespace || stored?.namespace || 'ns_live_appembly';
+      const appQuery = appClient ? `?app_client=${encodeURIComponent(appClient)}` : '';
       if (stored?.access_token) {
         const headers: Record<string, string> = {
           'X-OpenMeter-Namespace': ns,
           Authorization: `Bearer ${stored.access_token}`,
+          ...(appClient ? { 'X-Sauthen-App': appClient } : {}),
         };
-        const res = await fetch(`${apiUrl}/api/v1/auth/me`, {
+        const res = await fetch(`${apiUrl}/api/v1/auth/me${appQuery}`, {
           headers,
           credentials: 'include',
         });
@@ -392,8 +394,9 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
         }
       } else {
         // Cross-app SSO auto-hydration when user signed in on another Appembly app port
-        const ssoRes = await fetch(`${apiUrl}/api/v1/auth/sso`, {
+        const ssoRes = await fetch(`${apiUrl}/api/v1/auth/sso${appQuery}`, {
           credentials: 'include',
+          headers: appClient ? { 'X-Sauthen-App': appClient } : undefined,
         });
         if (ssoRes.ok) {
           const ssoData = await ssoRes.json();
@@ -421,7 +424,7 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
     } finally {
       setLoading(false);
     }
-  }, [apiUrl, namespace]);
+  }, [apiUrl, namespace, appClient]);
 
   const handleSignOut = useCallback(async () => {
     const stored = loadSauthenSession();
@@ -457,7 +460,11 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
         syncWithBackend();
       }
     };
-    const heartbeat = window.setInterval(syncWithBackend, 3 * 60 * 1000);
+    const heartbeat = window.setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        syncWithBackend();
+      }
+    }, 15 * 1000);
     window.addEventListener('sauthen-auth-change', onAuthChange);
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);
@@ -1056,7 +1063,7 @@ export const SauthenUserBadge: React.FC<SauthenUserBadgeProps> = ({
 }) => {
   const cfg = resolveBrandConfig(brand);
   const { session, user, organization, namespace: activeNS, orgs, pendingStepUps, refresh, signOut } =
-    useSauthenSession(apiUrl, namespace);
+    useSauthenSession(apiUrl, namespace, cfg.appId);
   const [menuOpen, setMenuOpen] = useState(false);
   const [tab, setTab] = useState<'account' | 'settings'>('account');
   const [stepUpOpen, setStepUpOpen] = useState(false);
@@ -2080,7 +2087,7 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
   children,
 }) => {
   const cfg = resolveBrandConfig(brand);
-  const { session, authenticated, refresh } = useSauthenSession(apiUrl, namespace);
+  const { session, authenticated, refresh } = useSauthenSession(apiUrl, namespace, cfg.appId);
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
