@@ -1,6 +1,8 @@
+"use client";
+
 import { ConsoleProvider } from "../../../console/ConsoleProvider";
 import { ConsoleShell } from "../../../console/shell/ConsoleShell";
-import { SauthenAuthGuard } from "../../../packages/appembly-ui";
+import { SauthenAuthGuard } from "../../../packages/appembly-ui/components/auth/SauthenAuthKit";
 
 export default function ConsoleLayout({
   children,
