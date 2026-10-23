@@ -277,6 +277,9 @@ export function resolveBrandConfig(
 
 export function saveSauthenSession(payload: SauthenAuthPayload) {
   try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('sth.auth.signed_out');
+    }
     const prev = loadSauthenSession();
     if (prev?.user?.id && payload?.user?.id && prev.user.id !== payload.user.id) {
       localStorage.removeItem('cyclode_active_task_id');
@@ -325,8 +328,12 @@ export function loadSauthenSession(): SauthenAuthPayload | null {
   }
 }
 
-export function clearSauthenSession() {
+export function clearSauthenSession(notifyServer = true, apiUrl = DEFAULT_SAUTHEN_API) {
   try {
+    const stored = loadSauthenSession();
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('sth.auth.signed_out', '1');
+    }
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem('cyclode_active_task_id');
     localStorage.removeItem('cyclode_active_task_snapshot');
@@ -334,6 +341,20 @@ export function clearSauthenSession() {
       window.history.replaceState({}, '', '/');
     }
     window.dispatchEvent(new CustomEvent('sauthen-auth-change', { detail: null }));
+    if (notifyServer && typeof fetch !== 'undefined') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (stored?.access_token) {
+        headers.Authorization = `Bearer ${stored.access_token}`;
+      }
+      fetch(`${apiUrl}/api/v1/auth/signout`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({ token: stored?.access_token || '' }),
+      }).catch(() => {
+        /* ignore network error on signout */
+      });
+    }
   } catch {
     /* ignore */
   }
@@ -363,7 +384,7 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
           credentials: 'include',
         });
         if (res.status === 401) {
-          clearSauthenSession();
+          clearSauthenSession(false, apiUrl);
           setSession(null);
           return;
         }
@@ -393,6 +414,9 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
           setSession(hydrated);
         }
       } else {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sth.auth.signed_out') === '1') {
+          return;
+        }
         // Cross-app SSO auto-hydration when user signed in on another Appembly app port
         const ssoRes = await fetch(`${apiUrl}/api/v1/auth/sso${appQuery}`, {
           credentials: 'include',
@@ -427,23 +451,8 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
   }, [apiUrl, namespace, appClient]);
 
   const handleSignOut = useCallback(async () => {
-    const stored = loadSauthenSession();
-    clearSauthenSession();
+    clearSauthenSession(true, apiUrl);
     setSession(null);
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (stored?.access_token) {
-        headers.Authorization = `Bearer ${stored.access_token}`;
-      }
-      await fetch(`${apiUrl}/api/v1/auth/signout`, {
-        method: 'POST',
-        headers,
-        credentials: 'include',
-        body: JSON.stringify({ token: stored?.access_token || '' }),
-      });
-    } catch {
-      /* ignore network error on signout */
-    }
   }, [apiUrl]);
 
   useEffect(() => {

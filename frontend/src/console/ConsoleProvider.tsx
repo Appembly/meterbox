@@ -165,12 +165,14 @@ export const ConsoleProvider: React.FC<{
 
   useEffect(() => {
     fetchTenants();
-    const onAuthChange = () => {
+    const onAuthChange = (e: Event) => {
       CACHED_ORGS = null;
       CACHED_ENVS = null;
       SNAPSHOT_CACHE.clear();
-      fetchTenants();
-      setTick((t) => t + 1);
+      if ((e as CustomEvent).detail) {
+        fetchTenants();
+        setTick((t) => t + 1);
+      }
     };
     window.addEventListener("sauthen-auth-change", onAuthChange);
     return () => window.removeEventListener("sauthen-auth-change", onAuthChange);

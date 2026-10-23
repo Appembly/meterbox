@@ -40,6 +40,9 @@ let ssoHydrationPromise: Promise<string | null> | null = null;
 function notifyUnauthorized(): void {
   try {
     if (typeof window !== "undefined") {
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("sth.auth.signed_out", "1");
+      }
       localStorage.removeItem(SESSION_STORAGE_KEY);
       window.dispatchEvent(new CustomEvent("sauthen-auth-change", { detail: null }));
     }
@@ -50,6 +53,9 @@ function notifyUnauthorized(): void {
 
 async function hydrateSsoToken(): Promise<string | null> {
   if (typeof window === "undefined") return null;
+  if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("sth.auth.signed_out") === "1") {
+    return null;
+  }
   if (!ssoHydrationPromise) {
     ssoHydrationPromise = fetch(`${SAUTHEN_API_BASE}/api/v1/auth/sso?app_client=meterbox`, {
       cache: "no-store",
@@ -59,6 +65,9 @@ async function hydrateSsoToken(): Promise<string | null> {
         if (!r.ok) return null;
         const d = await r.json();
         if (d?.access_token && !isTokenExpiredOrInvalid(d.access_token)) {
+          if (typeof sessionStorage !== "undefined") {
+            sessionStorage.removeItem("sth.auth.signed_out");
+          }
           localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(d));
           return d.access_token as string;
         }
