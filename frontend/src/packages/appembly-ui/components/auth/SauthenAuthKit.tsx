@@ -485,6 +485,42 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
     };
   }, [syncWithBackend]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || !session?.user) return;
+    const pathname = window.location.pathname || '/';
+    const host = window.location.hostname || 'localhost';
+    const isLocal = host === 'localhost' || host === '127.0.0.1';
+    const opsBase =
+      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OPS_API_URL) ||
+      (isLocal ? 'http://localhost:6091' : 'https://ops.appembly.com');
+    const dedupKey = `appembly_pv_${appClient}_${pathname}`;
+    const lastSent = Number(window.sessionStorage?.getItem(dedupKey) || '0');
+    if (Date.now() - lastSent < 10_000) return;
+    try {
+      window.sessionStorage?.setItem(dedupKey, String(Date.now()));
+    } catch {
+      // ignore storage errors
+    }
+    fetch(`${opsBase.replace(/\/$/, '')}/api/ops/v1/posthog/capture`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: '$pageview',
+        distinct_id: session.user.id || session.user.email || 'anon_user',
+        org_id: session.user.org_ids?.[0] || session.organization?.id || 'org_appembly',
+        namespace: session.namespace || namespace || 'ns_live_appembly',
+        app: appClient || host.split('.')[0] || 'appembly',
+        properties: {
+          $pathname: pathname,
+          $host: host,
+          email: session.user.email,
+          display_name: session.user.display_name,
+          $session_id: session.session?.id || 'sess_web',
+        },
+      }),
+    }).catch(() => {});
+  }, [session?.user?.id, session?.namespace, appClient, namespace]);
+
   return {
     session,
     authenticated: Boolean(session?.user && session?.access_token),

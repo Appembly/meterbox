@@ -64,7 +64,6 @@ export const NAV: NavGroup[] = [
     label: "Insights",
     items: [
       { id: "cost", label: "AI cost", icon: "cost", route: "cost" },
-      { id: "analytics", label: "Product analytics", icon: "analytics", route: "analytics" },
     ],
   },
   {

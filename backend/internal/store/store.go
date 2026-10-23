@@ -111,11 +111,15 @@ func NewMultiTenantStore(chClient *clickhouse.Client, redpandaEndpoint, redisAdd
 		s.reconcileCustomerTenantsLocked()
 		s.rebuildSubjectProfilesLocked()
 		s.saveStateLocked()
+		snapEvents := append([]models.CloudEvent(nil), s.events...)
+		go s.chClient.EnsureSchemaAndBackfill(snapEvents)
 		return s
 	}
 	s.seedDefaultPlatform()
 	s.rebuildSubjectProfilesLocked()
 	s.saveStateLocked()
+	snapEvents := append([]models.CloudEvent(nil), s.events...)
+	go s.chClient.EnsureSchemaAndBackfill(snapEvents)
 	return s
 }
 
@@ -3747,9 +3751,22 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 		}
 	}
 
+	// Prune legacy PostHog meters from customer namespaces (moved to Appembly Ops ClickHouse observability)
+	for k, m := range s.meters {
+		if m.Namespace != "" && m.Namespace != models.InternalDogfoodNamespace && m.Namespace != "ns_live_demo" && m.Namespace != "ns_test_demo" {
+			if m.Slug == "posthog_events_total" || m.Slug == "pageviews_total" || strings.HasPrefix(m.EventType, "posthog.") {
+				delete(s.meters, k)
+				dirty = true
+			}
+		}
+	}
+
 	// Ensure meters & subject entitlements exist for any real events already stored
 	for _, ev := range s.events {
 		if ev.Namespace != "" && ev.Namespace != models.InternalDogfoodNamespace && ev.Namespace != "ns_live_demo" && ev.Namespace != "ns_test_demo" {
+			if strings.HasPrefix(ev.Type, "posthog.") {
+				continue
+			}
 			beforeMeters := len(s.meters)
 			beforeEnts := len(s.entitlements)
 			s.ensureMeterForEventLocked(ev.Namespace, ev.Type)
@@ -3769,7 +3786,7 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 }
 
 func (s *MultiTenantStore) ensureMeterForEventLocked(ns, eventType string) {
-	if ns == "" || ns == models.InternalDogfoodNamespace {
+	if ns == "" || ns == models.InternalDogfoodNamespace || strings.HasPrefix(eventType, "posthog.") {
 		return
 	}
 	now := time.Now().UTC()
@@ -3821,40 +3838,6 @@ func (s *MultiTenantStore) ensureMeterForEventLocked(ns, eventType string) {
 				EventType:     "infra.sandbox.seconds",
 				ValueProperty: "$.duration_sec",
 				GroupBy:       map[string]string{"runtime": "$.runtime"},
-				WindowSize:    "HOUR",
-				CreatedAt:     now,
-			}
-		}
-	case "posthog.event":
-		key := ns + ":posthog_events_total"
-		if _, ok := s.meters[key]; !ok {
-			s.meters[key] = models.Meter{
-				ID:            s.NextID("mtr"),
-				Namespace:     ns,
-				Slug:          "posthog_events_total",
-				Name:          "PostHog Product Events",
-				Description:   "Captured PostHog product telemetry and user actions",
-				Aggregation:   models.AggregationCount,
-				EventType:     "posthog.event",
-				ValueProperty: "",
-				GroupBy:       map[string]string{"event": "$.event", "country": "$.$geoip_country_code"},
-				WindowSize:    "HOUR",
-				CreatedAt:     now,
-			}
-		}
-	case "posthog.pageview":
-		key := ns + ":pageviews_total"
-		if _, ok := s.meters[key]; !ok {
-			s.meters[key] = models.Meter{
-				ID:            s.NextID("mtr"),
-				Namespace:     ns,
-				Slug:          "pageviews_total",
-				Name:          "PostHog Web Pageviews",
-				Description:   "Captured $pageview sessions grouped by pathname and visitor country",
-				Aggregation:   models.AggregationCount,
-				EventType:     "posthog.pageview",
-				ValueProperty: "",
-				GroupBy:       map[string]string{"pathname": "$.$pathname", "country": "$.$geoip_country_code"},
 				WindowSize:    "HOUR",
 				CreatedAt:     now,
 			}
