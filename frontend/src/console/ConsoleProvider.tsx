@@ -25,6 +25,14 @@ let CACHED_ORGS: Organization[] | null = null;
 let CACHED_ENVS: ConsoleEnv[] | null = null;
 const SNAPSHOT_CACHE = new Map<string, { snap: Snapshot; usage: EntitlementUsage[]; ts: number }>();
 
+if (typeof window !== "undefined") {
+  window.addEventListener("sauthen-auth-change", () => {
+    CACHED_ORGS = null;
+    CACHED_ENVS = null;
+    SNAPSHOT_CACHE.clear();
+  });
+}
+
 function inferNamespace(orgSlug: string, envSlug: string): string {
   const o = orgSlug.toLowerCase();
   const isSandbox = envSlug.toLowerCase().includes("sandbox") || envSlug.toLowerCase().includes("test");

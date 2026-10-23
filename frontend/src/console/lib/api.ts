@@ -106,13 +106,6 @@ export async function apiGet<T = unknown>(path: string, namespace?: string, sign
       signal,
       cache: "no-store",
     });
-    if (res.status === 401 && retryBearer.Authorization) {
-      res = await fetch(`${API_BASE}${path}`, {
-        headers: namespace ? { "X-OpenMeter-Namespace": namespace } : {},
-        signal,
-        cache: "no-store",
-      });
-    }
   }
   if (!res.ok) throw new ApiError(res.status, `${res.status} ${res.statusText}`);
   return (await res.json()) as T;

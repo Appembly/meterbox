@@ -481,6 +481,15 @@ func TestPaymentProviderOrchestrationAndWebhooks(t *testing.T) {
 	if !foundPaid {
 		t.Fatalf("expected invoice %s to be marked paid after invoice.paid webhook", inv.ID)
 	}
+
+	// 6. Verify external browser request without API key or Sauthen token is rejected with 401
+	reqExtUnauth := httptest.NewRequest(http.MethodGet, "/api/control/v1/snapshot", nil)
+	reqExtUnauth.Header.Set("Origin", "https://meter.appembly.com")
+	recExtUnauth := httptest.NewRecorder()
+	handler.ServeHTTP(recExtUnauth, reqExtUnauth)
+	if recExtUnauth.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized on unauthenticated external request, got %d", recExtUnauth.Code)
+	}
 }
 
 

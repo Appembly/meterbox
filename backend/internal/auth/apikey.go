@@ -159,7 +159,11 @@ func Middleware(resolver KeyResolver) func(http.Handler) http.Handler {
 				}
 				tenantCtx = &tcCopy
 			} else {
-				// Control plane UI session / explicit namespace header fallback
+				if isExternalOrBrowserRequest(r) {
+					writeAuthError(w, http.StatusUnauthorized, "authentication_required", "Authentication token or API key is required")
+					return
+				}
+				// Internal bridge / test fallback
 				ns := r.Header.Get("X-OpenMeter-Namespace")
 				if ns == "" {
 					ns = r.URL.Query().Get("namespace")
@@ -203,6 +207,18 @@ type sauthenClaims struct {
 	OrgIDs    []string
 	Namespace string
 	Scope     models.KeyScope
+}
+
+func isExternalOrBrowserRequest(r *http.Request) bool {
+	if r.Header.Get("X-Appembly-Internal-Bridge") != "" {
+		return false
+	}
+	return r.Header.Get("Origin") != "" ||
+		r.Header.Get("Sec-Fetch-Mode") != "" ||
+		r.Header.Get("X-Forwarded-For") != "" ||
+		r.Header.Get("X-Forwarded-Proto") != "" ||
+		r.Header.Get("CF-Connecting-IP") != "" ||
+		r.Header.Get("X-Real-IP") != ""
 }
 
 func extractSauthenToken(r *http.Request) string {

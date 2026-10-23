@@ -119,104 +119,102 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
   const activeLabel = sectionTitle(section);
 
   return (
-    <SauthenAuthGuard brand="meterbox">
-      <div className="mbx-console mbx-app-shell">
-        {isSandbox && <div className="mbx-env-stripe" aria-hidden="true" />}
+    <div className="mbx-console mbx-app-shell">
+      {isSandbox && <div className="mbx-env-stripe" aria-hidden="true" />}
 
-        {/* Desktop collapsible sidebar (256px ↔ 60px mini rail) */}
-        <div className={`hidden lg:block mbx-sidebar-wrap ${collapsed ? "collapsed" : ""}`}>
-          <div className={`mbx-sidebar-fixed ${collapsed ? "collapsed" : ""}`}>
+      {/* Desktop collapsible sidebar (256px ↔ 60px mini rail) */}
+      <div className={`hidden lg:block mbx-sidebar-wrap ${collapsed ? "collapsed" : ""}`}>
+        <div className={`mbx-sidebar-fixed ${collapsed ? "collapsed" : ""}`}>
+          <Sidebar
+            collapsed={collapsed}
+            onToggleCollapse={toggleCollapse}
+            onOpenPalette={() => setPaletteOpen(true)}
+          />
+        </div>
+      </div>
+
+      {/* Mobile sidebar */}
+      {mobileNav && (
+        <div className="lg:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileNav(false)} />
+          <div className="mbx-pop absolute inset-y-0 left-0 w-[264px] shadow-[var(--shadow-xl)]">
             <Sidebar
-              collapsed={collapsed}
-              onToggleCollapse={toggleCollapse}
-              onOpenPalette={() => setPaletteOpen(true)}
+              onOpenPalette={() => {
+                setMobileNav(false);
+                setPaletteOpen(true);
+              }}
+              onNavigate={() => setMobileNav(false)}
             />
+            <button
+              type="button"
+              onClick={() => setMobileNav(false)}
+              className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center mbx-hover"
+              aria-label="Close navigation"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
+      )}
 
-        {/* Mobile sidebar */}
-        {mobileNav && (
-          <div className="lg:hidden fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/30" onClick={() => setMobileNav(false)} />
-            <div className="mbx-pop absolute inset-y-0 left-0 w-[264px] shadow-[var(--shadow-xl)]">
-              <Sidebar
-                onOpenPalette={() => {
-                  setMobileNav(false);
-                  setPaletteOpen(true);
-                }}
-                onNavigate={() => setMobileNav(false)}
-              />
-              <button
-                type="button"
-                onClick={() => setMobileNav(false)}
-                className="absolute top-3 right-3 w-8 h-8 rounded-lg flex items-center justify-center mbx-hover"
-                aria-label="Close navigation"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      <div className="flex-1 min-w-0 min-h-screen flex flex-col">
+        {/* Unified 60px Top Breadcrumb & Command Bar */}
+        <header className="mbx-topbar">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setMobileNav(true)}
+              className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center mbx-hover shrink-0"
+              aria-label="Open navigation"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+            <ContextSwitcher />
+            <ChevronRight className="w-3.5 h-3.5 text-[var(--placeholder)] shrink-0 hidden sm:block" />
+            <span className="text-[13.5px] font-semibold text-[var(--foreground)] truncate hidden sm:block">
+              {activeLabel}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="inline-flex items-center gap-2.5 h-8 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] hover:bg-[var(--card)] hover:border-[var(--border-strong)] text-[12.5px] text-[var(--muted-foreground)] transition-colors"
+            >
+              <Search className="w-3.5 h-3.5 text-[var(--placeholder)]" />
+              <span className="hidden md:inline">Search or jump to…</span>
+              <Kbd>⌘K</Kbd>
+            </button>
+
+            <TopbarUserMenu namespace={namespace} />
+          </div>
+        </header>
+
+        {!connected && status !== "loading" && (
+          <div
+            className="mx-4 sm:mx-8 mt-4 flex items-center gap-3 rounded-xl border px-4 py-2.5 text-[13px]"
+            style={{
+              borderColor: "color-mix(in srgb, var(--err) 35%, transparent)",
+              background: "color-mix(in srgb, var(--err) 8%, transparent)",
+            }}
+            role="alert"
+          >
+            <TriangleAlert className="w-4 h-4 shrink-0" style={{ color: "var(--err)" }} />
+            <span className="flex-1">Can’t reach the Meterbox API. Figures below may be stale.</span>
+            <button type="button" onClick={refresh} className="font-semibold underline underline-offset-2">
+              Retry
+            </button>
           </div>
         )}
 
-        <div className="flex-1 min-w-0 min-h-screen flex flex-col">
-          {/* Unified 60px Top Breadcrumb & Command Bar */}
-          <header className="mbx-topbar">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <button
-                type="button"
-                onClick={() => setMobileNav(true)}
-                className="lg:hidden w-8 h-8 rounded-lg flex items-center justify-center mbx-hover shrink-0"
-                aria-label="Open navigation"
-              >
-                <Menu className="w-4 h-4" />
-              </button>
-              <ContextSwitcher />
-              <ChevronRight className="w-3.5 h-3.5 text-[var(--placeholder)] shrink-0 hidden sm:block" />
-              <span className="text-[13.5px] font-semibold text-[var(--foreground)] truncate hidden sm:block">
-                {activeLabel}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setPaletteOpen(true)}
-                className="inline-flex items-center gap-2.5 h-8 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] hover:bg-[var(--card)] hover:border-[var(--border-strong)] text-[12.5px] text-[var(--muted-foreground)] transition-colors"
-              >
-                <Search className="w-3.5 h-3.5 text-[var(--placeholder)]" />
-                <span className="hidden md:inline">Search or jump to…</span>
-                <Kbd>⌘K</Kbd>
-              </button>
-
-              <TopbarUserMenu namespace={namespace} />
-            </div>
-          </header>
-
-          {!connected && status !== "loading" && (
-            <div
-              className="mx-4 sm:mx-8 mt-4 flex items-center gap-3 rounded-xl border px-4 py-2.5 text-[13px]"
-              style={{
-                borderColor: "color-mix(in srgb, var(--err) 35%, transparent)",
-                background: "color-mix(in srgb, var(--err) 8%, transparent)",
-              }}
-              role="alert"
-            >
-              <TriangleAlert className="w-4 h-4 shrink-0" style={{ color: "var(--err)" }} />
-              <span className="flex-1">Can’t reach the Meterbox API. Figures below may be stale.</span>
-              <button type="button" onClick={refresh} className="font-semibold underline underline-offset-2">
-                Retry
-              </button>
-            </div>
-          )}
-
-          <main className="flex-1 px-4 sm:px-8 py-6 pb-16 max-w-[1440px] w-full mx-auto">
-            {renderSectionView(section, children)}
-          </main>
-        </div>
-
-        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        <main className="flex-1 px-4 sm:px-8 py-6 pb-16 max-w-[1440px] w-full mx-auto">
+          {renderSectionView(section, children)}
+        </main>
       </div>
-    </SauthenAuthGuard>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </div>
   );
 };
 
