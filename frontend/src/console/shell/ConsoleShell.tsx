@@ -18,7 +18,14 @@ import { CostView } from "../views/insights/CostView";
 import { AnalyticsView } from "../views/insights/AnalyticsView";
 import { ApiKeysView } from "../views/developers/ApiKeysView";
 import { DocsView } from "../views/developers/DocsView";
-import { SauthenAuthGuard, useSauthenSession } from "../../packages/appembly-ui";
+import {
+  AppemblyLogo,
+  EmblyChat,
+  SauthenAuthGuard,
+  loadSauthenSession,
+  useSauthenSession,
+} from "../../packages/appembly-ui";
+import type { EmblyToolRendererProps } from "../../packages/appembly-ui";
 import "../console.css";
 
 function renderSectionView(section: string, fallback: React.ReactNode): React.ReactNode {
@@ -67,9 +74,38 @@ function sectionTitle(section: string): string {
   return "Overview";
 }
 
+const MeterboxPricingSimCard: React.FC<EmblyToolRendererProps> = ({ step }) => {
+  const res = (step.result || {}) as Record<string, any>;
+  const planName = res.plan_name || step.arguments?.plan_name || "Pro Plan";
+  const rev = typeof res.total_revenue_usd === "number" ? res.total_revenue_usd : 149;
+  const marginPct = typeof res.gross_margin === "number" ? (res.gross_margin * 100).toFixed(1) : "76.5";
+
+  return (
+    <div className="py-1 space-y-1">
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <span className="text-[12.5px] font-semibold text-[var(--foreground)] truncate">
+          Pricing Simulation · {planName}
+        </span>
+        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[var(--primary)]/15 text-[var(--primary)] whitespace-nowrap shrink-0">
+          {marginPct}% Gross Margin
+        </span>
+      </div>
+      <div className="text-[12px] text-[var(--muted-foreground)] truncate">
+        Projected Revenue: <span className="mbx-mono text-[var(--foreground)]">${rev.toFixed(2)}/mo</span> · Overage:{" "}
+        <span className="mbx-mono text-[var(--foreground)]">${Number(res.overage_charge_usd ?? 50).toFixed(2)}</span>
+      </div>
+    </div>
+  );
+};
+
+const METERBOX_TOOL_RENDERERS = {
+  simulate_pricing_tier: MeterboxPricingSimCard,
+};
+
 export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isSandbox, connected, status, section, namespace, refresh } = useConsole();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
@@ -104,6 +140,11 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
         toggleCollapse();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setChatOpen((v) => !v);
         return;
       }
       const tag = (e.target as HTMLElement)?.tagName;
@@ -180,11 +221,26 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="inline-flex items-center gap-2.5 h-8 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] hover:bg-[var(--card)] hover:border-[var(--border-strong)] text-[12.5px] text-[var(--muted-foreground)] transition-colors"
+              className="inline-flex items-center gap-2.5 h-8 px-3 rounded-lg border border-[var(--border)] bg-[var(--surface-subtle)] hover:bg-[var(--card)] hover:border-[var(--border-strong)] text-[12.5px] text-[var(--muted-foreground)] transition-colors whitespace-nowrap shrink-0"
             >
-              <Search className="w-3.5 h-3.5 text-[var(--placeholder)]" />
-              <span className="hidden md:inline">Search or jump to…</span>
+              <Search className="w-3.5 h-3.5 text-[var(--placeholder)] shrink-0" />
+              <span className="hidden md:inline whitespace-nowrap">Search or jump to…</span>
               <Kbd>⌘K</Kbd>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setChatOpen((v) => !v)}
+              className={`inline-flex items-center gap-2 h-8 px-2.5 rounded-lg border text-[12.5px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+                chatOpen
+                  ? "border-[var(--primary)] bg-[var(--surface-subtle)] text-[var(--foreground)]"
+                  : "border-[var(--border)] bg-[var(--surface-subtle)] hover:bg-[var(--card)] hover:border-[var(--border-strong)] text-[var(--muted-foreground)]"
+              }`}
+              title="Ask AI (⌘J)"
+            >
+              <AppemblyLogo variant="mark" size={15} strokeColor="#4E8067" />
+              <span className="hidden sm:inline whitespace-nowrap">Ask AI</span>
+              <Kbd>⌘J</Kbd>
             </button>
 
             <TopbarUserMenu namespace={namespace} />
@@ -212,6 +268,27 @@ export const ConsoleShell: React.FC<{ children: React.ReactNode }> = ({ children
           {renderSectionView(section, children)}
         </main>
       </div>
+
+      {chatOpen && (
+        <div className="fixed inset-y-0 right-0 z-40 flex shadow-2xl shadow-black/50">
+          <EmblyChat
+            mode="drawer"
+            packName="meterbox_finops"
+            brandAccent="#4E8067"
+            showCostTelemetry
+            isOpen={chatOpen}
+            onClose={() => setChatOpen(false)}
+            width={460}
+            sessionContext={{ namespace, section: activeLabel }}
+            contextChips={[
+              { id: "ns", kind: "namespace", label: namespace, value: namespace, removable: false },
+              { id: "sec", kind: "view", label: activeLabel, value: section, removable: false },
+            ]}
+            getAuthToken={() => loadSauthenSession()?.access_token || null}
+            toolRenderers={METERBOX_TOOL_RENDERERS}
+          />
+        </div>
+      )}
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>

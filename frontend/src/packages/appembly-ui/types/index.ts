@@ -122,3 +122,124 @@ export interface CostTelemetryBreakdown {
   tool_token_breakdown?: CostToolBreakdownItem[];
 }
 
+export type EmblyChatMode = 'canvas' | 'drawer' | 'popover';
+
+export type EmblyIntentCategory = 'execution' | 'qa_research' | 'planning';
+
+export interface EmblyContextChip {
+  id: string;
+  label: string;
+  kind: string;
+  value: string;
+  icon?: React.ReactNode;
+  removable?: boolean;
+}
+
+export interface EmblyStarterPrompt {
+  id: string;
+  label: string;
+  prompt: string;
+  persona?: string;
+  icon?: React.ReactNode;
+}
+
+export interface EmblyToolStep {
+  turn: number;
+  callId: string;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  result?: unknown;
+  status: 'running' | 'completed' | 'error' | 'awaiting_approval';
+  error?: string;
+  durationMs?: number;
+  requiresSauthenStepup?: boolean;
+}
+
+export interface EmblyEvalGateCheck {
+  gateName: string;
+  passed: boolean;
+  score: number;
+  diagnostics: string;
+}
+
+export interface EmblyEvalReport {
+  packName: string;
+  status: 'accomplished' | 'needs_revision';
+  score: number;
+  checks: EmblyEvalGateCheck[];
+}
+
+export interface EmblyMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  persona?: string;
+  thinking?: string;
+  toolSteps?: EmblyToolStep[];
+  evalReport?: EmblyEvalReport;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    cachedTokens?: number;
+    estimatedCostUsd?: number;
+  };
+  createdAt: string;
+}
+
+export interface EmblyToolRendererProps<
+  TArgs = Record<string, unknown>,
+  TResult = unknown,
+> {
+  step: EmblyToolStep & { arguments: TArgs; result?: TResult };
+  brandAccent: string;
+  onApprove?: (callId: string, payload?: Record<string, unknown>) => Promise<void>;
+  onReject?: (callId: string, reason?: string) => Promise<void>;
+  onSendFollowUp?: (prompt: string) => void;
+}
+
+export interface EmblyChatProps {
+  mode?: EmblyChatMode;
+  endpointUrl?: string;
+  packName:
+    | 'cyclode_coding'
+    | 'computer_use_qa'
+    | 'adappty_autonomic'
+    | 'sauthen_identity'
+    | 'meterbox_finops'
+    | 'valiscale_concept'
+    | 'swarmteam_orchestrator'
+    | (string & {});
+  secondaryPacks?: string[];
+  persona?: string;
+  allowPersonaSwitch?: boolean;
+  pinnedSkills?: string[];
+  intentCategory?: EmblyIntentCategory;
+  title?: string;
+  subtitle?: string;
+  brandAccent?: string;
+  brandIcon?: React.ReactNode;
+  placeholder?: string;
+  isOpen?: boolean;
+  onClose?: () => void;
+  width?: number | string;
+  sessionContext?: Record<string, unknown>;
+  contextChips?: EmblyContextChip[];
+  onRemoveContextChip?: (chipId: string) => void;
+  starterPrompts?: EmblyStarterPrompt[];
+  messages?: EmblyMessage[];
+  initialMessages?: EmblyMessage[];
+  onMessagesChange?: (messages: EmblyMessage[]) => void;
+  getAuthToken?: () => Promise<string | null> | string | null;
+  toolRenderers?: Record<string, React.ComponentType<EmblyToolRendererProps<any, any>>>;
+  onStepUpRequired?: (
+    step: EmblyToolStep
+  ) => Promise<{ approved: boolean; stepUpToken?: string }>;
+  showEvalGateBadge?: boolean;
+  showCostTelemetry?: boolean;
+  enableVoiceInput?: boolean;
+  enableAttachments?: boolean;
+  headerActionsSlot?: React.ReactNode;
+  composerLeadingSlot?: React.ReactNode;
+}
+
+

@@ -15,5 +15,9 @@ export * from './components/metrics/MultiSeriesChart';
 export * from './components/metrics/CostIntelligenceCard';
 export * from './components/swarm/ProjectTaskTimeline';
 export * from './components/marketing/AppemblyLandingPage';
+export * from './components/chat/EmblyChat';
+export * from './components/workbench/AppemblyWorkbench';
+
+
 
 

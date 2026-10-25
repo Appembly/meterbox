@@ -298,11 +298,101 @@ const ACCESS_STEPS = [
   { title: 'Get a private invite', desc: 'Beta products arrive first; waitlisted products as soon as they’re ready.' },
 ];
 
+const ASSEMBLE_STEPS = [
+  { title: 'Share your project brief & starting stage', desc: 'Start from a raw concept, an active roadmap, or a production AI system that needs security and scale.' },
+  { title: 'Architecture & scope session', desc: 'Our engineers map your app and agent workflows onto the Appembly stack with clear milestones.' },
+  { title: 'Assemble, launch & scale together', desc: 'We validate, build, deploy, and operate your system — or hand your team the keys on our connected platform.' },
+];
+
+interface LifecycleStageItem {
+  id: string;
+  step: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  deliverable: string;
+  productIds: string[];
+  foundationIds?: string[];
+}
+
+const LIFECYCLE_STAGES: LifecycleStageItem[] = [
+  {
+    id: 'validate',
+    step: '01 · Validate',
+    title: 'Idea, Research & Demand',
+    subtitle: 'Prove what to build before writing code',
+    description:
+      'Test market viability, run AI-moderated customer focus groups, capture real buyer intent, and generate structured PRDs.',
+    deliverable: 'Validated PRD & demand signals',
+    productIds: ['valiscale', 'gatharoom', 'wotneed'],
+  },
+  {
+    id: 'engineer',
+    step: '02 · Assemble',
+    title: 'Autonomous Engineering',
+    subtitle: 'Multi-agent build in isolated worktrees',
+    description:
+      'Decompose roadmaps into parallel agent waves and build in sandboxed git worktrees with auditable diffs and calm UI surfaces.',
+    deliverable: 'Verified full-stack apps & agents',
+    productIds: ['cyclode', 'swarmteam'],
+  },
+  {
+    id: 'secure',
+    step: '03 · Secure & Deploy',
+    title: 'Identity, Vault & Runtime',
+    subtitle: 'Zero-trust auth for humans and agents',
+    description:
+      'Ship with Passkey & OIDC SSO, 15-minute RFC 8693 scoped agent tokens, zero-knowledge LLM key proxying, and human step-up gates.',
+    deliverable: 'Scoped agent STS & production runtime',
+    productIds: ['sauthen'],
+    foundationIds: ['runctor'],
+  },
+  {
+    id: 'operate',
+    step: '04 · Operate',
+    title: 'Autonomic Day-2 Ops',
+    subtitle: 'Self-healing production systems',
+    description:
+      'Keep client systems resilient with bounded runtime tuning, shadow-replayed remediations, and blast-radius approval queues.',
+    deliverable: '24/7 autonomous SLO & incident reflexes',
+    productIds: ['adappty'],
+  },
+  {
+    id: 'scale',
+    step: '05 · Scale & Bill',
+    title: 'AI FinOps & Metering',
+    subtitle: 'Every token metered, every quota enforced',
+    description:
+      'Ingest token and compute events exactly once, enforce edge entitlements, track per-agent margins, and automate Stripe invoicing.',
+    deliverable: 'Live usage telemetry & billing',
+    productIds: ['meterbox'],
+  },
+];
+
+const ENGAGEMENT_MODELS = [
+  {
+    id: 'turnkey',
+    label: 'Managed Assembly',
+    detail: 'We validate, build, deploy & run it for you',
+  },
+  {
+    id: 'cobuild',
+    label: 'Co-Build Studio',
+    detail: 'Assemble alongside your engineering team',
+  },
+  {
+    id: 'pilot',
+    label: 'Enterprise Pilot',
+    detail: 'Custom agent & platform architecture rollout',
+  },
+];
+
 const NAV_LINKS = [
+  { href: '#lifecycle', label: 'Lifecycle' },
   { href: '#showcase', label: 'Showcase' },
   { href: '#products', label: 'Products' },
   { href: '#platform', label: 'Platform' },
-  { href: '#access', label: 'Access' },
+  { href: '#access', label: 'Get Started' },
 ];
 
 /* -------------------------------------------------------------------------- */
@@ -322,8 +412,8 @@ function usePrefersReducedMotion(): boolean {
   return reduced;
 }
 
-/** Fires once when the element first scrolls into view. */
-function useInView<T extends Element>(threshold = 0.18, rootMargin = '0px 0px -8% 0px') {
+/** Fires once when the element first enters (or is about to enter) the viewport. */
+function useInView<T extends Element>(threshold = 0.02, rootMargin = '0px 0px 80px 0px') {
   const ref = useRef<T | null>(null);
   const [inView, setInView] = useState(false);
   useEffect(() => {
@@ -595,19 +685,19 @@ const ProductFrame: React.FC<{
   className?: string;
 }> = ({ children, label, className = '' }) => (
   <div
-    className={`rounded-[18px] overflow-hidden border bg-[var(--ui-bg-surface)] border-[var(--ui-border)] shadow-[0_40px_120px_-30px_rgba(17,22,24,0.45),0_12px_32px_-12px_rgba(17,22,24,0.25)] ${className}`}
+    className={`rounded-[14px] sm:rounded-[18px] overflow-hidden border bg-[var(--ui-bg-surface)] border-[var(--ui-border)] shadow-[0_24px_72px_-24px_rgba(17,22,24,0.4),0_8px_24px_-8px_rgba(17,22,24,0.2)] ${className}`}
   >
-    <div className="h-9 flex items-center gap-3 px-4 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)]">
-      <div className="flex gap-1.5">
-        <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]/80" />
-        <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]/80" />
-        <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]/80" />
+    <div className="h-8 sm:h-9 flex items-center gap-2 sm:gap-3 px-3 sm:px-4 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)]">
+      <div className="flex gap-1.5 shrink-0">
+        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FF5F57]/80" />
+        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#FEBC2E]/80" />
+        <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#28C840]/80" />
       </div>
-      <div className="mx-auto max-w-[260px] w-full h-5 rounded-md text-[10.5px] font-medium flex items-center justify-center gap-1.5 truncate px-2 bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]">
+      <div className="mx-auto max-w-[220px] sm:max-w-[260px] w-full h-5 rounded-md text-[10px] sm:text-[10.5px] font-medium flex items-center justify-center gap-1.5 truncate px-2 bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]">
         <Lock className="w-2.5 h-2.5 shrink-0" />
-        {label}
+        <span className="truncate">{label}</span>
       </div>
-      <div className="w-[42px]" />
+      <div className="w-[26px] sm:w-[42px] shrink-0" />
     </div>
     {children}
   </div>
@@ -625,6 +715,7 @@ const ProductShot: React.FC<{ src: string; alt: string; eager?: boolean; classNa
     width={SHOT_WIDTH}
     height={SHOT_HEIGHT}
     loading={eager ? 'eager' : 'lazy'}
+    fetchPriority={eager ? 'high' : 'auto'}
     decoding="async"
     className={className}
   />
@@ -675,7 +766,7 @@ const HeadlineWords: React.FC<{ text: string; startDelay?: number; className?: s
   <>
     {text.split(' ').map((word, i) => (
       <span key={`${word}-${i}`} className={`ap-word ${className}`}>
-        <span style={{ '--ap-delay': `${startDelay + i * 80}ms` } as React.CSSProperties}>
+        <span style={{ '--ap-delay': `${startDelay + i * 45}ms` } as React.CSSProperties}>
           {word}
         </span>
         {'\u00A0'}
@@ -684,7 +775,7 @@ const HeadlineWords: React.FC<{ text: string; startDelay?: number; className?: s
   </>
 );
 
-type RequestAccess = (productId?: string) => void;
+type RequestAccess = (productId?: string, stageId?: string, intent?: FormIntent) => void;
 
 /* -------------------------------------------------------------------------- */
 /*                                   Sections                                 */
@@ -738,10 +829,17 @@ const Header: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess 
           </button>
           <button
             type="button"
-            onClick={() => onRequestAccess()}
+            onClick={() => onRequestAccess(undefined, undefined, 'access')}
+            className="hidden lg:inline-flex items-center h-9 px-3.5 rounded-lg text-[13px] font-medium text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-hover)] transition-colors cursor-pointer"
+          >
+            Product beta
+          </button>
+          <button
+            type="button"
+            onClick={() => onRequestAccess(undefined, undefined, 'assemble')}
             className="hidden sm:inline-flex group items-center gap-1.5 h-9 px-4 rounded-lg text-[13px] font-semibold bg-[var(--ui-text-primary)] text-[var(--ui-bg-canvas)] hover:opacity-90 transition-opacity cursor-pointer"
           >
-            Request access
+            Assemble with us
             <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
           </button>
           <button
@@ -768,16 +866,28 @@ const Header: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess 
               {item.label}
             </a>
           ))}
-          <button
-            type="button"
-            onClick={() => {
-              setMenuOpen(false);
-              onRequestAccess();
-            }}
-            className="w-full mt-1 px-4 py-3 rounded-xl text-[15px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] cursor-pointer"
-          >
-            Request access
-          </button>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onRequestAccess(undefined, undefined, 'assemble');
+              }}
+              className="px-4 py-3 rounded-xl text-[14px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] cursor-pointer"
+            >
+              Assemble with us
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                onRequestAccess(undefined, undefined, 'access');
+              }}
+              className="px-4 py-3 rounded-xl text-[14px] font-semibold border border-[var(--ui-border-strong)] text-[var(--ui-text-primary)] cursor-pointer"
+            >
+              Product beta
+            </button>
+          </div>
         </div>
       )}
     </header>
@@ -787,13 +897,17 @@ const Header: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess 
 const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => {
   const stageRef = useRef<HTMLDivElement | null>(null);
 
-  // Scroll-linked tilt: the product stage starts slightly reclined and settles flat as you scroll.
+  // Scroll-linked tilt on desktop viewports only; mobile stays flat for crisp legibility and 60fps scroll.
   useEffect(() => {
     const el = stageRef.current;
-    if (!el) return;
+    if (!el || typeof window === 'undefined') return;
     let raf = 0;
     const update = () => {
       raf = 0;
+      if (window.innerWidth < 768) {
+        el.style.setProperty('--ap-tilt', '0');
+        return;
+      }
       const rect = el.getBoundingClientRect();
       const vh = window.innerHeight || 1;
       const tilt = Math.max(0, Math.min(1, (rect.top - vh * 0.12) / (vh * 0.6)));
@@ -813,7 +927,7 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
   }, []);
 
   return (
-    <section id="top" className="relative overflow-hidden pt-36 sm:pt-44 pb-8">
+    <section id="top" className="relative overflow-hidden pt-28 sm:pt-40 lg:pt-44 pb-6 sm:pb-8">
       <ModularPatternBackdrop tone="light" />
       <div
         className="pointer-events-none absolute -top-48 left-1/2 -translate-x-1/2 w-[1100px] h-[700px] rounded-full opacity-60 blur-3xl ap-glow"
@@ -823,68 +937,69 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
         }}
       />
 
-      <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
+      <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
         <div className="max-w-[920px] mx-auto text-center">
           <a
-            href="#access"
-            className="ap-enter group inline-flex items-center gap-2.5 pl-2 pr-3.5 py-1.5 rounded-full border border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[12.5px] font-medium text-[var(--ui-text-secondary)] hover:border-[var(--ui-accent)]/50 transition-colors"
+            href="#lifecycle"
+            className="ap-enter group inline-flex items-center gap-2 pl-2 pr-3 py-1.5 max-w-full rounded-full border border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[12px] sm:text-[12.5px] font-medium text-[var(--ui-text-secondary)] hover:border-[var(--ui-accent)]/50 transition-colors"
             style={{ '--ap-delay': '0ms' } as React.CSSProperties}
           >
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--ui-accent)]/12 text-[var(--ui-accent)] font-semibold">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-[var(--ui-accent)]/12 text-[var(--ui-accent)] font-semibold shrink-0">
               <span className="ap-pulse w-1.5 h-1.5 rounded-full bg-current" />
-              Private beta
+              Platform &amp; Studio
             </span>
-            <span>
-              Cyclode, Meterbox &amp; Sauthen<span className="hidden sm:inline"> are onboarding early teams</span>
+            <span className="truncate">
+              Idea to scale · Cyclode, Meterbox &amp; Sauthen<span className="hidden sm:inline"> now in private beta</span>
             </span>
-            <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+            <ArrowRight className="w-3.5 h-3.5 shrink-0 transition-transform group-hover:translate-x-0.5" />
           </a>
 
-          <h1 className="mt-8 text-[44px] sm:text-[64px] lg:text-[84px] font-semibold tracking-[-0.045em] leading-[0.98] text-[var(--ui-text-primary)]">
-            <HeadlineWords text="Assembling AI-native" startDelay={120} />
+          <h1 className="mt-6 sm:mt-8 text-[38px] sm:text-[64px] lg:text-[84px] font-semibold tracking-[-0.045em] leading-[1.01] sm:leading-[0.98] text-[var(--ui-text-primary)]">
+            <HeadlineWords text="Assembling AI-native" startDelay={60} />
             <br />
-            <HeadlineWords text="apps and agents." startDelay={360} className="text-[var(--ui-accent)]" />
+            <HeadlineWords text="apps and agents." startDelay={180} className="text-[var(--ui-accent)]" />
           </h1>
 
           <p
-            className="ap-enter mt-7 text-[17px] sm:text-[19px] leading-[1.6] text-[var(--ui-text-secondary)] max-w-[640px] mx-auto"
-            style={{ '--ap-delay': '700ms' } as React.CSSProperties}
+            className="ap-enter mt-5 sm:mt-7 text-[15.5px] sm:text-[19px] leading-[1.6] text-[var(--ui-text-secondary)] max-w-[680px] mx-auto"
+            style={{ '--ap-delay': '260ms' } as React.CSSProperties}
           >
-            Appembly builds modular applications and autonomous agents designed to work powerfully
-            on their own — and effortlessly together across engineering, FinOps, research and
-            commerce.
+            One connected platform from idea validation and autonomous engineering to identity,
+            self-healing ops, and usage billing. Adopt our modular tools directly — or partner
+            with our team to assemble, deploy, and scale your system end to end.
           </p>
 
           <div
-            className="ap-enter mt-10 flex flex-wrap items-center justify-center gap-3"
-            style={{ '--ap-delay': '850ms' } as React.CSSProperties}
+            className="ap-enter mt-8 sm:mt-10 flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 max-w-[420px] sm:max-w-none mx-auto"
+            style={{ '--ap-delay': '340ms' } as React.CSSProperties}
           >
             <button
               type="button"
-              onClick={() => onRequestAccess()}
-              className="group inline-flex items-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] shadow-[0_8px_24px_-8px_rgba(78,128,103,0.6)] transition-all cursor-pointer"
+              onClick={() => onRequestAccess(undefined, undefined, 'assemble')}
+              className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] shadow-[0_8px_24px_-8px_rgba(78,128,103,0.6)] transition-all cursor-pointer"
             >
-              Request early access
+              Assemble with us
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </button>
-            <a
-              href="#products"
-              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors"
+            <button
+              type="button"
+              onClick={() => onRequestAccess(undefined, undefined, 'access')}
+              className="inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/70 backdrop-blur text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors cursor-pointer"
             >
-              Explore the suite
-            </a>
+              Request product access
+            </button>
           </div>
         </div>
 
         {/* Product stage */}
         <div
-          className="ap-enter-stage relative mt-20 sm:mt-24 mx-auto max-w-[1160px]"
-          style={{ '--ap-delay': '1000ms', perspective: '2200px' } as React.CSSProperties}
+          className="ap-enter-stage relative mt-12 sm:mt-24 mx-auto max-w-[1160px]"
+          style={{ '--ap-delay': '400ms', perspective: '2200px' } as React.CSSProperties}
         >
-          <div ref={stageRef} className="relative" style={{ '--ap-tilt': 1 } as React.CSSProperties}>
+          <div ref={stageRef} className="relative" style={{ '--ap-tilt': 0 } as React.CSSProperties}>
             <div className="ap-stage-back hidden md:block absolute -right-6 lg:-right-16 -top-14 w-[58%] opacity-90">
               <ProductFrame label="Meterbox · Private beta" className="rotate-[2deg]">
-                <ProductShot src={SHOT_METERBOX} alt="Meterbox FinOps control plane" eager />
+                <ProductShot src={SHOT_METERBOX} alt="Meterbox FinOps control plane" />
               </ProductFrame>
             </div>
 
@@ -895,7 +1010,7 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
             </div>
           </div>
 
-          <div className="pointer-events-none absolute inset-x-0 -bottom-2 h-12 sm:h-40 bg-gradient-to-t from-[var(--ui-bg-canvas)] to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 -bottom-2 h-8 sm:h-40 bg-gradient-to-t from-[var(--ui-bg-canvas)] to-transparent" />
         </div>
       </div>
     </section>
@@ -947,6 +1062,176 @@ const ProductMarquee: React.FC = () => {
   );
 };
 
+const LifecyclePipeline: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => (
+  <section
+    id="lifecycle"
+    className="relative overflow-hidden py-16 sm:py-24 lg:py-32 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)]/35 scroll-mt-20"
+  >
+    <ModularPatternBackdrop tone="light" />
+    <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-10">
+        <Reveal className="max-w-[740px]">
+          <SectionEyebrow>End-to-end AI lifecycle</SectionEyebrow>
+          <h2 className="mt-4 sm:mt-5 text-[30px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.06] sm:leading-[1.04] text-[var(--ui-text-primary)]">
+            From initial idea to
+            <br />
+            <span className="text-[var(--ui-accent)]">autonomic production.</span>
+          </h2>
+        </Reveal>
+        <Reveal delay={50} className="max-w-[460px]">
+          <p className="text-[15.5px] sm:text-[16px] leading-[1.65] text-[var(--ui-text-secondary)]">
+            Every stage of building an AI-native application or agent system is backed by purpose-built
+            Appembly software — whether your team runs the tools directly or partners with us to assemble
+            and operate the full lifecycle.
+          </p>
+        </Reveal>
+      </div>
+
+      {/* 5-Stage Full-Width Pipeline Matrix */}
+      <div className="mt-10 sm:mt-14 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {LIFECYCLE_STAGES.map((stage, idx) => {
+          const stageProducts = stage.productIds
+            .map((id) => PRODUCT_SUITE.find((p) => p.id === id))
+            .filter((p): p is ProductSuiteItem => Boolean(p));
+          const stageFoundations = (stage.foundationIds || [])
+            .map((id) => FOUNDATION.find((f) => f.id === id))
+            .filter((f): f is (typeof FOUNDATION)[number] => Boolean(f));
+
+          return (
+            <Reveal key={stage.id} delay={idx * 45}>
+              <article
+                onMouseMove={handleSpotlightMove}
+                className="ap-spotlight ap-lift h-full rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-5 sm:p-6 flex flex-col justify-between hover:border-[var(--ui-border-strong)] transition-colors"
+                style={{ '--ap-spot': 'rgba(78,128,103,0.16)' } as React.CSSProperties}
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11.5px] font-semibold uppercase tracking-[0.08em] text-[var(--ui-accent)]">
+                      {stage.step}
+                    </span>
+                    <span className="text-[11px] font-medium text-[var(--ui-text-muted)]">
+                      Stage {idx + 1}/5
+                    </span>
+                  </div>
+
+                  <h3 className="mt-2.5 text-[17px] font-semibold tracking-[-0.015em] text-[var(--ui-text-primary)]">
+                    {stage.title}
+                  </h3>
+                  <div className="mt-1 text-[13px] font-medium text-[var(--ui-text-primary)]/85">
+                    {stage.subtitle}
+                  </div>
+                  <p className="mt-2.5 text-[13.5px] leading-[1.55] text-[var(--ui-text-secondary)]">
+                    {stage.description}
+                  </p>
+                </div>
+
+                <div className="mt-5 pt-4 border-t border-[var(--ui-border)] space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {stageProducts.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => onRequestAccess(p.id, stage.id, 'access')}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--ui-border)] text-[12px] font-semibold text-[var(--ui-text-primary)] hover:border-[var(--ui-accent)] transition-colors cursor-pointer"
+                      >
+                        <span
+                          className="w-1.5 h-1.5 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: p.accentColor,
+                            opacity: p.status === 'beta' ? 1 : 0.45,
+                          }}
+                        />
+                        {p.name}
+                      </button>
+                    ))}
+                    {stageFoundations.map((f) => (
+                      <span
+                        key={f.id}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[var(--ui-border)] text-[12px] font-semibold text-[var(--ui-text-secondary)]"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ui-accent)] shrink-0" />
+                        {f.name}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[12px] text-[var(--ui-text-muted)] truncate">
+                      {stage.deliverable}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRequestAccess(undefined, stage.id, 'assemble')}
+                      className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-[var(--ui-accent)] hover:opacity-80 shrink-0 cursor-pointer"
+                    >
+                      Scope <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </article>
+            </Reveal>
+          );
+        })}
+      </div>
+
+      {/* Two Ways to Assemble: Studio vs Self-Serve Platform */}
+      <div className="mt-6 sm:mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
+        <Reveal delay={120}>
+          <div className="h-full rounded-2xl border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)] p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="space-y-1.5 max-w-[460px]">
+              <div className="inline-flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-[var(--ui-accent)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--ui-accent)]" />
+                Client Assembly &amp; Venture Studio
+              </div>
+              <h3 className="text-[18px] sm:text-[20px] font-semibold tracking-[-0.015em] text-[var(--ui-text-primary)]">
+                We assemble and run it for you — powered by our suite.
+              </h3>
+              <p className="text-[13.5px] sm:text-[14px] leading-[1.55] text-[var(--ui-text-secondary)]">
+                Bring an initial concept, roadmap, or enterprise workflow. Our team validates, builds,
+                deploys, and operates your AI-native apps and agents on the connected Appembly stack.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRequestAccess(undefined, 'full-lifecycle', 'assemble')}
+              className="group inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-[13.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] transition-colors shrink-0 cursor-pointer"
+            >
+              Scope a project
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
+        </Reveal>
+
+        <Reveal delay={160}>
+          <div className="h-full rounded-2xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="space-y-1.5 max-w-[460px]">
+              <div className="inline-flex items-center gap-2 text-[11.5px] font-semibold uppercase tracking-[0.08em] text-[var(--ui-text-muted)]">
+                <span className="w-2 h-2 rounded-full bg-[var(--ui-text-secondary)]" />
+                Self-Serve &amp; Co-Build Platform
+              </div>
+              <h3 className="text-[18px] sm:text-[20px] font-semibold tracking-[-0.015em] text-[var(--ui-text-primary)]">
+                Your engineering team builds directly on our modules.
+              </h3>
+              <p className="text-[13.5px] sm:text-[14px] leading-[1.55] text-[var(--ui-text-secondary)]">
+                Adopt Cyclode, Meterbox, and Sauthen individually in your own stack today — or connect
+                the full suite on one shared identity, runtime, and Calm UI foundation.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRequestAccess(undefined, undefined, 'access')}
+              className="group inline-flex items-center justify-center gap-2 h-11 px-5 rounded-xl text-[13.5px] font-semibold border border-[var(--ui-border-strong)] text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors shrink-0 cursor-pointer"
+            >
+              Request beta access
+              <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
+            </button>
+          </div>
+        </Reveal>
+      </div>
+    </div>
+  </section>
+);
+
 const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => {
   const reduced = usePrefersReducedMotion();
   const [activeIdx, setActiveIdx] = useState(0);
@@ -963,33 +1248,33 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
   }, []);
 
   return (
-    <section id="showcase" className="relative overflow-hidden py-28 lg:py-36 scroll-mt-20">
+    <section id="showcase" className="relative overflow-hidden py-16 sm:py-24 lg:py-36 scroll-mt-20">
       <ModularPatternBackdrop tone="light" />
-      <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
+      <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
         <Reveal className="max-w-[760px]">
           <SectionEyebrow>Now in private beta</SectionEyebrow>
-          <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
+          <h2 className="mt-4 sm:mt-5 text-[30px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.06] sm:leading-[1.04] text-[var(--ui-text-primary)]">
             Real products, built for real work.
           </h2>
-          <p className="mt-5 text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[620px]">
+          <p className="mt-4 sm:mt-5 text-[15.5px] sm:text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[620px]">
             Cyclode, Meterbox and Sauthen are running today with early teams. All three share the
             same calm interface, unified identity and live telemetry — so moving between them feels
             like one product.
           </p>
         </Reveal>
 
-        <div className="ap-showcase mt-14 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-start">
-          <Reveal className="lg:col-span-4 space-y-3" delay={80}>
+        <div className="ap-showcase mt-10 sm:mt-14 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-start">
+          <Reveal className="lg:col-span-4 space-y-3" delay={40}>
             <div role="tablist" aria-label="Products in private beta" className="space-y-3">
               {SHOWCASE.map((item, idx) => {
                 const isActive = idx === activeIdx;
                 return (
                   <div
                     key={item.id}
-                    className={`rounded-2xl border p-5 transition-all duration-500 relative overflow-hidden ${
+                    className={`rounded-2xl border p-4 sm:p-5 transition-all duration-300 relative overflow-hidden ${
                       isActive
                         ? 'bg-[var(--ui-bg-surface)] border-[var(--ui-border-strong)] shadow-[0_12px_40px_-20px_rgba(17,22,24,0.35)]'
-                        : 'bg-transparent border-transparent hover:bg-[var(--ui-bg-surface)]/60'
+                        : 'bg-[var(--ui-bg-surface)]/40 lg:bg-transparent border-[var(--ui-border)] lg:border-transparent hover:bg-[var(--ui-bg-surface)]/60'
                     }`}
                   >
                     <button
@@ -1004,21 +1289,32 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                       >
                         {item.icon}
                       </span>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="text-[15px] font-semibold text-[var(--ui-text-primary)]">{item.name}</div>
-                        <div className="text-[12.5px] text-[var(--ui-text-muted)]">{item.kicker}</div>
+                        <div className="text-[12.5px] text-[var(--ui-text-muted)] truncate">{item.kicker}</div>
                       </div>
                     </button>
 
                     <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-700 ${
+                      className={`grid transition-[grid-template-rows,opacity] duration-400 ${
                         isActive ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
                       }`}
                       aria-hidden={!isActive}
                     >
                       <div className="overflow-hidden">
-                        <div className="pt-5 space-y-4">
-                          <div className="text-[19px] font-semibold tracking-[-0.02em] leading-snug text-[var(--ui-text-primary)]">
+                        <div className="pt-4 sm:pt-5 space-y-4">
+                          {/* Inline screenshot preview on mobile/tablet so tapping a tab immediately displays its UI */}
+                          <div className="lg:hidden">
+                            <ProductFrame label={`${item.name} · Private beta`}>
+                              <ProductShot
+                                src={item.image}
+                                alt={`${item.name} — ${item.kicker}`}
+                                className="w-full h-auto object-cover object-top"
+                              />
+                            </ProductFrame>
+                          </div>
+
+                          <div className="text-[17px] sm:text-[19px] font-semibold tracking-[-0.02em] leading-snug text-[var(--ui-text-primary)]">
                             {item.headline}
                           </div>
                           <p className="text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{item.description}</p>
@@ -1030,10 +1326,10 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                               </li>
                             ))}
                           </ul>
-                          <div className="grid grid-cols-2 gap-3 pt-2">
+                          <div className="grid grid-cols-2 gap-3 pt-1">
                             {item.highlights.map((h) => (
                               <div key={h.title} className="rounded-xl bg-[var(--ui-bg-subtle)] px-3.5 py-3">
-                                <div className="text-[15px] font-semibold tracking-tight text-[var(--ui-text-primary)]">
+                                <div className="text-[14px] sm:text-[15px] font-semibold tracking-tight text-[var(--ui-text-primary)]">
                                   {h.title}
                                 </div>
                                 <div className="text-[11.5px] text-[var(--ui-text-muted)]">{h.detail}</div>
@@ -1069,7 +1365,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
             </div>
           </Reveal>
 
-          <Reveal className="lg:col-span-8" delay={160}>
+          <Reveal className="hidden lg:block lg:col-span-8" delay={80}>
             <div className="relative">
               <div
                 className="pointer-events-none absolute -inset-10 rounded-[40px] blur-3xl opacity-40 transition-colors duration-1000"
@@ -1097,20 +1393,20 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
 };
 
 const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess }) => (
-  <section id="products" className="relative overflow-hidden py-28 lg:py-36 bg-[var(--ui-bg-subtle)]/50 border-y border-[var(--ui-border)] scroll-mt-20">
+  <section id="products" className="relative overflow-hidden py-16 sm:py-24 lg:py-36 bg-[var(--ui-bg-subtle)]/50 border-y border-[var(--ui-border)] scroll-mt-20">
     <ModularPatternBackdrop tone="light" />
-    <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+    <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 sm:gap-8">
         <Reveal className="max-w-[720px]">
           <SectionEyebrow>The product suite</SectionEyebrow>
-          <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04] text-[var(--ui-text-primary)]">
+          <h2 className="mt-4 sm:mt-5 text-[30px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.06] sm:leading-[1.04] text-[var(--ui-text-primary)]">
             Powerful alone.
             <br />
             <span className="text-[var(--ui-text-muted)]">Effortless together.</span>
           </h2>
         </Reveal>
-        <Reveal delay={100} className="max-w-[420px]">
-          <p className="text-[16px] leading-[1.65] text-[var(--ui-text-secondary)]">
+        <Reveal delay={50} className="max-w-[420px]">
+          <p className="text-[15.5px] sm:text-[16px] leading-[1.65] text-[var(--ui-text-secondary)]">
             Start with one app to solve an immediate workflow. As the suite grows, research,
             validation, engineering and commerce will share context automatically.
           </p>
@@ -1118,12 +1414,12 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
       </div>
 
       {/* Private beta */}
-      <div className="mt-16 grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div className="mt-10 sm:mt-16 grid grid-cols-1 lg:grid-cols-3 gap-5">
         {BETA_PRODUCTS.map((product, idx) => (
-          <Reveal key={product.id} delay={idx * 90}>
+          <Reveal key={product.id} delay={idx * 45}>
             <article
               onMouseMove={handleSpotlightMove}
-              className="ap-spotlight ap-lift group h-full rounded-3xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-8 flex flex-col hover:border-[var(--ui-border-strong)] hover:shadow-[0_24px_60px_-28px_rgba(17,22,24,0.35)]"
+              className="ap-spotlight ap-lift group h-full rounded-3xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-6 sm:p-8 flex flex-col hover:border-[var(--ui-border-strong)] hover:shadow-[0_24px_60px_-28px_rgba(17,22,24,0.35)]"
               style={{ '--ap-spot': `${product.accentColor}22` } as React.CSSProperties}
             >
               <div className="flex items-center justify-between">
@@ -1134,14 +1430,14 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
                 </span>
                 <StatusBadge status={product.status} />
               </div>
-              <div className="mt-7">
+              <div className="mt-6 sm:mt-7">
                 <div className="text-[12px] font-medium" style={{ color: product.accentColor }}>
                   {product.categoryLabel}
                 </div>
-                <h3 className="mt-1.5 text-[26px] font-semibold tracking-[-0.02em] text-[var(--ui-text-primary)]">
+                <h3 className="mt-1.5 text-[24px] sm:text-[26px] font-semibold tracking-[-0.02em] text-[var(--ui-text-primary)]">
                   {product.name}
                 </h3>
-                <p className="mt-2 text-[16px] font-medium leading-snug text-[var(--ui-text-primary)]/85">{product.tagline}</p>
+                <p className="mt-2 text-[15.5px] sm:text-[16px] font-medium leading-snug text-[var(--ui-text-primary)]/85">{product.tagline}</p>
                 <p className="mt-3 text-[14px] leading-relaxed text-[var(--ui-text-secondary)]">{product.description}</p>
               </div>
               <ul className="mt-6 space-y-2.5">
@@ -1152,7 +1448,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
                   </li>
                 ))}
               </ul>
-              <div className="mt-auto pt-8">
+              <div className="mt-auto pt-7 sm:pt-8">
                 <div className="pt-5 border-t border-[var(--ui-border)] flex items-center justify-between gap-4">
                   <span className="text-[12.5px] text-[var(--ui-text-muted)]">Invitation-only</span>
                   <button
@@ -1170,20 +1466,20 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
       </div>
 
       {/* Coming soon */}
-      <Reveal className="mt-20 flex items-center gap-4">
+      <Reveal className="mt-14 sm:mt-20 flex items-center gap-4">
         <h3 className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)] whitespace-nowrap">
           Coming soon
         </h3>
         <span className="h-px flex-1 bg-[var(--ui-border)]" />
       </Reveal>
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-5">
+      <div className="mt-6 sm:mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4 sm:gap-5">
         {SOON_PRODUCTS.map((product, idx) => (
           <Reveal
             key={product.id}
-            delay={idx * 80}
+            delay={idx * 40}
             className={idx < 2 ? 'lg:col-span-3' : 'lg:col-span-2'}
           >
-            <article className="ap-lift group h-full rounded-3xl border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/60 p-6 flex flex-col hover:bg-[var(--ui-bg-surface)]">
+            <article className="ap-lift group h-full rounded-3xl border border-dashed border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]/60 p-5 sm:p-6 flex flex-col hover:bg-[var(--ui-bg-surface)]">
               <div className="flex items-center justify-between">
                 <span
                   className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)]"
@@ -1193,7 +1489,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
                 </span>
                 <StatusBadge status={product.status} />
               </div>
-              <div className="mt-6 text-[12px] font-medium" style={{ color: product.accentColor }}>
+              <div className="mt-5 sm:mt-6 text-[12px] font-medium" style={{ color: product.accentColor }}>
                 {product.categoryLabel}
               </div>
               <h4 className="mt-1 text-[19px] font-semibold tracking-[-0.02em] text-[var(--ui-text-primary)]">{product.name}</h4>
@@ -1202,7 +1498,7 @@ const ProductGrid: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAc
               <button
                 type="button"
                 onClick={() => onRequestAccess(product.id)}
-                className="mt-auto pt-6 self-start inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] transition-colors cursor-pointer"
+                className="mt-auto pt-5 sm:pt-6 self-start inline-flex items-center gap-1.5 text-[13px] font-semibold text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] transition-colors cursor-pointer"
               >
                 Join the waitlist <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
               </button>
@@ -1232,7 +1528,70 @@ const PlatformDiagram: React.FC = () => {
 
   return (
     <div ref={ref} className={inView ? 'is-visible' : ''}>
-      <svg viewBox="0 0 640 480" className="w-full h-auto" role="img" aria-label="Appembly platform architecture: a shared core and foundation connecting seven products">
+      {/* Mobile-friendly high-legibility stack (< 640px) */}
+      <div className="sm:hidden rounded-2xl border border-[#263136] bg-[#171E21]/75 p-4 space-y-4">
+        <div className="flex items-center gap-3 pb-3 border-b border-[#263136]">
+          <div className="w-10 h-10 rounded-xl bg-[#4E8067] flex items-center justify-center shrink-0">
+            <AppemblyLogo variant="mark" size={22} strokeColor="#F6F7F5" animated />
+          </div>
+          <div>
+            <div className="text-[13.5px] font-semibold text-[#F6F7F5]">Appembly Core</div>
+            <div className="text-[11.5px] text-[#72B091]">Shared identity, runtime &amp; metering bus</div>
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#A9AFAB] mb-2">
+            Foundation Layers
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {FOUNDATION.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-2 rounded-xl border border-[#4E8067]/50 bg-[#111618] px-3 py-2 text-[12.5px] font-semibold text-[#F6F7F5]"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#72B091] shrink-0" />
+                <span className="truncate">{f.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#A9AFAB] mb-2">
+            Connected Product Suite
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            {outerProducts.map((p) => {
+              const live = p.status === 'beta';
+              return (
+                <div
+                  key={p.id}
+                  className={`flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-[12.5px] font-semibold ${
+                    live
+                      ? 'border border-[#4E8067]/50 bg-[#111618] text-[#F6F7F5]'
+                      : 'border border-dashed border-[#344248] bg-[#111618]/50 text-[#A9AFAB]'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2 truncate">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: p.accentColor, opacity: live ? 1 : 0.45 }}
+                    />
+                    <span className="truncate">{p.name}</span>
+                  </span>
+                  <span className={`text-[10px] uppercase tracking-wider shrink-0 ${live ? 'text-[#72B091]' : 'text-[#7C8380]'}`}>
+                    {live ? 'Beta' : 'Soon'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Tablet & Desktop orbital SVG architecture diagram (sm+) */}
+      <svg viewBox="0 0 640 480" className="hidden sm:block w-full h-auto" role="img" aria-label="Appembly platform architecture: a shared core and foundation connecting seven products">
         <defs>
           <radialGradient id="ap-core-glow" cx="50%" cy="50%" r="50%">
             <stop offset="0%" stopColor="#4E8067" stopOpacity="0.45" />
@@ -1339,35 +1698,35 @@ const PlatformDiagram: React.FC = () => {
 };
 
 const Platform: React.FC = () => (
-  <section id="platform" className="relative py-28 lg:py-36 bg-[#111618] text-[#F6F7F5] overflow-hidden scroll-mt-20">
+  <section id="platform" className="relative py-16 sm:py-24 lg:py-36 bg-[#111618] text-[#F6F7F5] overflow-hidden scroll-mt-20">
     <ModularPatternBackdrop tone="dark" />
     <div
       className="pointer-events-none absolute -bottom-40 -left-40 w-[700px] h-[700px] rounded-full blur-3xl opacity-40 ap-glow"
       style={{ background: 'radial-gradient(closest-side, rgba(78,128,103,0.45), transparent)' }}
     />
 
-    <div className="relative max-w-[1320px] mx-auto px-6 sm:px-10">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-14 items-center">
+    <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-14 items-center">
         <div className="lg:col-span-5">
           <Reveal>
             <SectionEyebrow tone="dark">The connected platform</SectionEyebrow>
-            <h2 className="mt-5 text-[36px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.04]">
+            <h2 className="mt-4 sm:mt-5 text-[30px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.06] sm:leading-[1.04]">
               One foundation.
               <br />
               <span className="text-[#72B091]">Every product.</span>
             </h2>
-            <p className="mt-6 text-[17px] leading-[1.65] text-[#A9AFAB] max-w-[480px]">
+            <p className="mt-4 sm:mt-6 text-[15.5px] sm:text-[17px] leading-[1.65] text-[#A9AFAB] max-w-[480px]">
               Most suites are stitched together after the fact. Every Appembly app is built from
               day one on shared layers — so identity, intelligence and experience never fragment.
             </p>
           </Reveal>
 
-          <div className="mt-10 space-y-3">
+          <div className="mt-8 sm:mt-10 space-y-3">
             {FOUNDATION.map((f, i) => (
-              <Reveal key={f.id} delay={120 + i * 100}>
+              <Reveal key={f.id} delay={60 + i * 50}>
                 <div
                   onMouseMove={handleSpotlightMove}
-                  className="ap-spotlight flex items-start gap-4 rounded-2xl border border-[#263136] bg-[#171E21]/70 p-5 hover:border-[#4E8067]/60 transition-colors"
+                  className="ap-spotlight flex items-start gap-4 rounded-2xl border border-[#263136] bg-[#171E21]/70 p-4 sm:p-5 hover:border-[#4E8067]/60 transition-colors"
                   style={{ '--ap-spot': 'rgba(114,176,145,0.14)' } as React.CSSProperties}
                 >
                   <span className="w-10 h-10 rounded-xl bg-[#111618] border border-[#263136] text-[#72B091] flex items-center justify-center shrink-0">
@@ -1396,7 +1755,7 @@ const Platform: React.FC = () => (
         </div>
 
         <div className="lg:col-span-7">
-          <Reveal delay={150}>
+          <Reveal delay={80}>
             <PlatformDiagram />
           </Reveal>
         </div>
@@ -1406,15 +1765,19 @@ const Platform: React.FC = () => (
 );
 
 const Availability: React.FC = () => (
-  <section className="py-24 lg:py-28">
-    <div className="max-w-[1320px] mx-auto px-6 sm:px-10">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-12">
+  <section className="py-16 sm:py-24 lg:py-28">
+    <div className="max-w-[1320px] mx-auto px-4 sm:px-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[var(--ui-border)]">
         {AVAILABILITY.map((s, i) => (
-          <Reveal key={s.label} delay={i * 90} className={`px-6 ${i > 0 ? 'sm:border-l border-[var(--ui-border)]' : ''}`}>
-            <div className="text-[56px] sm:text-[64px] font-semibold tracking-[-0.04em] leading-none text-[var(--ui-text-primary)]">
+          <Reveal
+            key={s.label}
+            delay={i * 45}
+            className="py-6 first:pt-0 last:pb-0 sm:py-0 sm:px-6 sm:first:pl-0 sm:last:pr-0"
+          >
+            <div className="text-[48px] sm:text-[64px] font-semibold tracking-[-0.04em] leading-none text-[var(--ui-text-primary)]">
               <CountUp value={s.value} />
             </div>
-            <div className="mt-3 text-[15px] font-medium text-[var(--ui-text-secondary)]">{s.label}</div>
+            <div className="mt-2.5 sm:mt-3 text-[15px] font-medium text-[var(--ui-text-secondary)]">{s.label}</div>
             <div className="mt-1 text-[12.5px] text-[var(--ui-text-muted)]">{s.detail}</div>
           </Reveal>
         ))}
@@ -1424,7 +1787,7 @@ const Availability: React.FC = () => (
 );
 
 type SubmitState = 'idle' | 'submitting' | 'success' | 'error';
-type FormIntent = 'access' | 'contact';
+type FormIntent = 'assemble' | 'access' | 'contact';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const CONTACT_TOPICS = [
@@ -1434,23 +1797,42 @@ const CONTACT_TOPICS = [
   'Press & media',
 ];
 
+const STAGE_OPTIONS = [
+  ...LIFECYCLE_STAGES.map((s) => ({
+    id: s.id,
+    step: s.step,
+    label: s.title,
+  })),
+  {
+    id: 'full-lifecycle',
+    step: '01–05 · End-to-End',
+    label: 'Full Lifecycle Assembly',
+  },
+];
+
 const AccessSection: React.FC<{
   interest: string[];
   setInterest: React.Dispatch<React.SetStateAction<string[]>>;
+  stages: string[];
+  setStages: React.Dispatch<React.SetStateAction<string[]>>;
+  intent: FormIntent;
+  setIntent: React.Dispatch<React.SetStateAction<FormIntent>>;
   endpoint?: string;
   contactEmail: string;
-  defaultIntent?: FormIntent;
   standalone?: boolean;
 }> = ({
   interest,
   setInterest,
+  stages,
+  setStages,
+  intent,
+  setIntent,
   endpoint = '/api/waitlist',
   contactEmail,
-  defaultIntent = 'access',
   standalone = false,
 }) => {
-  const [intent, setIntent] = useState<FormIntent>(defaultIntent);
   const [topic, setTopic] = useState<string>(CONTACT_TOPICS[0]);
+  const [engagement, setEngagement] = useState<string>(ENGAGEMENT_MODELS[0].id);
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [company, setCompany] = useState('');
@@ -1460,28 +1842,40 @@ const AccessSection: React.FC<{
   const [deliveryMode, setDeliveryMode] = useState<'api' | 'mailto'>('api');
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setIntent(defaultIntent);
-  }, [defaultIntent]);
-
-  const toggle = (id: string) =>
+  const toggleProduct = (id: string) =>
     setInterest((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
 
+  const toggleStage = (id: string) =>
+    setStages((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
+
   const triggerMailtoFallback = (
-    payload: { name: string; company: string; email: string; message: string; topic?: string; intent: FormIntent },
-    productNames: string[]
+    payload: {
+      name: string;
+      company: string;
+      email: string;
+      message: string;
+      topic?: string;
+      engagement?: string;
+      stages?: string[];
+      intent: FormIntent;
+    },
+    summaryItems: string[]
   ) => {
     const subject =
       payload.intent === 'contact'
         ? `[Appembly Contact] ${payload.topic || 'General inquiry'} — ${payload.company || payload.name || payload.email}`
-        : `Access request — ${productNames.length ? productNames.map((n) => n.split(' (')[0]).join(', ') : 'Appembly'}`;
+        : payload.intent === 'assemble'
+          ? `[Appembly Assembly Brief] ${payload.company || payload.name || payload.email} — ${payload.engagement || 'Project'}`
+          : `Access request — ${summaryItems.length ? summaryItems.map((n) => n.split(' (')[0]).join(', ') : 'Appembly'}`;
     const body = [
       `Name: ${payload.name || '-'}`,
       `Company: ${payload.company || '-'}`,
       `Email: ${payload.email}`,
       payload.intent === 'contact'
         ? `Topic: ${payload.topic || 'General inquiry'}`
-        : `Interested in: ${productNames.join(', ') || '-'}`,
+        : payload.intent === 'assemble'
+          ? `Engagement: ${payload.engagement || '-'}\nLifecycle stages: ${summaryItems.join(', ') || 'End-to-End Lifecycle'}`
+          : `Interested in: ${summaryItems.join(', ') || '-'}`,
       '',
       payload.message,
     ].join('\n');
@@ -1506,13 +1900,34 @@ const AccessSection: React.FC<{
       setError('Please include a short message so we know how to help.');
       return;
     }
-    const products = intent === 'access' && interest.length ? interest : [];
-    const productNames = PRODUCT_SUITE.filter((p) => products.includes(p.id)).map(
-      (p) => `${p.name} (${p.status === 'beta' ? 'private beta' : 'waitlist'})`
+    const selectedEngagement = ENGAGEMENT_MODELS.find((m) => m.id === engagement)?.label || 'Managed Assembly';
+    const selectedStages = stages.length ? stages : ['full-lifecycle'];
+    const stageLabels = STAGE_OPTIONS.filter((s) => selectedStages.includes(s.id)).map(
+      (s) => `${s.step} (${s.label})`
     );
+    const products =
+      intent === 'access'
+        ? interest
+        : intent === 'assemble'
+          ? selectedStages.map((s) => `stage:${s}`)
+          : [];
+    const summaryItems =
+      intent === 'assemble'
+        ? stageLabels
+        : PRODUCT_SUITE.filter((p) => products.includes(p.id)).map(
+            (p) => `${p.name} (${p.status === 'beta' ? 'private beta' : 'waitlist'})`
+          );
+
     const payload = {
       intent,
-      topic: intent === 'contact' ? topic : undefined,
+      topic:
+        intent === 'contact'
+          ? topic
+          : intent === 'assemble'
+            ? `Assembly · ${selectedEngagement}`
+            : undefined,
+      engagement: intent === 'assemble' ? selectedEngagement : undefined,
+      stages: intent === 'assemble' ? selectedStages : undefined,
       email: email.trim(),
       name: name.trim(),
       company: company.trim(),
@@ -1539,24 +1954,25 @@ const AccessSection: React.FC<{
         // If running on local static dev server (404/405) or unconfigured binding (503),
         // seamlessly hand off to mailto: so no request is ever lost.
         if (res.status === 404 || res.status === 405 || res.status === 503) {
-          triggerMailtoFallback(payload, productNames);
+          triggerMailtoFallback(payload, summaryItems);
           return;
         }
         throw new Error(`HTTP ${res.status}`);
       } catch {
         // Network error or static preview without Functions runtime: fall back to mailto:
-        triggerMailtoFallback(payload, productNames);
+        triggerMailtoFallback(payload, summaryItems);
       }
       return;
     }
 
-    triggerMailtoFallback(payload, productNames);
+    triggerMailtoFallback(payload, summaryItems);
   };
 
   const inputCls =
     'w-full h-11 px-3.5 rounded-xl bg-[#111618] border border-[#263136] text-[14px] text-[#F6F7F5] placeholder:text-[#7C8380] focus:outline-none focus:border-[#4E8067] focus:ring-2 focus:ring-[#4E8067]/30 transition-colors';
 
   const isContact = intent === 'contact';
+  const isAssemble = intent === 'assemble';
 
   return (
     <section id="access" className={`px-4 sm:px-6 ${standalone ? 'py-10 sm:py-16' : 'pb-24'} scroll-mt-24`}>
@@ -1597,14 +2013,40 @@ const AccessSection: React.FC<{
                     </div>
                     <div className="rounded-2xl border border-[#263136] bg-[#171E21]/60 p-4">
                       <div className="text-[11.5px] font-semibold uppercase tracking-[0.14em] text-[#72B091]">
-                        Private beta cohorts
+                        Assemble or self-serve
                       </div>
-                      <div className="mt-1 font-medium text-[#F6F7F5]">Cyclode, Meterbox &amp; Sauthen</div>
+                      <div className="mt-1 font-medium text-[#F6F7F5]">Studio builds &amp; private beta</div>
                       <div className="mt-0.5 text-[12.5px] text-[#A9AFAB]">
-                        Need early product access? Switch to the Request Access tab on the right.
+                        Use the tabs on the right to scope a client build or request product beta invites.
                       </div>
                     </div>
                   </div>
+                </>
+              ) : isAssemble ? (
+                <>
+                  <h2 className="mt-8 text-[36px] sm:text-[48px] font-semibold tracking-[-0.04em] leading-[1.04]">
+                    Assemble your AI
+                    <br />
+                    <span className="text-[#72B091]">apps &amp; agents.</span>
+                  </h2>
+                  <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
+                    Partner with the Appembly studio and engineering team to take your AI-native
+                    product or autonomous agent system from initial idea and validation to deployed,
+                    self-healing, metered production.
+                  </p>
+                  <ol className="mt-10 space-y-6">
+                    {ASSEMBLE_STEPS.map((s, i) => (
+                      <li key={s.title} className="flex gap-4">
+                        <span className="w-7 h-7 rounded-full border border-[#344248] text-[12px] font-semibold text-[#72B091] flex items-center justify-center shrink-0">
+                          {i + 1}
+                        </span>
+                        <div>
+                          <div className="text-[15px] font-semibold">{s.title}</div>
+                          <p className="mt-1 text-[13.5px] leading-relaxed text-[#A9AFAB]">{s.desc}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
                 </>
               ) : (
                 <>
@@ -1614,8 +2056,8 @@ const AccessSection: React.FC<{
                     <span className="text-[#72B091]">Connect them all.</span>
                   </h2>
                   <p className="mt-5 text-[16px] leading-[1.65] text-[#A9AFAB] max-w-[440px]">
-                    Appembly products are invitation-only while we onboard early teams. Request access
-                    to the private beta, or join the waitlist for what’s coming next.
+                    Appembly products are invitation-only while we onboard early engineering teams.
+                    Request access to the private beta, or join the waitlist for what’s coming next.
                   </p>
                   <ol className="mt-10 space-y-6">
                     {ACCESS_STEPS.map((s, i) => (
@@ -1636,9 +2078,22 @@ const AccessSection: React.FC<{
 
             {/* Form */}
             <div className="lg:col-span-7">
-              <div className="rounded-3xl border border-[#263136] bg-[#171E21]/80 backdrop-blur p-6 sm:p-8">
-                {/* Mode switcher: Request access vs Contact us */}
-                <div className="inline-flex p-1 rounded-xl bg-[#111618] border border-[#263136] mb-6">
+              <div className="rounded-3xl border border-[#263136] bg-[#171E21]/80 backdrop-blur p-5 sm:p-8">
+                {/* 3-Mode switcher: Assemble with us vs Product access vs Contact us */}
+                <div className="grid grid-cols-3 sm:inline-flex p-1 rounded-xl bg-[#111618] border border-[#263136] mb-6 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIntent('assemble');
+                      setState('idle');
+                      setError(null);
+                    }}
+                    className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[12.5px] sm:text-[13px] font-semibold transition-colors cursor-pointer text-center justify-center inline-flex items-center ${
+                      isAssemble ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
+                    }`}
+                  >
+                    Assemble with us
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -1646,11 +2101,11 @@ const AccessSection: React.FC<{
                       setState('idle');
                       setError(null);
                     }}
-                    className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer ${
-                      !isContact ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
+                    className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[12.5px] sm:text-[13px] font-semibold transition-colors cursor-pointer text-center justify-center inline-flex items-center ${
+                      intent === 'access' ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
                     }`}
                   >
-                    Request access
+                    Product access
                   </button>
                   <button
                     type="button"
@@ -1659,12 +2114,12 @@ const AccessSection: React.FC<{
                       setState('idle');
                       setError(null);
                     }}
-                    className={`px-4 py-1.5 rounded-lg text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                    className={`px-2.5 sm:px-4 py-1.5 rounded-lg text-[12.5px] sm:text-[13px] font-semibold transition-colors cursor-pointer inline-flex items-center justify-center gap-1.5 ${
                       isContact ? 'bg-[#4E8067] text-[#F6F7F5]' : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
                     }`}
                   >
-                    <Mail className="w-3.5 h-3.5" />
-                    Contact us
+                    <Mail className="w-3.5 h-3.5 hidden sm:inline" />
+                    Contact
                   </button>
                 </div>
 
@@ -1674,21 +2129,31 @@ const AccessSection: React.FC<{
                       <Check className="w-7 h-7" />
                     </div>
                     <div className="mt-6 text-[22px] font-semibold tracking-tight">
-                      {isContact ? 'Message received.' : 'You’re on the list.'}
+                      {isContact
+                        ? 'Message received.'
+                        : isAssemble
+                          ? 'Assembly brief received.'
+                          : 'You’re on the list.'}
                     </div>
                     <p className="mt-2 text-[14.5px] text-[#A9AFAB] max-w-[380px] mx-auto">
                       {deliveryMode === 'api'
                         ? isContact
                           ? 'Thanks for reaching out — our team will reply to your email shortly.'
-                          : 'Thanks — we’ll be in touch as soon as a seat opens for you.'
-                        : 'Your email app should have opened with your message. Send it and we’ll be in touch.'}
+                          : isAssemble
+                            ? 'Thanks — our engineering and studio team will review your project scope and reach out directly.'
+                            : 'Thanks — we’ll be in touch as soon as a seat opens for you.'
+                        : 'Your email app should have opened with your details. Send it and we’ll be in touch.'}
                     </p>
                     <button
                       type="button"
                       onClick={() => setState('idle')}
                       className="mt-6 text-[13px] font-semibold text-[#72B091] hover:text-[#F6F7F5] cursor-pointer"
                     >
-                      {isContact ? 'Send another message' : 'Submit another request'}
+                      {isContact
+                        ? 'Send another message'
+                        : isAssemble
+                          ? 'Submit another brief'
+                          : 'Submit another request'}
                     </button>
                   </div>
                 ) : (
@@ -1721,6 +2186,73 @@ const AccessSection: React.FC<{
                           })}
                         </div>
                       </fieldset>
+                    ) : isAssemble ? (
+                      <div className="space-y-5">
+                        <fieldset>
+                          <legend className="text-[13px] font-semibold text-[#C5CAC7]">
+                            Which lifecycle stages do you want to assemble?
+                          </legend>
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {STAGE_OPTIONS.map((s) => {
+                              const checked = stages.includes(s.id);
+                              return (
+                                <label
+                                  key={s.id}
+                                  className={`flex items-center gap-3 rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                                    checked ? 'border-[#4E8067] bg-[#4E8067]/12' : 'border-[#263136] hover:border-[#344248]'
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={checked}
+                                    onChange={() => toggleStage(s.id)}
+                                  />
+                                  <span
+                                    className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 ${
+                                      checked ? 'bg-[#4E8067] border-[#4E8067]' : 'border-[#344248]'
+                                    }`}
+                                  >
+                                    {checked && <Check className="w-3 h-3 text-white" />}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[13.5px] font-medium text-[#F6F7F5] truncate">{s.label}</div>
+                                    <div className="text-[11px] font-semibold uppercase tracking-wider text-[#72B091]">
+                                      {s.step}
+                                    </div>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+
+                        <fieldset>
+                          <legend className="text-[13px] font-semibold text-[#C5CAC7]">
+                            How would you like to work together?
+                          </legend>
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            {ENGAGEMENT_MODELS.map((m) => {
+                              const active = engagement === m.id;
+                              return (
+                                <button
+                                  key={m.id}
+                                  type="button"
+                                  onClick={() => setEngagement(m.id)}
+                                  className={`text-left rounded-xl border px-3.5 py-2.5 cursor-pointer transition-colors ${
+                                    active
+                                      ? 'border-[#4E8067] bg-[#4E8067]/12 text-[#F6F7F5]'
+                                      : 'border-[#263136] text-[#A9AFAB] hover:border-[#344248]'
+                                  }`}
+                                >
+                                  <div className="text-[13px] font-semibold text-[#F6F7F5]">{m.label}</div>
+                                  <div className="mt-0.5 text-[11.5px] leading-snug text-[#A9AFAB]">{m.detail}</div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+                      </div>
                     ) : (
                       <fieldset>
                         <legend className="text-[13px] font-semibold text-[#C5CAC7]">What are you interested in?</legend>
@@ -1734,7 +2266,7 @@ const AccessSection: React.FC<{
                                   checked ? 'border-[#4E8067] bg-[#4E8067]/12' : 'border-[#263136] hover:border-[#344248]'
                                 }`}
                               >
-                                <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggle(p.id)} />
+                                <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggleProduct(p.id)} />
                                 <span
                                   className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 ${
                                     checked ? 'bg-[#4E8067] border-[#4E8067]' : 'border-[#344248]'
@@ -1782,6 +2314,8 @@ const AccessSection: React.FC<{
                             <>
                               Message <span className="text-[#72B091]">*</span>
                             </>
+                          ) : isAssemble ? (
+                            'What AI-native app or agent system are you looking to assemble?'
                           ) : (
                             'What would you use it for?'
                           )}
@@ -1794,7 +2328,9 @@ const AccessSection: React.FC<{
                           placeholder={
                             isContact
                               ? 'How can we help your team?'
-                              : 'A sentence or two about your team and use case (optional)'
+                              : isAssemble
+                                ? 'Share a few lines about your idea, workflow, target users, or timeline…'
+                                : 'A sentence or two about your team and use case (optional)'
                           }
                           className={`${inputCls} mt-2 h-auto py-3 resize-none`}
                         />
@@ -1827,7 +2363,11 @@ const AccessSection: React.FC<{
                           </>
                         ) : (
                           <>
-                            {isContact ? 'Send message' : 'Request access'}
+                            {isContact
+                              ? 'Send message'
+                              : isAssemble
+                                ? 'Start assembly conversation'
+                                : 'Request access'}
                             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
                           </>
                         )}
@@ -1845,7 +2385,8 @@ const AccessSection: React.FC<{
 };
 
 function getContactPortalUrl(mode: FormIntent = 'contact'): string {
-  const query = mode === 'access' ? '?mode=access' : '?mode=contact';
+  const query =
+    mode === 'assemble' ? '?mode=assemble' : mode === 'access' ? '?mode=access' : '?mode=contact';
   if (typeof window === 'undefined') {
     return `https://contact.appembly.com/${query}`;
   }
@@ -1872,9 +2413,9 @@ const Footer: React.FC<{
     <div className="max-w-[1320px] mx-auto px-6 sm:px-10 py-16 grid grid-cols-2 md:grid-cols-12 gap-10">
       <div className="col-span-2 md:col-span-5 space-y-4">
         <AppemblyLogo variant="lockup" size={30} productName="Appembly" animated />
-        <p className="text-[14px] text-[var(--ui-text-secondary)] max-w-[320px] leading-relaxed">
-          Assembling AI-native apps and agents. Modular software and autonomous systems, built into
-          one calm ecosystem.
+        <p className="text-[14px] text-[var(--ui-text-secondary)] max-w-[340px] leading-relaxed">
+          Assembling AI-native apps and agents. Adopt our modular software directly — or partner with
+          our studio to validate, build, deploy, and scale your system end to end.
         </p>
       </div>
       <div className="md:col-span-3">
@@ -1884,7 +2425,7 @@ const Footer: React.FC<{
             <li key={p.id}>
               <button
                 type="button"
-                onClick={() => onRequestAccess(p.id)}
+                onClick={() => onRequestAccess(p.id, undefined, 'access')}
                 className="inline-flex items-center gap-2 text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors cursor-pointer"
               >
                 {p.name}
@@ -1899,6 +2440,11 @@ const Footer: React.FC<{
       <div className="md:col-span-2">
         <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Platform</div>
         <ul className="mt-4 space-y-2.5">
+          <li>
+            <a href="#lifecycle" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
+              5-Stage Lifecycle
+            </a>
+          </li>
           {FOUNDATION.map((f) => (
             <li key={f.id}>
               <a href="#platform" className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors">
@@ -1909,8 +2455,22 @@ const Footer: React.FC<{
         </ul>
       </div>
       <div className="md:col-span-2">
-        <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Company</div>
+        <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--ui-text-muted)]">Get Started</div>
         <ul className="mt-4 space-y-2.5">
+          <li>
+            <a
+              href={getContactPortalUrl('assemble')}
+              onClick={(e) => {
+                if (typeof window !== 'undefined' && !window.location.hostname.endsWith('appembly.com')) {
+                  e.preventDefault();
+                  onOpenContactPortal('assemble');
+                }
+              }}
+              className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors"
+            >
+              Assemble with us
+            </a>
+          </li>
           <li>
             <a
               href={getContactPortalUrl('access')}
@@ -1922,7 +2482,7 @@ const Footer: React.FC<{
               }}
               className="text-[14px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] transition-colors"
             >
-              Request access
+              Product beta access
             </a>
           </li>
           <li>
@@ -1956,7 +2516,7 @@ const ContactPortalHeader: React.FC<{ onBackToMain?: () => void }> = ({ onBackTo
   const mainUrl = getMainSiteUrl();
   return (
     <header className="border-b border-[var(--ui-border)] bg-[var(--ui-bg-surface)]/80 backdrop-blur">
-      <div className="max-w-[1320px] mx-auto px-6 sm:px-10 h-16 flex items-center justify-between">
+      <div className="max-w-[1320px] mx-auto px-4 sm:px-10 h-16 flex items-center justify-between gap-2">
         <a
           href={mainUrl}
           onClick={(e) => {
@@ -1965,11 +2525,16 @@ const ContactPortalHeader: React.FC<{ onBackToMain?: () => void }> = ({ onBackTo
               onBackToMain();
             }
           }}
-          className="inline-flex items-center gap-2.5"
+          className="inline-flex items-center gap-2.5 min-w-0"
         >
-          <AppemblyLogo variant="lockup" size={28} productName="Appembly" tagline="Contact & Access" />
+          <span className="sm:hidden">
+            <AppemblyLogo variant="lockup" size={26} productName="Appembly" />
+          </span>
+          <span className="hidden sm:inline-flex">
+            <AppemblyLogo variant="lockup" size={28} productName="Appembly" tagline="Contact & Access" />
+          </span>
         </a>
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={toggleTheme}
@@ -1986,9 +2551,9 @@ const ContactPortalHeader: React.FC<{ onBackToMain?: () => void }> = ({ onBackTo
                 onBackToMain();
               }
             }}
-            className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-[var(--ui-border-strong)] text-[13px] font-semibold text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors"
+            className="inline-flex items-center gap-1.5 h-9 px-3 sm:px-3.5 rounded-xl border border-[var(--ui-border-strong)] text-[12.5px] sm:text-[13px] font-semibold text-[var(--ui-text-primary)] hover:border-[var(--ui-text-primary)] transition-colors"
           >
-            ← Back to appembly.com
+            ← Back<span className="hidden sm:inline"> to appembly.com</span>
           </a>
         </div>
       </div>
@@ -2000,21 +2565,29 @@ const ContactPortalHeader: React.FC<{ onBackToMain?: () => void }> = ({ onBackTo
 /*                                    Page                                    */
 /* -------------------------------------------------------------------------- */
 
+function parseModeParam(raw: string | null): FormIntent {
+  if (raw === 'assemble') return 'assemble';
+  if (raw === 'access') return 'access';
+  return 'contact';
+}
+
 export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
   accessRequestEndpoint,
   contactEmail = DEFAULT_CONTACT_EMAIL,
 }) => {
   const [interest, setInterest] = useState<string[]>([]);
+  const [stages, setStages] = useState<string[]>(['full-lifecycle']);
+  const [formIntent, setFormIntent] = useState<FormIntent>('assemble');
   const [portalView, setPortalView] = useState<{ active: boolean; intent: FormIntent }>(() => {
     if (typeof window === 'undefined') return { active: false, intent: 'contact' };
     const host = window.location.hostname;
     const path = window.location.pathname;
     const params = new URLSearchParams(window.location.search);
-    const modeParam = params.get('mode') === 'access' ? 'access' : 'contact';
+    const modeParam = parseModeParam(params.get('mode'));
     if (host.startsWith('contact.') || path === '/contact' || path === '/contact/') {
       return { active: true, intent: modeParam };
     }
-    return { active: false, intent: 'access' };
+    return { active: false, intent: 'assemble' };
   });
 
   useEffect(() => {
@@ -2023,11 +2596,12 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
       const host = window.location.hostname;
       const path = window.location.pathname;
       const params = new URLSearchParams(window.location.search);
-      const modeParam: FormIntent = params.get('mode') === 'access' ? 'access' : 'contact';
+      const modeParam = parseModeParam(params.get('mode'));
       setPortalView({
         active: host.startsWith('contact.') || path === '/contact' || path === '/contact/',
         intent: modeParam,
       });
+      setFormIntent(modeParam);
     };
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
@@ -2035,10 +2609,12 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
 
   const openContactPortal = useCallback((mode: FormIntent) => {
     if (typeof window !== 'undefined') {
-      const nextPath = mode === 'access' ? '/contact?mode=access' : '/contact';
+      const nextPath =
+        mode === 'assemble' ? '/contact?mode=assemble' : mode === 'access' ? '/contact?mode=access' : '/contact';
       window.history.pushState({}, '', nextPath);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+    setFormIntent(mode);
     setPortalView({ active: true, intent: mode });
   }, []);
 
@@ -2047,13 +2623,23 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
       window.history.pushState({}, '', '/');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    setPortalView({ active: false, intent: 'access' });
+    setPortalView({ active: false, intent: 'assemble' });
   }, []);
 
-  /** Pre-selects a product (if given) and scrolls to the access form. */
-  const requestAccess = useCallback<RequestAccess>((productId) => {
+  /** Pre-selects a product or lifecycle stage (if given), sets the form intent, and scrolls to `#access`. */
+  const requestAccess = useCallback<RequestAccess>((productId, stageId, nextIntent) => {
     if (productId) {
       setInterest((prev) => (prev.includes(productId) ? prev : [...prev, productId]));
+    }
+    if (stageId) {
+      setStages((prev) => (prev.includes(stageId) ? prev : [...prev, stageId]));
+    }
+    if (nextIntent) {
+      setFormIntent(nextIntent);
+    } else if (productId && !stageId) {
+      setFormIntent('access');
+    } else if (stageId) {
+      setFormIntent('assemble');
     }
     const target = document.getElementById('access');
     if (target) {
@@ -2071,9 +2657,12 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
           <AccessSection
             interest={interest}
             setInterest={setInterest}
+            stages={stages}
+            setStages={setStages}
+            intent={formIntent}
+            setIntent={setFormIntent}
             endpoint={accessRequestEndpoint}
             contactEmail={contactEmail}
-            defaultIntent={portalView.intent}
             standalone
           />
         </main>
@@ -2093,6 +2682,7 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
       <main>
         <Hero onRequestAccess={requestAccess} />
         <ProductMarquee />
+        <LifecyclePipeline onRequestAccess={requestAccess} />
         <Showcase onRequestAccess={requestAccess} />
         <ProductGrid onRequestAccess={requestAccess} />
         <Platform />
@@ -2100,6 +2690,10 @@ export const AppemblyLandingPage: React.FC<AppemblyLandingPageProps> = ({
         <AccessSection
           interest={interest}
           setInterest={setInterest}
+          stages={stages}
+          setStages={setStages}
+          intent={formIntent}
+          setIntent={setFormIntent}
           endpoint={accessRequestEndpoint}
           contactEmail={contactEmail}
         />
