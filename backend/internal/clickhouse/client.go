@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
+	"net/url"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,6 +23,8 @@ import (
 type Client struct {
 	endpoint   string
 	database   string
+	user       string
+	password   string
 	httpClient *http.Client
 }
 
@@ -30,12 +35,28 @@ func NewClient(endpoint, database string) *Client {
 	if database == "" {
 		database = "openmeter"
 	}
+	user := strings.TrimSpace(os.Getenv("CLICKHOUSE_USER"))
+	if user == "" {
+		user = "default"
+	}
+	password := os.Getenv("CLICKHOUSE_PASSWORD")
 	return &Client{
-		endpoint: endpoint,
+		endpoint: strings.TrimRight(endpoint, "/"),
 		database: database,
+		user:     user,
+		password: password,
 		httpClient: &http.Client{
-			Timeout: 2 * time.Second,
+			Timeout: 3 * time.Second,
 		},
+	}
+}
+
+func (c *Client) setAuthHeaders(req *http.Request) {
+	if c.user != "" {
+		req.Header.Set("X-ClickHouse-User", c.user)
+	}
+	if c.password != "" {
+		req.Header.Set("X-ClickHouse-Key", c.password)
 	}
 }
 
@@ -49,6 +70,65 @@ func (c *Client) Ping() bool {
 	return resp.StatusCode == http.StatusOK
 }
 
+// Exec runs a DDL or query statement against ClickHouse with authentication headers.
+func (c *Client) Exec(sqlQuery string) (string, error) {
+	reqURL := fmt.Sprintf("%s/?query=%s", c.endpoint, url.QueryEscape(sqlQuery))
+	req, err := http.NewRequest(http.MethodPost, reqURL, nil)
+	if err != nil {
+		return "", err
+	}
+	c.setAuthHeaders(req)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return "", fmt.Errorf("clickhouse status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return strings.TrimSpace(string(body)), nil
+}
+
+// EnsureSchemaAndBackfill ensures openmeter.om_events exists and backfills historical non-PostHog
+// CloudEvents from meterbox_state.json when openmeter.om_events is empty.
+func (c *Client) EnsureSchemaAndBackfill(events []models.CloudEvent) {
+	if !c.Ping() {
+		return
+	}
+	_, _ = c.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", c.database))
+	_, _ = c.Exec(fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s.om_events (
+		namespace LowCardinality(String),
+		id String,
+		type LowCardinality(String),
+		source String,
+		subject String,
+		time DateTime64(3, 'UTC'),
+		data String,
+		ingested_at DateTime64(3, 'UTC'),
+		stored_at DateTime64(3, 'UTC'),
+		lane LowCardinality(String) DEFAULT 'realtime'
+	) ENGINE = MergeTree()
+	PARTITION BY toYYYYMM(time)
+	ORDER BY (namespace, type, subject, toStartOfHour(time), id)`, c.database))
+
+	out, err := c.Exec(fmt.Sprintf("SELECT count() FROM %s.om_events", c.database))
+	if err != nil {
+		return
+	}
+	if count, err := strconv.Atoi(strings.TrimSpace(out)); err == nil && count == 0 && len(events) > 0 {
+		billable := make([]models.CloudEvent, 0, len(events))
+		for _, ev := range events {
+			if !strings.HasPrefix(ev.Type, "posthog.") {
+				billable = append(billable, ev)
+			}
+		}
+		if len(billable) > 0 {
+			_ = c.InsertEventsBatch(billable)
+		}
+	}
+}
+
 // InsertEventsBatch writes a batch of validated CloudEvents to ClickHouse `openmeter.om_events`
 // using JSONEachRow format if the ClickHouse server is online.
 func (c *Client) InsertEventsBatch(events []models.CloudEvent) error {
@@ -57,7 +137,11 @@ func (c *Client) InsertEventsBatch(events []models.CloudEvent) error {
 	}
 
 	var buf bytes.Buffer
+	written := 0
 	for _, ev := range events {
+		if strings.HasPrefix(ev.Type, "posthog.") {
+			continue
+		}
 		dataBytes, _ := json.Marshal(ev.Data)
 		row := map[string]interface{}{
 			"namespace":   ev.Namespace,
@@ -74,11 +158,21 @@ func (c *Client) InsertEventsBatch(events []models.CloudEvent) error {
 		line, _ := json.Marshal(row)
 		buf.Write(line)
 		buf.WriteByte('\n')
+		written++
+	}
+	if written == 0 {
+		return nil
 	}
 
 	query := fmt.Sprintf("INSERT INTO %s.om_events FORMAT JSONEachRow", c.database)
-	reqURL := fmt.Sprintf("%s/?query=%s", c.endpoint, strings.ReplaceAll(query, " ", "+"))
-	resp, err := c.httpClient.Post(reqURL, "application/json", &buf)
+	reqURL := fmt.Sprintf("%s/?query=%s", c.endpoint, url.QueryEscape(query))
+	req, err := http.NewRequest(http.MethodPost, reqURL, &buf)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	c.setAuthHeaders(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return err
 	}

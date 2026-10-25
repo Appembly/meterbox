@@ -1,10 +1,13 @@
 package control
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/meterbox/meterbox/internal/auth"
 	"github.com/meterbox/meterbox/internal/billing"
@@ -659,6 +662,7 @@ func (s *Server) handlePostHogCapture(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res := s.Ingest.IngestPostHogBatch(tc, batch)
+	go forwardPostHogToOps(tc, batch)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":        1,
 		"ingest_result": res,
@@ -712,6 +716,88 @@ func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snap)
 }
 
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+var opsHTTPClient = &http.Client{Timeout: 1500 * time.Millisecond}
+
+func resolveOpsEndpoints() []string {
+	out := []string{}
+	if env := strings.TrimRight(strings.TrimSpace(os.Getenv("OPS_API_URL")), "/"); env != "" {
+		out = append(out, env)
+	}
+	out = append(out, "http://ops-api:6091", "http://127.0.0.1:6091")
+	return out
+}
+
+func emitSpanToOps(method, path string, status int, durationMs float64, ns string) {
+	if path == "/healthz" || strings.HasPrefix(path, "/_next") {
+		return
+	}
+	level := "INFO"
+	if status >= 500 {
+		level = "ERROR"
+	} else if status >= 400 {
+		level = "WARN"
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"service":     "meterbox-api",
+		"level":       level,
+		"operation":   method + " " + path,
+		"status_code": status,
+		"duration_ms": durationMs,
+		"org_id":      ns,
+		"message":     method + " " + path + " -> " + strconv.Itoa(status),
+	})
+	for _, base := range resolveOpsEndpoints() {
+		resp, err := opsHTTPClient.Post(base+"/api/ops/v1/spans/ingest", "application/json", bytes.NewReader(payload))
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode < 300 {
+				return
+			}
+		}
+	}
+}
+
+func forwardPostHogToOps(tc *models.TenantContext, batch []map[string]interface{}) {
+	if len(batch) == 0 {
+		return
+	}
+	ns := "ns_live_appembly"
+	orgID := "org_appembly"
+	if tc != nil {
+		if tc.Namespace != "" {
+			ns = tc.Namespace
+		}
+		if tc.OrgID != "" {
+			orgID = tc.OrgID
+		}
+	}
+	payload, _ := json.Marshal(map[string]interface{}{
+		"org_id":    orgID,
+		"namespace": ns,
+		"app":       "meterbox",
+		"batch":     batch,
+	})
+	for _, base := range resolveOpsEndpoints() {
+		resp, err := opsHTTPClient.Post(base+"/api/ops/v1/posthog/capture", "application/json", bytes.NewReader(payload))
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode < 300 {
+				return
+			}
+		}
+	}
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -722,7 +808,12 @@ func corsMiddleware(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		next.ServeHTTP(w, r)
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		durMs := float64(time.Since(start).Microseconds()) / 1000.0
+		ns := r.Header.Get("X-OpenMeter-Namespace")
+		go emitSpanToOps(r.Method, r.URL.Path, rec.status, durMs, ns)
 	})
 }
 
