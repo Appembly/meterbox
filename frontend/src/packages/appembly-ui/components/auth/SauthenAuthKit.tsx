@@ -490,8 +490,9 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
     const pathname = window.location.pathname || '/';
     const host = window.location.hostname || 'localhost';
     const isLocal = host === 'localhost' || host === '127.0.0.1';
+    const envOpsUrl = (globalThis as Record<string, any>)?.process?.env?.NEXT_PUBLIC_OPS_API_URL as string | undefined;
     const opsBase =
-      (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_OPS_API_URL) ||
+      envOpsUrl ||
       (isLocal ? 'http://localhost:6091' : 'https://ops.appembly.com');
     const dedupKey = `appembly_pv_${appClient}_${pathname}`;
     const lastSent = Number(window.sessionStorage?.getItem(dedupKey) || '0');
