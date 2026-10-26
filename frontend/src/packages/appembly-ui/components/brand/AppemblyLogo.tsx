@@ -390,7 +390,7 @@ export function syncAppemblyFavicon(
   options?: { badgeHex?: string; themeMode?: 'light' | 'dark' }
 ): void {
   if (typeof document === 'undefined') return;
-  const markPath = buildAppemblyMarkPath();
+  const markPath = APPEMBLY_MONOGRAM_COMPACT_PATH;
   const ringStroke = options?.themeMode === 'dark' ? '#0F1419' : '#F6F7F5';
   const badgeCircle = options?.badgeHex
     ? `<circle cx="76" cy="24" r="11" fill="${options.badgeHex}" stroke="${ringStroke}" stroke-width="3.5" />`

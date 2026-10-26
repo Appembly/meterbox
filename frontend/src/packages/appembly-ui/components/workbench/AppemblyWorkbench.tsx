@@ -347,7 +347,7 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
       return (
         <code
           key={idx}
-          className="px-1.5 py-0.5 mx-0.5 text-[12px] font-mono rounded bg-onedark-darker text-onedark-accent border border-onedark-borderSubtle/80"
+          className="px-1.5 py-0.5 mx-0.5 text-[12.5px] font-mono rounded bg-onedark-darker text-onedark-accent border border-onedark-borderSubtle/80"
         >
           {part.slice(1, -1)}
         </code>
@@ -385,6 +385,269 @@ export interface QuickActionParsedItem {
   variant?: string;
   icon?: string;
 }
+
+export interface DecisionCardOption {
+  id: string;
+  label: string;
+  description?: string;
+  isDefault?: boolean;
+}
+
+export interface DecisionCardQuestion {
+  id: string;
+  label: string;
+  multi: boolean;
+  options: DecisionCardOption[];
+}
+
+export interface DecisionCardData {
+  title: string;
+  stage?: string;
+  questions: DecisionCardQuestion[];
+}
+
+export function extractDecisionCardsFromMarkdown(rawContent: string): {
+  cleanedContent: string;
+  decisionCards: DecisionCardData[];
+} {
+  if (!rawContent) return { cleanedContent: '', decisionCards: [] };
+  const decisionCards: DecisionCardData[] = [];
+  // Unwrap fenced ```xml <decision-card>...</decision-card> ``` if the model wrapped it in a code fence
+  const unwrapped = rawContent.replace(
+    /```(?:xml|html)?\s*(<(?:decision-card|decision_card)\b[\s\S]*?<\/(?:decision-card|decision_card)>)\s*```/gi,
+    '$1'
+  );
+  const cardRegex = /<(?:decision-card|decision_card)\b([^>]*)>([\s\S]*?)<\/(?:decision-card|decision_card)>/gi;
+  let cardMatch: RegExpExecArray | null;
+  while ((cardMatch = cardRegex.exec(unwrapped)) !== null) {
+    const cardAttrs = cardMatch[1] || '';
+    const cardInner = cardMatch[2] || '';
+    const titleMatch = cardAttrs.match(/\btitle=["']([^"']+)["']/i);
+    const stageMatch = cardAttrs.match(/\bstage=["']([^"']+)["']/i);
+    const questions: DecisionCardQuestion[] = [];
+
+    const qRegex = /<question\b([^>]*)>([\s\S]*?)<\/question>/gi;
+    let qMatch: RegExpExecArray | null;
+    while ((qMatch = qRegex.exec(cardInner)) !== null) {
+      const qAttrs = qMatch[1] || '';
+      const qInner = qMatch[2] || '';
+      const qId = (qAttrs.match(/\bid=["']([^"']+)["']/i) || [])[1] || `q_${questions.length + 1}`;
+      const qLabel = (qAttrs.match(/\blabel=["']([^"']+)["']/i) || [])[1] || `Question ${questions.length + 1}`;
+      const multiStr = ((qAttrs.match(/\bmulti=["']([^"']+)["']/i) || [])[1] || 'false').toLowerCase();
+      const options: DecisionCardOption[] = [];
+
+      const optRegex = /<option\b([^>]*?)(?:\/>|>([\s\S]*?)<\/option>)/gi;
+      let optMatch: RegExpExecArray | null;
+      while ((optMatch = optRegex.exec(qInner)) !== null) {
+        const oAttrs = optMatch[1] || '';
+        const oInner = (optMatch[2] || '').trim();
+        const oId = (oAttrs.match(/\bid=["']([^"']+)["']/i) || [])[1] || `opt_${options.length + 1}`;
+        const oLabel = (oAttrs.match(/\blabel=["']([^"']+)["']/i) || [])[1] || oInner || oId;
+        const oDesc = (oAttrs.match(/\bdescription=["']([^"']+)["']/i) || [])[1];
+        const oDefault = ((oAttrs.match(/\bdefault=["']([^"']+)["']/i) || [])[1] || '').toLowerCase() === 'true';
+        options.push({
+          id: oId,
+          label: oLabel,
+          description: oDesc,
+          isDefault: oDefault,
+        });
+      }
+
+      if (options.length > 0) {
+        questions.push({
+          id: qId,
+          label: qLabel,
+          multi: multiStr === 'true',
+          options,
+        });
+      }
+    }
+
+    if (questions.length > 0) {
+      decisionCards.push({
+        title: titleMatch ? titleMatch[1] : 'Quick Scope & Stack Defaults',
+        stage: stageMatch ? stageMatch[1] : 'Stage 1 · Consultative Defaults',
+        questions,
+      });
+    }
+  }
+
+  let cleanedContent = unwrapped.replace(cardRegex, '').trimEnd();
+  cleanedContent = cleanedContent.replace(/<(?:decision-card|decision_card)\b[\s\S]*$/gi, '').trimEnd();
+  return { cleanedContent, decisionCards };
+}
+
+const InteractiveDecisionCard: React.FC<{
+  card: DecisionCardData;
+  onSubmitDecision: (formattedPrompt: string) => void;
+}> = ({ card, onSubmitDecision }) => {
+  const [selections, setSelections] = useState<Record<string, string[]>>(() => {
+    const init: Record<string, string[]> = {};
+    for (const q of card.questions) {
+      const defaults = q.options.filter((o) => o.isDefault).map((o) => o.id);
+      if (defaults.length > 0) {
+        init[q.id] = q.multi ? defaults : [defaults[0]];
+      } else if (q.options.length > 0) {
+        init[q.id] = [q.options[0].id];
+      } else {
+        init[q.id] = [];
+      }
+    }
+    return init;
+  });
+  const [customNote, setCustomNote] = useState('');
+  const [submittedSummary, setSubmittedSummary] = useState<string | null>(null);
+
+  const toggleOption = (q: DecisionCardQuestion, optId: string) => {
+    if (submittedSummary) return;
+    setSelections((prev) => {
+      const current = prev[q.id] || [];
+      if (!q.multi) {
+        return { ...prev, [q.id]: [optId] };
+      }
+      if (current.includes(optId)) {
+        const next = current.filter((id) => id !== optId);
+        return { ...prev, [q.id]: next.length > 0 ? next : [optId] };
+      }
+      return { ...prev, [q.id]: [...current, optId] };
+    });
+  };
+
+  const handleConfirm = (useRecommendedDefaults: boolean) => {
+    if (submittedSummary) return;
+    const summaryParts: string[] = [];
+    for (const q of card.questions) {
+      const chosenIds = useRecommendedDefaults
+        ? q.options.filter((o) => o.isDefault).map((o) => o.id)
+        : selections[q.id] || [];
+      const effectiveIds = chosenIds.length > 0 ? chosenIds : q.options[0] ? [q.options[0].id] : [];
+      const chosenLabels = q.options.filter((o) => effectiveIds.includes(o.id)).map((o) => o.label);
+      const cleanQTitle = q.label.replace(/^\d+\.\s*/, '');
+      if (chosenLabels.length > 0) {
+        summaryParts.push(`${cleanQTitle}: ${chosenLabels.join(', ')}`);
+      }
+    }
+    const noteSuffix = customNote.trim() ? ` | Additional Context: ${customNote.trim()}` : '';
+    const prefix = useRecommendedDefaults
+      ? '[Decision Card Confirmed · Fast-Track Recommended Defaults]'
+      : '[Decision Card Confirmed]';
+    const fullPrompt = `${prefix} ${summaryParts.join(' · ')}${noteSuffix}`;
+    setSubmittedSummary(summaryParts.join(' · ') + (customNote.trim() ? ` (${customNote.trim()})` : ''));
+    onSubmitDecision(fullPrompt);
+  };
+
+  return (
+    <div className="my-3 rounded-xl border border-onedark-border bg-onedark-darker/95 p-4 space-y-3.5 shadow-md">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-onedark-borderSubtle/70">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-lg bg-onedark-accent/15 border border-onedark-accent/30 flex items-center justify-center text-onedark-accent shrink-0">
+            <Sparkles className="w-3.5 h-3.5" />
+          </div>
+          <span className="text-[13.5px] font-semibold text-onedark-fgBright">{card.title}</span>
+        </div>
+        {card.stage && (
+          <span className="px-2 py-0.5 rounded-md text-[10.5px] font-mono font-medium bg-onedark-surface text-onedark-accent border border-onedark-borderSubtle">
+            {card.stage}
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {card.questions.map((q) => {
+          const selectedIds = selections[q.id] || [];
+          return (
+            <div key={q.id} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12.5px] font-semibold text-onedark-fgBright">{q.label}</span>
+                <span className="text-[10px] font-mono text-onedark-muted">
+                  {q.multi ? 'Select one or more' : 'Select one'}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {q.options.map((opt) => {
+                  const isSelected = selectedIds.includes(opt.id);
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={Boolean(submittedSummary)}
+                      onClick={() => toggleOption(q, opt.id)}
+                      title={opt.description || opt.label}
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left text-[12.5px] transition-all cursor-pointer disabled:cursor-default ${
+                        isSelected
+                          ? 'bg-onedark-accent/15 border-onedark-accent text-onedark-fgBright font-medium shadow-2xs'
+                          : 'bg-onedark-surface/40 hover:bg-onedark-surface border-onedark-borderSubtle text-onedark-fg'
+                      }`}
+                    >
+                      <span
+                        className={`w-3.5 h-3.5 ${
+                          q.multi ? 'rounded' : 'rounded-full'
+                        } border flex items-center justify-center shrink-0 ${
+                          isSelected
+                            ? 'bg-onedark-accent border-onedark-accent text-onedark-darker'
+                            : 'border-onedark-muted/50 bg-onedark-darker/60'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                      </span>
+                      <span>{opt.label}</span>
+                      {opt.isDefault && (
+                        <span className="px-1.5 py-0.2 rounded text-[9.5px] font-mono bg-onedark-surface/90 text-onedark-accent border border-onedark-borderSubtle/80">
+                          Recommended
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {submittedSummary ? (
+        <div className="flex items-center gap-2 pt-2 border-t border-onedark-borderSubtle/60 text-[12px] text-onedark-green font-mono">
+          <Check className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">Confirmed: {submittedSummary}</span>
+        </div>
+      ) : (
+        <div className="pt-2 border-t border-onedark-borderSubtle/60 space-y-2.5">
+          <input
+            type="text"
+            value={customNote}
+            onChange={(e) => setCustomNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleConfirm(false);
+              }
+            }}
+            placeholder="Optional: Add specific details about your app/agent idea, target users, or workflow..."
+            className="w-full px-3 py-1.5 rounded-lg bg-onedark-surface/50 border border-onedark-borderSubtle text-[12.5px] text-onedark-fgBright placeholder:text-onedark-muted/70 focus:outline-none focus:border-onedark-accent"
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => handleConfirm(false)}
+              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[12.5px] font-semibold bg-onedark-accent hover:opacity-95 text-white shadow-sm transition-all cursor-pointer"
+            >
+              <Check className="w-3.5 h-3.5" />
+              <span>Confirm & Generate Blueprint →</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleConfirm(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-onedark-surface hover:bg-onedark-darker text-onedark-fgBright border border-onedark-borderSubtle hover:border-onedark-accent/60 transition-all cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-onedark-accent" />
+              <span>Fast-Track with Defaults ⚡</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export function extractQuickActionsFromMarkdown(rawContent: string): {
   cleanedContent: string;
@@ -468,6 +731,104 @@ function getAlertStyle(type: string) {
 }
 
 /**
+ * Zero-dependency syntax highlighter for One Dark / One Light code blocks
+ */
+function highlightCodeLine(line: string, lang: string, lineIdx: number): React.ReactNode {
+  if (!line) return '\n';
+  const trimmed = line.trimStart();
+
+  // Unified diff / patch coloring
+  if (lang === 'diff' || lang === 'patch') {
+    if (line.startsWith('+') && !line.startsWith('+++')) {
+      return (
+        <span key={lineIdx} className="text-onedark-green bg-emerald-500/10 block">
+          {line}
+        </span>
+      );
+    }
+    if (line.startsWith('-') && !line.startsWith('---')) {
+      return (
+        <span key={lineIdx} className="text-onedark-red bg-rose-500/10 block">
+          {line}
+        </span>
+      );
+    }
+    if (line.startsWith('@@')) {
+      return (
+        <span key={lineIdx} className="text-onedark-purple font-semibold block">
+          {line}
+        </span>
+      );
+    }
+  }
+
+  // Whole-line comment check
+  if (
+    trimmed.startsWith('//') ||
+    (trimmed.startsWith('#') && !trimmed.startsWith('#!')) ||
+    trimmed.startsWith('-- ')
+  ) {
+    return (
+      <span key={lineIdx} className="text-onedark-muted italic">
+        {line}
+      </span>
+    );
+  }
+
+  const tokenRegex =
+    /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\/.*$|#.*$|\b(?:import|export|from|const|let|var|function|async|await|return|if|else|elif|for|while|switch|case|break|continue|default|interface|type|class|extends|implements|new|try|catch|finally|throw|def|with|as|yield|pass|raise|in|is|not|and|or|pub|fn|struct|enum|impl|use|mod|match|package|go|defer|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|JOIN|LEFT|RIGHT|INNER|ON|GROUP|ORDER|BY|LIMIT|HAVING|AS|AND|OR|NOT|NULL|PRIMARY|KEY)\b|\b(?:true|false|null|undefined|None|True|False|self|this)\b|\b\d+(?:\.\d+)?\b|[A-Za-z_][A-Za-z0-9_]*(?=\s*\())/g;
+
+  const parts = line.split(tokenRegex);
+  return parts.map((tok, tIdx) => {
+    if (!tok) return null;
+    if (
+      (tok.startsWith('"') && tok.endsWith('"')) ||
+      (tok.startsWith("'") && tok.endsWith("'")) ||
+      (tok.startsWith('`') && tok.endsWith('`'))
+    ) {
+      return (
+        <span key={tIdx} className="text-onedark-green">
+          {tok}
+        </span>
+      );
+    }
+    if (tok.startsWith('//') || tok.startsWith('#')) {
+      return (
+        <span key={tIdx} className="text-onedark-muted italic">
+          {tok}
+        </span>
+      );
+    }
+    if (/^(?:true|false|null|undefined|None|True|False|self|this|\d+(?:\.\d+)?)$/.test(tok)) {
+      return (
+        <span key={tIdx} className="text-onedark-yellow">
+          {tok}
+        </span>
+      );
+    }
+    if (
+      /^(?:import|export|from|const|let|var|function|async|await|return|if|else|elif|for|while|switch|case|break|continue|default|interface|type|class|extends|implements|new|try|catch|finally|throw|def|with|as|yield|pass|raise|in|is|not|and|or|pub|fn|struct|enum|impl|use|mod|match|package|go|defer|SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|INDEX|JOIN|LEFT|RIGHT|INNER|ON|GROUP|ORDER|BY|LIMIT|HAVING|AS|AND|OR|NOT|NULL|PRIMARY|KEY)$/.test(
+        tok
+      )
+    ) {
+      return (
+        <span key={tIdx} className="text-onedark-purple font-medium">
+          {tok}
+        </span>
+      );
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(tok)) {
+      return (
+        <span key={tIdx} className="text-onedark-accent">
+          {tok}
+        </span>
+      );
+    }
+    return <React.Fragment key={tIdx}>{tok}</React.Fragment>;
+  });
+}
+
+/**
  * Full Cyclode-grade Markdown, Mermaid Diagram, GFM Table, and GitHub Callout Alert renderer
  */
 const RichMarkdownContent: React.FC<{
@@ -475,7 +836,10 @@ const RichMarkdownContent: React.FC<{
   onCopyCode?: (code: string) => void;
 }> = ({ content, onCopyCode }) => {
   const [copiedBlockIdx, setCopiedBlockIdx] = useState<number | null>(null);
-  const { cleanedContent } = useMemo(() => extractQuickActionsFromMarkdown(content), [content]);
+  const { cleanedContent } = useMemo(() => {
+    const afterDecision = extractDecisionCardsFromMarkdown(content).cleanedContent;
+    return extractQuickActionsFromMarkdown(afterDecision);
+  }, [content]);
 
   const blocks = useMemo(() => {
     const result: Array<
@@ -512,43 +876,70 @@ const RichMarkdownContent: React.FC<{
   };
 
   return (
-    <div className="space-y-2.5 text-[13.5px] leading-[1.65] text-onedark-fg">
+    <div className="space-y-3 text-[14px] leading-[1.7] text-onedark-fg">
       {blocks.map((block, bIdx) => {
         if (block.type === 'code') {
           if (block.lang === 'mermaid') {
             return <MermaidDiagram key={bIdx} code={block.code} />;
           }
+          const codeLines = block.code.split('\n');
           return (
             <div
               key={bIdx}
-              className="my-2.5 rounded-lg border border-onedark-borderSubtle bg-onedark-darker overflow-hidden shadow-sm"
+              className="my-3 rounded-xl border border-onedark-borderSubtle bg-onedark-darker/90 overflow-hidden shadow-xs"
             >
-              <div className="flex items-center justify-between px-3 py-1.5 bg-onedark-surface/70 border-b border-onedark-borderSubtle text-[11px] font-mono text-onedark-muted">
-                <span className="flex items-center gap-1.5 uppercase tracking-wider font-semibold text-onedark-fg/80">
-                  <FileCode2 className="w-3.5 h-3.5 text-onedark-accent" />
-                  {block.lang}
-                </span>
+              <div className="flex items-center justify-between px-3.5 py-1.5 bg-onedark-surface/60 border-b border-onedark-borderSubtle/70 text-[11px] font-mono text-onedark-muted">
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 uppercase tracking-wider font-semibold text-[10.5px] text-onedark-accent">
+                    <FileCode2 className="w-3.5 h-3.5 text-onedark-accent" />
+                    {block.lang || 'code'}
+                  </span>
+                  <span className="text-[10px] text-onedark-muted/75">
+                    ({codeLines.length} {codeLines.length === 1 ? 'line' : 'lines'})
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={() => handleCopy(block.code, bIdx)}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-onedark-fg hover:text-onedark-fgBright hover:bg-onedark-bg transition-colors"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-onedark-muted hover:text-onedark-fgBright hover:bg-onedark-surface transition-colors"
                 >
                   {copiedBlockIdx === bIdx ? (
                     <>
-                      <Check className="w-3 h-3 text-onedark-green" />
+                      <Check className="w-3.5 h-3.5 text-onedark-green" />
                       <span className="text-onedark-green">Copied</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3 h-3" />
+                      <Copy className="w-3.5 h-3.5" />
                       <span>Copy</span>
                     </>
                   )}
                 </button>
               </div>
-              <pre className="p-3.5 text-[12.5px] font-mono leading-[1.55] text-onedark-fgBright overflow-x-auto">
-                <code>{block.code}</code>
-              </pre>
+              <div className="flex font-mono text-[12.5px] leading-[1.6] overflow-x-auto p-3.5">
+                {codeLines.length > 2 && (
+                  <pre
+                    aria-hidden="true"
+                    className="select-none text-onedark-muted/45 text-right pr-3 border-r border-onedark-borderSubtle/50 font-mono leading-[1.6] shrink-0 m-0"
+                  >
+                    {codeLines.map((_, idx) => idx + 1).join('\n')}
+                  </pre>
+                )}
+                <pre
+                  className={`text-onedark-fgBright font-mono leading-[1.6] ${
+                    codeLines.length > 2 ? 'pl-3.5' : ''
+                  } flex-1 overflow-x-auto m-0`}
+                >
+                  <code>
+                    {codeLines.map((ln, lIdx) => (
+                      <React.Fragment key={lIdx}>
+                        {highlightCodeLine(ln, block.lang, lIdx)}
+                        {lIdx < codeLines.length - 1 ? '\n' : ''}
+                      </React.Fragment>
+                    ))}
+                  </code>
+                </pre>
+              </div>
             </div>
           );
         }
@@ -556,6 +947,7 @@ const RichMarkdownContent: React.FC<{
         // Render prose lines (headings, tables, GitHub alerts, blockquotes, bullet/numbered lists, paragraphs)
         const elements: React.ReactNode[] = [];
         let listItems: React.ReactNode[] = [];
+        let listKind: 'ul' | 'ol' | null = null;
         let activeTable: {
           headers: string[];
           rows: string[][];
@@ -564,12 +956,21 @@ const RichMarkdownContent: React.FC<{
 
         const flushList = (keyPrefix: string) => {
           if (listItems.length > 0) {
-            elements.push(
-              <ul key={`${keyPrefix}-list`} className="my-1.5 space-y-1.5 pl-1">
-                {listItems}
-              </ul>
-            );
+            if (listKind === 'ol') {
+              elements.push(
+                <ol key={`${keyPrefix}-ol`} className="my-2 space-y-2 pl-1">
+                  {listItems}
+                </ol>
+              );
+            } else {
+              elements.push(
+                <ul key={`${keyPrefix}-ul`} className="my-2 space-y-1.5 pl-1">
+                  {listItems}
+                </ul>
+              );
+            }
             listItems = [];
+            listKind = null;
           }
         };
 
@@ -596,7 +997,7 @@ const RichMarkdownContent: React.FC<{
                       {tbl.headers.map((h, hIdx) => (
                         <th
                           key={hIdx}
-                          className={`px-3.5 py-2.5 font-mono text-[11.5px] font-semibold whitespace-nowrap ${getAlignClass(
+                          className={`px-3.5 py-2.5 font-mono text-[12px] font-semibold whitespace-nowrap ${getAlignClass(
                             hIdx
                           )}`}
                         >
@@ -698,7 +1099,7 @@ const RichMarkdownContent: React.FC<{
             elements.push(
               <div
                 key={`${bIdx}-${lIdx}-alert`}
-                className={`my-2.5 p-3 rounded-xl border ${style.border} ${style.bg} flex items-start gap-2.5 text-[13px] leading-relaxed`}
+                className={`my-2.5 p-3 rounded-xl border ${style.border} ${style.bg} flex items-start gap-2.5 text-[13.5px] leading-relaxed`}
               >
                 <AlertIcon className={`w-4 h-4 ${style.text} shrink-0 mt-0.5`} />
                 <div className="space-y-1 flex-1 min-w-0">
@@ -731,7 +1132,7 @@ const RichMarkdownContent: React.FC<{
             elements.push(
               <blockquote
                 key={`${bIdx}-${lIdx}-quote`}
-                className="border-l-2 border-onedark-accent/70 pl-3.5 py-1.5 my-2 bg-onedark-surface/35 rounded-r-lg text-onedark-fg text-[13px] space-y-1"
+                className="border-l-2 border-onedark-accent/70 pl-3.5 py-2 my-2.5 bg-onedark-surface/35 rounded-r-lg text-onedark-fg text-[13.5px] leading-[1.7] space-y-1.5"
               >
                 {quoteLines.map((ql, qIdx) => (
                   <p key={qIdx}>{renderInlineMarkdown(ql)}</p>
@@ -747,7 +1148,7 @@ const RichMarkdownContent: React.FC<{
             elements.push(
               <hr
                 key={`${bIdx}-${lIdx}-hr`}
-                className="my-4 border-0 h-px bg-onedark-borderSubtle/70"
+                className="my-5 border-0 h-px bg-onedark-borderSubtle/70"
               />
             );
             continue;
@@ -756,9 +1157,9 @@ const RichMarkdownContent: React.FC<{
           if (line.startsWith('#### ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h5 key={`${bIdx}-${lIdx}`} className="text-[13px] font-semibold text-onedark-fgBright pt-1">
+              <h4 key={`${bIdx}-${lIdx}`} className="text-[13.5px] font-semibold text-onedark-fgBright pt-1.5 pb-0.5">
                 {renderInlineMarkdown(line.slice(5))}
-              </h5>
+              </h4>
             );
             continue;
           }
@@ -766,9 +1167,9 @@ const RichMarkdownContent: React.FC<{
           if (line.startsWith('### ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h4 key={`${bIdx}-${lIdx}`} className="text-[13.5px] font-semibold text-onedark-fgBright pt-1.5">
+              <h3 key={`${bIdx}-${lIdx}`} className="text-[14.5px] font-semibold text-onedark-fgBright pt-2 pb-0.5">
                 {renderInlineMarkdown(line.slice(4))}
-              </h4>
+              </h3>
             );
             continue;
           }
@@ -776,9 +1177,9 @@ const RichMarkdownContent: React.FC<{
           if (line.startsWith('## ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h3 key={`${bIdx}-${lIdx}`} className="text-[15px] font-semibold text-onedark-fgBright pt-2">
+              <h2 key={`${bIdx}-${lIdx}`} className="text-[16px] font-bold text-onedark-fgBright tracking-tight pt-3 pb-0.5">
                 {renderInlineMarkdown(line.slice(3))}
-              </h3>
+              </h2>
             );
             continue;
           }
@@ -786,19 +1187,85 @@ const RichMarkdownContent: React.FC<{
           if (line.startsWith('# ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h2 key={`${bIdx}-${lIdx}`} className="text-[16px] font-bold text-onedark-fgBright pt-2.5">
+              <h1
+                key={`${bIdx}-${lIdx}`}
+                className="text-[17.5px] font-bold text-onedark-fgBright tracking-tight pt-3.5 pb-1 border-b border-onedark-borderSubtle"
+              >
                 {renderInlineMarkdown(line.slice(2))}
-              </h2>
+              </h1>
             );
             continue;
           }
 
-          if (/^([•\-*]|\d+\.)\s+/.test(line)) {
-            const clean = line.replace(/^([•\-*]|\d+\.)\s+/, '');
+          // Ordered list item: 1. ...
+          const orderedMatch = rawLine.match(/^(\s*)(\d+)\.\s+(.*)$/);
+          if (orderedMatch) {
+            const indentSpaces = orderedMatch[1].length;
+            const numLabel = orderedMatch[2];
+            const itemText = orderedMatch[3];
+            if (listKind && listKind !== 'ol' && indentSpaces < 2) {
+              flushList(`${bIdx}-${lIdx}`);
+            }
+            if (!listKind) listKind = 'ol';
             listItems.push(
-              <li key={`${bIdx}-${lIdx}`} className="flex items-start gap-2 text-[13.25px] leading-[1.6]">
-                <span className="mt-2 w-1.5 h-1.5 rounded-full bg-onedark-accent shrink-0" />
-                <span className="flex-1">{renderInlineMarkdown(clean)}</span>
+              <li
+                key={`${bIdx}-${lIdx}`}
+                className={`flex items-start gap-2.5 text-[14px] leading-[1.7] ${
+                  indentSpaces >= 2 ? 'ml-5 pl-3 border-l border-onedark-borderSubtle/70' : ''
+                }`}
+              >
+                <span className="font-mono text-[13px] font-semibold text-onedark-accent shrink-0 mt-0.5 select-none">
+                  {numLabel}.
+                </span>
+                <span className="flex-1 text-onedark-fg">{renderInlineMarkdown(itemText)}</span>
+              </li>
+            );
+            continue;
+          }
+
+          // Unordered list item: - / * / • (with optional [ ] / [x] task checkbox)
+          const unorderedMatch = rawLine.match(/^(\s*)([•\-*])\s+(.*)$/);
+          if (unorderedMatch) {
+            const indentSpaces = unorderedMatch[1].length;
+            let itemText = unorderedMatch[3];
+            let taskChecked: boolean | null = null;
+            if (itemText.startsWith('[ ] ')) {
+              taskChecked = false;
+              itemText = itemText.slice(4);
+            } else if (itemText.startsWith('[x] ') || itemText.startsWith('[X] ')) {
+              taskChecked = true;
+              itemText = itemText.slice(4);
+            }
+
+            if (listKind && listKind !== 'ul' && indentSpaces < 2) {
+              flushList(`${bIdx}-${lIdx}`);
+            }
+            if (!listKind) listKind = 'ul';
+            listItems.push(
+              <li
+                key={`${bIdx}-${lIdx}`}
+                className={`flex items-start gap-2.5 text-[14px] leading-[1.7] ${
+                  indentSpaces >= 2 ? 'ml-5 pl-3 border-l border-onedark-borderSubtle/70' : ''
+                }`}
+              >
+                {taskChecked !== null ? (
+                  <span
+                    className={`mt-1.5 w-3.5 h-3.5 rounded flex items-center justify-center border shrink-0 ${
+                      taskChecked
+                        ? 'bg-onedark-accent/20 border-onedark-accent text-onedark-accent'
+                        : 'bg-onedark-darker border-onedark-border'
+                    }`}
+                  >
+                    {taskChecked && <Check className="w-2.5 h-2.5" />}
+                  </span>
+                ) : (
+                  <span
+                    className={`mt-2.5 w-1.5 h-1.5 rounded-full shrink-0 ${
+                      indentSpaces >= 2 ? 'bg-onedark-muted' : 'bg-onedark-accent'
+                    }`}
+                  />
+                )}
+                <span className="flex-1 text-onedark-fg">{renderInlineMarkdown(itemText)}</span>
               </li>
             );
             continue;
@@ -806,7 +1273,7 @@ const RichMarkdownContent: React.FC<{
 
           flushList(`${bIdx}-${lIdx}`);
           elements.push(
-            <p key={`${bIdx}-${lIdx}`} className="text-[13.5px] leading-[1.65]">
+            <p key={`${bIdx}-${lIdx}`} className="text-[14px] leading-[1.7] text-onedark-fg">
               {renderInlineMarkdown(line)}
             </p>
           );
@@ -929,6 +1396,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   const [openMenu, setOpenMenu] = useState<'persona' | 'model' | 'context' | null>(null);
   const [expandedTraces, setExpandedTraces] = useState<Record<string, boolean>>({});
   const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
+  const [expandedReasoning, setExpandedReasoning] = useState<Record<string, boolean>>({});
+  const [expandedStepOutputs, setExpandedStepOutputs] = useState<Record<string, boolean>>({});
   const [copiedTurnId, setCopiedTurnId] = useState<string | null>(null);
 
   // Split resizer state
@@ -1122,7 +1591,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
             className="flex flex-col h-full min-w-0 bg-onedark-bg select-text"
           >
             {/* Scrollable Conversation or Overview Viewport */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-6 chat-scroll-viewport">
+            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-5 pb-8 space-y-6 chat-scroll-viewport">
               {showOverviewLanding && renderOverviewLanding ? (
                 renderOverviewLanding({
                   prefillComposer,
@@ -1131,7 +1600,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
               ) : null}
 
               {/* Conversation Turns */}
-              <div className="max-w-3xl mx-auto space-y-6">
+              <div className="max-w-3xl xl:max-w-4xl mx-auto space-y-6">
                 {messages.map((msg) => {
                   if (msg.role === 'user') {
                     return (
@@ -1144,7 +1613,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                           <span>·</span>
                           <span>{msg.timestamp}</span>
                         </div>
-                        <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-2.5 bg-onedark-surface border border-onedark-borderSubtle text-[13.5px] leading-[1.6] text-onedark-fgBright shadow-sm">
+                        <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-2.5 bg-onedark-surface border border-onedark-borderSubtle text-[14px] leading-[1.65] text-onedark-fgBright shadow-sm">
                           {msg.contextRefs && msg.contextRefs.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mb-2">
                               {msg.contextRefs.map((ref) => (
@@ -1209,6 +1678,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                   // Assistant Open-Canvas Turn (Cyclode Architecture)
                   const isTraceOpen = expandedTraces[msg.id] ?? false;
                   const isPlanOpen = expandedPlans[msg.id] ?? true;
+                  const isReasoningOpen = expandedReasoning[msg.id] ?? false;
 
                   return (
                     <div
@@ -1225,7 +1695,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                               strokeColor={accentColor}
                             />
                           </div>
-                          <span className="text-[13px] font-semibold text-onedark-fgBright">
+                          <span className="text-[13.5px] font-semibold text-onedark-fgBright">
                             {msg.personaLabel || activePersona.label}
                           </span>
                           <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-onedark-surface text-onedark-fg border border-onedark-borderSubtle">
@@ -1311,6 +1781,47 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         </div>
                       )}
 
+                      {/* Collapsible Reasoning Process Card (when model emits thinking/reasoning) */}
+                      {msg.reasoning && msg.reasoning.trim().length > 0 && (
+                        <div className="rounded-lg border border-onedark-borderSubtle bg-onedark-darker/55 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedReasoning((prev) => ({
+                                ...prev,
+                                [msg.id]: !isReasoningOpen,
+                              }))
+                            }
+                            className="w-full flex items-center justify-between px-3 py-1.5 text-[12px] text-onedark-fg hover:bg-onedark-surface/50 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isReasoningOpen ? (
+                                <ChevronDown className="w-3.5 h-3.5 text-onedark-muted shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5 text-onedark-muted shrink-0" />
+                              )}
+                              <Sparkles className="w-3.5 h-3.5 text-onedark-accent shrink-0" />
+                              <span className="font-mono text-[11.5px] font-medium text-onedark-fgBright shrink-0">
+                                Reasoning process
+                              </span>
+                              {!isReasoningOpen && (
+                                <span className="text-[12px] text-onedark-muted truncate">
+                                  — {msg.reasoning.split('\n')[0]?.replace(/^[#*>-]+\s*/, '')}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] font-mono text-onedark-muted shrink-0 ml-2">
+                              {isReasoningOpen ? 'Hide' : 'Show'}
+                            </span>
+                          </button>
+                          {isReasoningOpen && (
+                            <div className="px-3.5 py-2.5 border-t border-onedark-borderSubtle/70 bg-onedark-bg/40 text-[13px] leading-relaxed text-onedark-fg/90 max-h-64 overflow-y-auto">
+                              <RichMarkdownContent content={msg.reasoning} />
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Collapsible Tool Action Step Accordion (Cyclode Style) */}
                       {msg.steps && msg.steps.length > 0 && (
                         <div className="rounded-lg border border-onedark-borderSubtle bg-onedark-darker/75 overflow-hidden">
@@ -1358,33 +1869,70 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
 
                           {isTraceOpen && (
                             <div className="p-2.5 border-t border-onedark-borderSubtle space-y-1.5 bg-onedark-bg/50">
-                              {msg.steps.map((step: any, sIdx) => (
-                                <div
-                                  key={step.id || sIdx}
-                                  className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md bg-onedark-darker border border-onedark-borderSubtle/70 text-[12px]"
-                                >
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span
-                                      className={`px-1.5 py-0.5 rounded text-[10.5px] font-mono font-semibold border ${getVerbBadgeClasses(
-                                        step.verb || 'Executed'
-                                      )}`}
+                              {msg.steps.map((step: any, sIdx) => {
+                                const stepKey = `${msg.id}-step-${sIdx}`;
+                                const fullOutput =
+                                  step.commandOutput ||
+                                  step.diffPreview ||
+                                  step.output ||
+                                  step.detail ||
+                                  '';
+                                const isStepExpanded = expandedStepOutputs[stepKey] ?? false;
+
+                                return (
+                                  <div
+                                    key={step.id || sIdx}
+                                    className="rounded-md bg-onedark-darker border border-onedark-borderSubtle/70 overflow-hidden text-[12px]"
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (fullOutput) {
+                                          setExpandedStepOutputs((prev) => ({
+                                            ...prev,
+                                            [stepKey]: !isStepExpanded,
+                                          }));
+                                        }
+                                      }}
+                                      className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left ${
+                                        fullOutput ? 'hover:bg-onedark-surface/40 cursor-pointer' : 'cursor-default'
+                                      } transition-colors`}
                                     >
-                                      {step.verb || 'Executed'}
-                                    </span>
-                                    <code className="font-mono text-[12px] text-onedark-fgBright truncate">
-                                      {step.target || step.tool_name}
-                                    </code>
-                                    {(step.detail || step.output) && (
-                                      <span className="text-onedark-muted truncate hidden md:inline">
-                                        — {step.detail || step.output}
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        {fullOutput &&
+                                          (isStepExpanded ? (
+                                            <ChevronDown className="w-3 h-3 text-onedark-muted shrink-0" />
+                                          ) : (
+                                            <ChevronRight className="w-3 h-3 text-onedark-muted shrink-0" />
+                                          ))}
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded text-[10.5px] font-mono font-semibold border shrink-0 ${getVerbBadgeClasses(
+                                            step.verb || 'Executed'
+                                          )}`}
+                                        >
+                                          {step.verb || 'Executed'}
+                                        </span>
+                                        <code className="font-mono text-[12px] text-onedark-fgBright truncate">
+                                          {step.target || step.tool_name}
+                                        </code>
+                                        {(step.detail || step.output) && !isStepExpanded && (
+                                          <span className="text-onedark-muted truncate hidden md:inline">
+                                            — {step.detail || step.output}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
+                                        exit 0
                                       </span>
+                                    </button>
+                                    {isStepExpanded && fullOutput && (
+                                      <pre className="px-3 py-2 border-t border-onedark-borderSubtle/60 bg-onedark-bg/80 font-mono text-[11.5px] leading-[1.55] text-onedark-fg overflow-x-auto whitespace-pre-wrap max-h-56 overflow-y-auto">
+                                        {fullOutput}
+                                      </pre>
                                     )}
                                   </div>
-                                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
-                                    exit 0
-                                  </span>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1394,6 +1942,31 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                       <div className="pl-0.5">
                         <RichMarkdownContent content={msg.content} />
                       </div>
+
+                      {/* Interactive Stage 1/2 Scope & Defaults Decision Cards (<decision-card>) */}
+                      {(() => {
+                        const { decisionCards } = extractDecisionCardsFromMarkdown(msg.content);
+                        if (decisionCards.length === 0) return null;
+                        return (
+                          <div className="space-y-2">
+                            {decisionCards.map((dc, dcIdx) => (
+                              <InteractiveDecisionCard
+                                key={dcIdx}
+                                card={dc}
+                                onSubmitDecision={(formattedPrompt) => {
+                                  onSendMessage(formattedPrompt, {
+                                    persona: activePersona,
+                                    model: activeModel,
+                                    executionMode,
+                                    contextRefs: selectedContextRefs,
+                                    attachments: [],
+                                  });
+                                }}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
 
                       {/* Guided Follow-Up Action Chips (explicit followUps + parsed <quick-actions>) */}
                       {(() => {
@@ -1440,9 +2013,9 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
               </div>
             </div>
 
-            {/* FLOATING 2-ZONE CYCLODE COMPOSER */}
-            <div className="px-4 sm:px-6 pb-4 pt-1 bg-gradient-to-t from-onedark-bg via-onedark-bg to-transparent shrink-0">
-              <div className="max-w-3xl mx-auto relative rounded-xl border border-onedark-border bg-onedark-surface shadow-lg focus-within:border-onedark-accent/80 transition-colors">
+            {/* DOCKED 2-ZONE CYCLODE COMPOSER */}
+            <div className="px-4 sm:px-6 py-3 bg-onedark-darker/80 border-t border-onedark-borderSubtle shrink-0">
+              <div className="max-w-3xl xl:max-w-4xl mx-auto relative rounded-xl border border-onedark-border bg-onedark-surface shadow-md focus-within:border-onedark-accent/80 transition-colors">
                 {/* Active Popovers Above Composer */}
                 {openMenu === 'persona' && (
                   <div className="absolute bottom-full left-2 mb-2 w-80 rounded-xl border border-onedark-border bg-onedark-darker shadow-2xl p-2 z-30 animate-popover-enter">
@@ -1645,7 +2218,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                       }
                     }}
                     placeholder={composerPlaceholder}
-                    className="w-full bg-transparent text-[13.5px] leading-[1.55] text-onedark-fgBright placeholder:text-onedark-muted resize-none focus:outline-none"
+                    className="w-full bg-transparent text-[14.5px] leading-[1.6] text-onedark-fgBright placeholder:text-onedark-muted resize-none focus:outline-none"
                   />
                 </div>
 
