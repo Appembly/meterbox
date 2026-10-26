@@ -30,8 +30,13 @@ import {
   X,
   Eye,
   Zap,
+  Info,
+  AlertTriangle,
+  AlertCircle,
+  Flame,
 } from 'lucide-react';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
+import { MermaidDiagram } from './MermaidDiagram';
 
 export type WorkbenchPreset = 'appembly_dash' | 'cyclode' | 'valiscale' | 'adappty';
 export type WorkbenchLayoutMode = 'chat' | 'split' | 'workbench';
@@ -133,6 +138,10 @@ export interface AppemblyWorkbenchProps {
   personas?: WorkbenchPersonaOption[];
   models?: WorkbenchModelOption[];
   contextOptions?: WorkbenchContextOption[];
+  defaultContextRefs?: string[];
+  onContextRefsChange?: (refs: string[]) => void;
+  executionMode?: 'agentic' | 'readonly';
+  onExecutionModeChange?: (mode: 'agentic' | 'readonly') => void;
   selectedPersonaId?: string;
   onSelectPersonaId?: (id: string) => void;
   selectedModelId?: string;
@@ -154,31 +163,52 @@ export interface AppemblyWorkbenchProps {
 const DEFAULT_PERSONAS_BY_PRESET: Record<WorkbenchPreset, WorkbenchPersonaOption[]> = {
   appembly_dash: [
     {
-      id: 'agent_assembler',
-      label: 'Agent Assembler',
-      role: '8-Part Agent Spec & Guardrails',
-      description: 'Guides and synthesizes production agents across Persona, Skills, Tools, Memory, Governance, Integrations, and Triggers.',
+      id: 'General',
+      label: 'General Assistant',
+      role: 'Cross-Domain Workspace Assistant',
+      description: 'Conversational assistant across Sauthen Identity, Meterbox Billing, Harnway AI Routing, and Controps Fleet.',
       badgeColor: '#4E8067',
     },
     {
-      id: 'app_assembler',
+      id: 'AppBuilder',
       label: 'App Assembler',
       role: 'Full-Stack App & Blueprint Synthesis',
       description: 'Synthesizes full-stack applications, multi-agent topologies, OIDC auth gates, and AWS Graviton deployment manifests.',
       badgeColor: '#E5C07B',
     },
     {
-      id: 'platform_architect',
-      label: 'Platform Architect',
-      role: 'AI Gateway, FinOps & Fleet Topology',
-      description: 'Optimizes model routing policies, token budgets, Sauthen STS scopes, and Graviton arm64 fleet capacity.',
+      id: 'AgentAssembler',
+      label: 'Agent Assembler',
+      role: '8-Part Agent Spec & Guardrails',
+      description: 'Guides and synthesizes production agents across Persona, Skills, Tools, Memory, Governance, Integrations, and Triggers.',
+      badgeColor: '#4E8067',
+    },
+    {
+      id: 'SoftwareEngineer',
+      label: 'Software Engineer',
+      role: 'Polyglot Code & Worktree Execution',
+      description: 'Scopes repository tasks, generates production code, and prepares 1-click Cyclode IDE worktree handoffs.',
+      badgeColor: '#E5C07B',
+    },
+    {
+      id: 'IdentityArchitect',
+      label: 'Identity Architect',
+      role: 'OIDC, Passkeys & RFC 8693 STS',
+      description: 'Designs zero-trust authentication flows, 15m scoped agent tokens, and step-up approval policies.',
       badgeColor: '#8F80FF',
     },
     {
-      id: 'security_auditor',
-      label: 'Governance Auditor',
-      role: 'DLP, HITL Approvals & Zero-Trust Policy',
-      description: 'Audits tool execution scopes, PII redaction rules, and human-in-the-loop approval thresholds.',
+      id: 'FinOpsAnalyst',
+      label: 'FinOps & Pricing',
+      role: 'OpenMeter Quotas & Gross Margin',
+      description: 'Analyzes real-time token spend, customer credit burn, and SaaS pricing tier gross margins.',
+      badgeColor: '#4E8067',
+    },
+    {
+      id: 'IncidentResponder',
+      label: 'Incident & SRE',
+      role: 'Graviton Fleet & Autonomic Reflexes',
+      description: 'Triages SLO burn, inspects Graviton arm64 nodes, and governs bounded L1/L2 autonomic reflexes.',
       badgeColor: '#61AFEF',
     },
   ],
@@ -348,14 +378,104 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
   });
 }
 
+export interface QuickActionParsedItem {
+  actionId: string;
+  label: string;
+  prompt: string;
+  variant?: string;
+  icon?: string;
+}
+
+export function extractQuickActionsFromMarkdown(rawContent: string): {
+  cleanedContent: string;
+  quickActions: QuickActionParsedItem[];
+} {
+  if (!rawContent) return { cleanedContent: '', quickActions: [] };
+  const quickActions: QuickActionParsedItem[] = [];
+  const quickActionsBlockRegex = /<(?:quick-actions|quick_actions)>([\s\S]*?)<\/(?:quick-actions|quick_actions)>/gi;
+  let blockMatch: RegExpExecArray | null;
+  while ((blockMatch = quickActionsBlockRegex.exec(rawContent)) !== null) {
+    const blockContent = blockMatch[1];
+    const actionTagRegex = /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/gi;
+    let actionMatch: RegExpExecArray | null;
+    while ((actionMatch = actionTagRegex.exec(blockContent)) !== null) {
+      const attrsStr = actionMatch[1];
+      const innerText = (actionMatch[2] || '').trim();
+      const idMatch = attrsStr.match(/\bid=["']([^"']+)["']/i);
+      const labelMatch = attrsStr.match(/\blabel=["']([^"']+)["']/i);
+      const promptMatch = attrsStr.match(/\bprompt=["']([^"']+)["']/i);
+      const variantMatch = attrsStr.match(/\bvariant=["']([^"']+)["']/i);
+      const iconMatch = attrsStr.match(/\bicon=["']([^"']+)["']/i);
+
+      const label = labelMatch ? labelMatch[1] : innerText || 'Action';
+      const prompt = promptMatch ? promptMatch[1] : innerText || label;
+      const actionId = idMatch ? idMatch[1] : `qa_${quickActions.length + 1}`;
+      quickActions.push({
+        actionId,
+        label,
+        prompt,
+        variant: variantMatch ? variantMatch[1].toLowerCase() : 'secondary',
+        icon: iconMatch ? iconMatch[1].toLowerCase() : undefined,
+      });
+    }
+  }
+
+  let cleanedContent = rawContent.replace(quickActionsBlockRegex, '').trimEnd();
+  // Also strip unclosed <quick-actions> blocks during active streaming
+  cleanedContent = cleanedContent.replace(/<(?:quick-actions|quick_actions)>[\s\S]*$/gi, '').trimEnd();
+  return { cleanedContent, quickActions };
+}
+
+function getAlertStyle(type: string) {
+  switch (type.toUpperCase()) {
+    case 'TIP':
+      return {
+        border: 'border-emerald-500/40',
+        bg: 'bg-emerald-500/10',
+        text: 'text-emerald-400',
+        icon: Sparkles,
+      };
+    case 'IMPORTANT':
+      return {
+        border: 'border-violet-500/40',
+        bg: 'bg-violet-500/10',
+        text: 'text-violet-400',
+        icon: Flame,
+      };
+    case 'WARNING':
+      return {
+        border: 'border-amber-500/40',
+        bg: 'bg-amber-500/10',
+        text: 'text-amber-400',
+        icon: AlertTriangle,
+      };
+    case 'CAUTION':
+      return {
+        border: 'border-rose-500/40',
+        bg: 'bg-rose-500/10',
+        text: 'text-rose-400',
+        icon: AlertCircle,
+      };
+    case 'NOTE':
+    default:
+      return {
+        border: 'border-onedark-accent/40',
+        bg: 'bg-onedark-accent/10',
+        text: 'text-onedark-accent',
+        icon: Info,
+      };
+  }
+}
+
 /**
- * Full Cyclode-grade Markdown & Fenced Code Block renderer
+ * Full Cyclode-grade Markdown, Mermaid Diagram, GFM Table, and GitHub Callout Alert renderer
  */
 const RichMarkdownContent: React.FC<{
   content: string;
   onCopyCode?: (code: string) => void;
 }> = ({ content, onCopyCode }) => {
   const [copiedBlockIdx, setCopiedBlockIdx] = useState<number | null>(null);
+  const { cleanedContent } = useMemo(() => extractQuickActionsFromMarkdown(content), [content]);
 
   const blocks = useMemo(() => {
     const result: Array<
@@ -366,23 +486,23 @@ const RichMarkdownContent: React.FC<{
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
-    while ((match = fenceRegex.exec(content)) !== null) {
+    while ((match = fenceRegex.exec(cleanedContent)) !== null) {
       if (match.index > lastIndex) {
-        const proseChunk = content.slice(lastIndex, match.index);
+        const proseChunk = cleanedContent.slice(lastIndex, match.index);
         result.push({ type: 'prose', lines: proseChunk.split('\n') });
       }
       result.push({
         type: 'code',
-        lang: match[1] || 'ts',
+        lang: (match[1] || 'text').toLowerCase(),
         code: match[2].replace(/\n$/, ''),
       });
       lastIndex = match.index + match[0].length;
     }
-    if (lastIndex < content.length) {
-      result.push({ type: 'prose', lines: content.slice(lastIndex).split('\n') });
+    if (lastIndex < cleanedContent.length) {
+      result.push({ type: 'prose', lines: cleanedContent.slice(lastIndex).split('\n') });
     }
     return result;
-  }, [content]);
+  }, [cleanedContent]);
 
   const handleCopy = (code: string, idx: number) => {
     navigator.clipboard?.writeText(code);
@@ -395,6 +515,9 @@ const RichMarkdownContent: React.FC<{
     <div className="space-y-2.5 text-[13.5px] leading-[1.65] text-onedark-fg">
       {blocks.map((block, bIdx) => {
         if (block.type === 'code') {
+          if (block.lang === 'mermaid') {
+            return <MermaidDiagram key={bIdx} code={block.code} />;
+          }
           return (
             <div
               key={bIdx}
@@ -430,17 +553,19 @@ const RichMarkdownContent: React.FC<{
           );
         }
 
-        // Render prose lines (headings, bullet lists, numbered lists, paragraphs)
+        // Render prose lines (headings, tables, GitHub alerts, blockquotes, bullet/numbered lists, paragraphs)
         const elements: React.ReactNode[] = [];
         let listItems: React.ReactNode[] = [];
+        let activeTable: {
+          headers: string[];
+          rows: string[][];
+          alignments: Array<'left' | 'center' | 'right'>;
+        } | null = null;
 
         const flushList = (keyPrefix: string) => {
           if (listItems.length > 0) {
             elements.push(
-              <ul
-                key={`${keyPrefix}-list`}
-                className="my-1.5 space-y-1.5 pl-1"
-              >
+              <ul key={`${keyPrefix}-list`} className="my-1.5 space-y-1.5 pl-1">
                 {listItems}
               </ul>
             );
@@ -448,51 +573,235 @@ const RichMarkdownContent: React.FC<{
           }
         };
 
-        block.lines.forEach((rawLine, lIdx) => {
+        const flushTable = (keyPrefix: string) => {
+          if (!activeTable) return;
+          const tbl = activeTable;
+          activeTable = null;
+          const headerCount = tbl.headers.length;
+          const getAlignClass = (idx: number) => {
+            const al = tbl.alignments[idx];
+            if (al === 'center') return 'text-center';
+            if (al === 'right') return 'text-right';
+            return 'text-left';
+          };
+          elements.push(
+            <div
+              key={`${keyPrefix}-table`}
+              className="my-3 overflow-x-auto rounded-xl bg-onedark-darker/40 border border-onedark-borderSubtle/60 shadow-xs"
+            >
+              <table className="w-full border-collapse text-[13px] table-auto">
+                {tbl.headers.length > 0 && (
+                  <thead>
+                    <tr className="bg-onedark-surface/70 text-onedark-fgBright font-medium border-b border-onedark-borderSubtle/70">
+                      {tbl.headers.map((h, hIdx) => (
+                        <th
+                          key={hIdx}
+                          className={`px-3.5 py-2.5 font-mono text-[11.5px] font-semibold whitespace-nowrap ${getAlignClass(
+                            hIdx
+                          )}`}
+                        >
+                          {renderInlineMarkdown(h)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody className="divide-y divide-onedark-borderSubtle/40">
+                  {tbl.rows.map((row, rIdx) => {
+                    const cells = [...row];
+                    while (headerCount > 0 && cells.length < headerCount) {
+                      cells.push('');
+                    }
+                    return (
+                      <tr
+                        key={rIdx}
+                        className="odd:bg-transparent even:bg-onedark-surface/20 hover:bg-onedark-surface/40 transition-colors"
+                      >
+                        {cells.map((cell, cIdx) => {
+                          const isCompact = cell.trim().length <= 36 || cIdx === 0;
+                          return (
+                            <td
+                              key={cIdx}
+                              className={`px-3.5 py-2.5 text-onedark-fg text-[13px] leading-relaxed align-top ${
+                                isCompact ? 'whitespace-nowrap' : 'min-w-[160px] break-normal'
+                              } ${getAlignClass(cIdx)}`}
+                            >
+                              {renderInlineMarkdown(cell)}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        };
+
+        const lines = block.lines;
+        for (let lIdx = 0; lIdx < lines.length; lIdx++) {
+          const rawLine = lines[lIdx];
           const line = rawLine.trim();
+
           if (!line) {
             flushList(`${bIdx}-${lIdx}`);
-            return;
+            flushTable(`${bIdx}-${lIdx}`);
+            continue;
+          }
+
+          // Table row detection: starts with '|' or contains pipes while inside a table
+          if (line.startsWith('|') || (activeTable && line.includes('|'))) {
+            flushList(`${bIdx}-${lIdx}`);
+            let rawRow = line;
+            if (rawRow.startsWith('|')) rawRow = rawRow.slice(1);
+            if (rawRow.endsWith('|')) rawRow = rawRow.slice(0, -1);
+            const cells = rawRow.split('|').map((c) => c.trim());
+            const isDelimiter = cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c));
+            if (isDelimiter) {
+              if (activeTable) {
+                activeTable.alignments = cells.map((c) => {
+                  if (c.startsWith(':') && c.endsWith(':')) return 'center';
+                  if (c.endsWith(':')) return 'right';
+                  return 'left';
+                });
+              }
+              continue;
+            }
+            if (!activeTable) {
+              activeTable = { headers: cells, rows: [], alignments: [] };
+            } else {
+              activeTable.rows.push(cells);
+            }
+            continue;
+          } else if (activeTable) {
+            flushTable(`${bIdx}-${lIdx}`);
+          }
+
+          // GitHub Callout Alert: > [!NOTE], > [!TIP], > [!IMPORTANT], > [!WARNING], > [!CAUTION]
+          const alertMatch = line.match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i);
+          if (alertMatch) {
+            flushList(`${bIdx}-${lIdx}`);
+            const alertType = alertMatch[1].toUpperCase();
+            const alertLines: string[] = [];
+            if (alertMatch[2].trim()) alertLines.push(alertMatch[2].trim());
+            while (
+              lIdx + 1 < lines.length &&
+              lines[lIdx + 1].trim().startsWith('>') &&
+              !lines[lIdx + 1].trim().match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i)
+            ) {
+              lIdx++;
+              alertLines.push(lines[lIdx].trim().replace(/^>\s?/, ''));
+            }
+            const style = getAlertStyle(alertType);
+            const AlertIcon = style.icon;
+            elements.push(
+              <div
+                key={`${bIdx}-${lIdx}-alert`}
+                className={`my-2.5 p-3 rounded-xl border ${style.border} ${style.bg} flex items-start gap-2.5 text-[13px] leading-relaxed`}
+              >
+                <AlertIcon className={`w-4 h-4 ${style.text} shrink-0 mt-0.5`} />
+                <div className="space-y-1 flex-1 min-w-0">
+                  <div className={`font-bold font-mono text-[10.5px] uppercase tracking-wider ${style.text}`}>
+                    {alertType}
+                  </div>
+                  <div className="text-onedark-fg space-y-1">
+                    {alertLines.map((al, aIdx) => (
+                      <p key={aIdx}>{renderInlineMarkdown(al)}</p>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+            continue;
+          }
+
+          // Standard blockquote: > ...
+          if (line.startsWith('>')) {
+            flushList(`${bIdx}-${lIdx}`);
+            const quoteLines: string[] = [line.replace(/^>\s?/, '')];
+            while (
+              lIdx + 1 < lines.length &&
+              lines[lIdx + 1].trim().startsWith('>') &&
+              !lines[lIdx + 1].trim().match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]/i)
+            ) {
+              lIdx++;
+              quoteLines.push(lines[lIdx].trim().replace(/^>\s?/, ''));
+            }
+            elements.push(
+              <blockquote
+                key={`${bIdx}-${lIdx}-quote`}
+                className="border-l-2 border-onedark-accent/70 pl-3.5 py-1.5 my-2 bg-onedark-surface/35 rounded-r-lg text-onedark-fg text-[13px] space-y-1"
+              >
+                {quoteLines.map((ql, qIdx) => (
+                  <p key={qIdx}>{renderInlineMarkdown(ql)}</p>
+                ))}
+              </blockquote>
+            );
+            continue;
+          }
+
+          // Horizontal rule
+          if (line === '---' || line === '***' || line === '___') {
+            flushList(`${bIdx}-${lIdx}`);
+            elements.push(
+              <hr
+                key={`${bIdx}-${lIdx}-hr`}
+                className="my-4 border-0 h-px bg-onedark-borderSubtle/70"
+              />
+            );
+            continue;
+          }
+
+          if (line.startsWith('#### ')) {
+            flushList(`${bIdx}-${lIdx}`);
+            elements.push(
+              <h5 key={`${bIdx}-${lIdx}`} className="text-[13px] font-semibold text-onedark-fgBright pt-1">
+                {renderInlineMarkdown(line.slice(5))}
+              </h5>
+            );
+            continue;
           }
 
           if (line.startsWith('### ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h4
-                key={`${bIdx}-${lIdx}`}
-                className="text-[13.5px] font-semibold text-onedark-fgBright pt-1.5"
-              >
+              <h4 key={`${bIdx}-${lIdx}`} className="text-[13.5px] font-semibold text-onedark-fgBright pt-1.5">
                 {renderInlineMarkdown(line.slice(4))}
               </h4>
             );
-            return;
+            continue;
           }
 
           if (line.startsWith('## ')) {
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
-              <h3
-                key={`${bIdx}-${lIdx}`}
-                className="text-[14.5px] font-semibold text-onedark-fgBright pt-2"
-              >
+              <h3 key={`${bIdx}-${lIdx}`} className="text-[15px] font-semibold text-onedark-fgBright pt-2">
                 {renderInlineMarkdown(line.slice(3))}
               </h3>
             );
-            return;
+            continue;
+          }
+
+          if (line.startsWith('# ')) {
+            flushList(`${bIdx}-${lIdx}`);
+            elements.push(
+              <h2 key={`${bIdx}-${lIdx}`} className="text-[16px] font-bold text-onedark-fgBright pt-2.5">
+                {renderInlineMarkdown(line.slice(2))}
+              </h2>
+            );
+            continue;
           }
 
           if (/^([•\-*]|\d+\.)\s+/.test(line)) {
             const clean = line.replace(/^([•\-*]|\d+\.)\s+/, '');
             listItems.push(
-              <li
-                key={`${bIdx}-${lIdx}`}
-                className="flex items-start gap-2 text-[13.25px] leading-[1.6]"
-              >
+              <li key={`${bIdx}-${lIdx}`} className="flex items-start gap-2 text-[13.25px] leading-[1.6]">
                 <span className="mt-2 w-1.5 h-1.5 rounded-full bg-onedark-accent shrink-0" />
                 <span className="flex-1">{renderInlineMarkdown(clean)}</span>
               </li>
             );
-            return;
+            continue;
           }
 
           flushList(`${bIdx}-${lIdx}`);
@@ -501,9 +810,10 @@ const RichMarkdownContent: React.FC<{
               {renderInlineMarkdown(line)}
             </p>
           );
-        });
+        }
 
         flushList(`${bIdx}-end`);
+        flushTable(`${bIdx}-end`);
         return <React.Fragment key={bIdx}>{elements}</React.Fragment>;
       })}
     </div>
@@ -542,6 +852,10 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   personas,
   models = DEFAULT_MODELS,
   contextOptions = DEFAULT_CONTEXT_OPTIONS,
+  defaultContextRefs,
+  onContextRefsChange,
+  executionMode: controlledExecutionMode,
+  onExecutionModeChange,
   selectedPersonaId: controlledPersonaId,
   onSelectPersonaId,
   selectedModelId: controlledModelId,
@@ -596,8 +910,19 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
     onActiveAuxTabChange?.(tabId);
   };
 
-  const [executionMode, setExecutionMode] = useState<'agentic' | 'readonly'>('agentic');
-  const [selectedContextRefs, setSelectedContextRefs] = useState<string[]>(['@blueprint:agent-spec']);
+  const [internalExecutionMode, setInternalExecutionMode] = useState<'agentic' | 'readonly'>('agentic');
+  const executionMode = controlledExecutionMode ?? internalExecutionMode;
+  const setExecutionMode = (nextMode: 'agentic' | 'readonly') => {
+    setInternalExecutionMode(nextMode);
+    onExecutionModeChange?.(nextMode);
+  };
+
+  const [selectedContextRefs, setSelectedContextRefs] = useState<string[]>(defaultContextRefs ?? []);
+  useEffect(() => {
+    if (defaultContextRefs !== undefined) {
+      setSelectedContextRefs(defaultContextRefs);
+    }
+  }, [JSON.stringify(defaultContextRefs)]);
   const [attachments, setAttachments] = useState<string[]>([]);
 
   // Popover states
@@ -666,9 +991,11 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   };
 
   const toggleContextRef = (id: string) => {
-    setSelectedContextRefs((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setSelectedContextRefs((prev) => {
+      const next = prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id];
+      onContextRefsChange?.(next);
+      return next;
+    });
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -711,38 +1038,29 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
           </div>
         </div>
 
-        {/* Right: 3-Mode Layout Switcher (Chat | Split | Workbench) + Auxiliary Tab Quick Switcher */}
+        {/* Right: 3-Mode Layout Switcher (Chat | Split | Workbench) + Auxiliary Tab Quick Switcher (only in Chat mode) */}
         <div className="flex items-center gap-2 shrink-0">
-          {auxiliaryTabs.length > 0 && (
-            <div className="hidden lg:flex items-center gap-1 p-0.5 rounded-lg bg-onedark-darker border border-onedark-borderSubtle">
-              {auxiliaryTabs.map((tab) => {
-                const isTabActive = tab.id === activeAuxTab;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveAuxTab(tab.id);
-                      if (layoutMode === 'chat') {
-                        setLayoutMode('split');
-                      }
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium transition-colors ${
-                      isTabActive && layoutMode !== 'chat'
-                        ? 'bg-onedark-surface text-onedark-fgBright shadow-sm border border-onedark-borderSubtle/80'
-                        : 'text-onedark-muted hover:text-onedark-fg'
-                    }`}
-                  >
-                    {tab.icon}
-                    <span>{tab.label}</span>
-                    {tab.badge !== undefined && (
-                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-onedark-bg text-onedark-accent">
-                        {tab.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+          {layoutMode === 'chat' && auxiliaryTabs.length > 0 && (
+            <div className="hidden md:flex items-center gap-1 p-0.5 rounded-lg bg-onedark-darker border border-onedark-borderSubtle">
+              {auxiliaryTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveAuxTab(tab.id);
+                    setLayoutMode('split');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] font-medium text-onedark-muted hover:text-onedark-fg transition-colors"
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                  {tab.badge !== undefined && (
+                    <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-onedark-bg text-onedark-accent">
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
           )}
 
@@ -1014,17 +1332,23 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                               )}
                               <Terminal className="w-3.5 h-3.5 text-onedark-accent shrink-0" />
                               <span className="font-medium text-onedark-fgBright shrink-0">
-                                {msg.steps.length} steps completed
+                                {msg.steps.length} {msg.steps.length === 1 ? 'step' : 'steps'} completed
                               </span>
                               <div className="flex items-center gap-1 overflow-hidden">
-                                {msg.steps.slice(0, 3).map((s: any, idx) => (
-                                  <span
-                                    key={idx}
-                                    className="px-1.5 py-0.2 rounded text-[10.5px] font-mono bg-onedark-surface text-onedark-muted border border-onedark-borderSubtle truncate"
-                                  >
-                                    {s.verb || 'Executed'} {s.target || s.tool_name}
-                                  </span>
-                                ))}
+                                {msg.steps.slice(0, 3).map((s: any, idx) => {
+                                  const shortTarget = String(s.target || s.tool_name || '').replace(
+                                    /^(appembly_unified|cyclode_coding|sauthen_identity|meterbox_finops|adappty_autonomic)\./i,
+                                    ''
+                                  );
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="px-1.5 py-0.2 rounded text-[10.5px] font-mono bg-onedark-surface text-onedark-muted border border-onedark-borderSubtle truncate max-w-[180px]"
+                                    >
+                                      {s.verb || 'Executed'} {shortTarget}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </div>
                             <span className="text-[11px] font-mono text-onedark-muted shrink-0 ml-2">
@@ -1071,28 +1395,44 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         <RichMarkdownContent content={msg.content} />
                       </div>
 
-                      {/* Guided Follow-Up Action Chips */}
-                      {msg.followUps && msg.followUps.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-2 pt-1.5">
-                          {msg.followUps.map((f, fIdx) => (
-                            <button
-                              key={fIdx}
-                              type="button"
-                              onClick={() => {
-                                if (f.actionId && onFollowUpAction) {
-                                  onFollowUpAction(f.actionId, f.prompt);
-                                } else if (f.prompt) {
-                                  prefillComposer(f.prompt);
-                                }
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-onedark-surface hover:bg-onedark-darker text-onedark-fgBright border border-onedark-borderSubtle hover:border-onedark-accent/60 transition-all shadow-sm"
-                            >
-                              <Sparkles className="w-3.5 h-3.5 text-onedark-accent" />
-                              <span>{f.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      {/* Guided Follow-Up Action Chips (explicit followUps + parsed <quick-actions>) */}
+                      {(() => {
+                        const { quickActions } = extractQuickActionsFromMarkdown(msg.content);
+                        const mergedFollowUps = [
+                          ...(msg.followUps || []),
+                          ...quickActions.filter(
+                            (qa) => !(msg.followUps || []).some((f) => f.label === qa.label)
+                          ),
+                        ];
+                        if (mergedFollowUps.length === 0) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                            {mergedFollowUps.map((f, fIdx) => (
+                              <button
+                                key={fIdx}
+                                type="button"
+                                onClick={() => {
+                                  if (f.actionId && onFollowUpAction) {
+                                    onFollowUpAction(f.actionId, f.prompt);
+                                  } else if (f.prompt) {
+                                    onSendMessage(f.prompt, {
+                                      persona: activePersona,
+                                      model: activeModel,
+                                      executionMode,
+                                      contextRefs: selectedContextRefs,
+                                      attachments: [],
+                                    });
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-onedark-surface hover:bg-onedark-darker text-onedark-fgBright border border-onedark-borderSubtle hover:border-onedark-accent/60 transition-all shadow-sm"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-onedark-accent" />
+                                <span>{f.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -1378,8 +1718,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                     <button
                       type="button"
                       onClick={() =>
-                        setExecutionMode((m) =>
-                          m === 'agentic' ? 'readonly' : 'agentic'
+                        setExecutionMode(
+                          executionMode === 'agentic' ? 'readonly' : 'agentic'
                         )
                       }
                       title="Toggle between Agentic Execution and Plan-Only mode"

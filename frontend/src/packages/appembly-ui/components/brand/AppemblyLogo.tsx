@@ -379,3 +379,44 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
     </div>
   );
 };
+
+/**
+ * Dynamically updates the browser tab `<link rel="icon">` SVG and `<meta name="theme-color">`
+ * to match the active Appembly brand or user-selected theme accent color, with an optional
+ * corner badge dot (e.g. for active agent streaming or pending Sauthen Step-Up approvals).
+ */
+export function syncAppemblyFavicon(
+  fillHex = '#4E8067',
+  options?: { badgeHex?: string; themeMode?: 'light' | 'dark' }
+): void {
+  if (typeof document === 'undefined') return;
+  const markPath = buildAppemblyMarkPath();
+  const ringStroke = options?.themeMode === 'dark' ? '#0F1419' : '#F6F7F5';
+  const badgeCircle = options?.badgeHex
+    ? `<circle cx="76" cy="24" r="11" fill="${options.badgeHex}" stroke="${ringStroke}" stroke-width="3.5" />`
+    : '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 8 84 84" fill="none"><path d="${markPath}" fill="${fillHex}" fill-rule="evenodd"/>${badgeCircle}</svg>`;
+
+  const iconLinks = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
+  const dataUri = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  if (iconLinks.length === 0) {
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.type = 'image/svg+xml';
+    link.href = dataUri;
+    document.head.appendChild(link);
+  } else {
+    iconLinks.forEach((link) => {
+      link.type = 'image/svg+xml';
+      link.href = dataUri;
+    });
+  }
+
+  let metaTheme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!metaTheme) {
+    metaTheme = document.createElement('meta');
+    metaTheme.name = 'theme-color';
+    document.head.appendChild(metaTheme);
+  }
+  metaTheme.content = fillHex;
+}
