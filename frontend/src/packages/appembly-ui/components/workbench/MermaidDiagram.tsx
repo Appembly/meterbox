@@ -12,12 +12,67 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 
 export interface MermaidDiagramProps {
   code: string;
   className?: string;
   isStreaming?: boolean;
+  defaultExpanded?: boolean;
+}
+
+function extractDiagramSummary(cleanCode: string): {
+  kindLabel: string;
+  nodeCount: number;
+  previewLabel: string;
+} {
+  if (!cleanCode) {
+    return { kindLabel: 'Diagram', nodeCount: 0, previewLabel: '' };
+  }
+  const lines = cleanCode
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith('%%'));
+  const firstLine = (lines[0] || '').toLowerCase();
+
+  let kindLabel = 'Flowchart';
+  if (firstLine.startsWith('sequencediagram')) kindLabel = 'Sequence';
+  else if (firstLine.startsWith('statediagram')) kindLabel = 'State';
+  else if (firstLine.startsWith('erdiagram')) kindLabel = 'ER Model';
+  else if (firstLine.startsWith('classdiagram')) kindLabel = 'Class';
+  else if (firstLine.startsWith('gantt')) kindLabel = 'Timeline';
+  else if (firstLine.startsWith('mindmap')) kindLabel = 'Mindmap';
+  else if (firstLine.startsWith('pie')) kindLabel = 'Breakdown';
+
+  // Extract human-readable labels inside ["..."], ("..."), {"..."}, or participant/actor lines
+  const labels: string[] = [];
+  const labelRegex = /(?:\["([^"]+)"\]|\("([^"]+)"\)|\{"([^"]+)"\}|\[([^\][\n]+)\]|\{([^{}\n]+)\})/g;
+  for (const line of lines.slice(1)) {
+    if (line.startsWith('style ') || line.startsWith('classDef ') || line.startsWith('subgraph ')) {
+      continue;
+    }
+    let m: RegExpExecArray | null;
+    while ((m = labelRegex.exec(line)) !== null) {
+      const candidate = (m[1] || m[2] || m[3] || m[4] || m[5] || '')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/^"+|"+$/g, '')
+        .trim();
+      if (candidate && candidate.length >= 2 && !labels.includes(candidate)) {
+        labels.push(candidate);
+      }
+    }
+    const partMatch = line.match(/^(?:participant|actor)\s+(?:[A-Za-z0-9_]+\s+as\s+)?(.+)$/i);
+    if (partMatch && partMatch[1]) {
+      const cleanPart = partMatch[1].replace(/^"+|"+$/g, '').trim();
+      if (cleanPart && !labels.includes(cleanPart)) labels.push(cleanPart);
+    }
+  }
+
+  const nodeCount = Math.max(labels.length, Math.max(0, lines.length - 1));
+  const previewLabel = labels.slice(0, 2).join(' → ');
+  return { kindLabel, nodeCount, previewLabel };
 }
 
 function readCurrentThemeFromDOM(): { isLight: boolean; accentColor: string } {
@@ -333,16 +388,30 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   code,
   className = '',
   isStreaming = false,
+  defaultExpanded = true,
 }) => {
   const [svgHtml, setSvgHtml] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
   const [isFullWidth, setIsFullWidth] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [showSource, setShowSource] = useState<boolean>(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const modalCanvasRef = useRef<HTMLDivElement>(null);
 
+  // Inline 260px interactive canvas state
+  const [inlineZoom, setInlineZoom] = useState<number>(1.0);
+  const [inlinePan, setInlinePan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isInlineDragging, setIsInlineDragging] = useState<boolean>(false);
+  const inlineDragStartRef = useRef<{ x: number; y: number; panX: number; panY: number }>({
+    x: 0,
+    y: 0,
+    panX: 0,
+    panY: 0,
+  });
+
+  // Full-screen modal interactive canvas state
   const [zoom, setZoom] = useState<number>(1.0);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -356,6 +425,84 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   const svgDims = useMemo(() => extractSvgDimensions(svgHtml), [svgHtml]);
   const { isLight, accentColor } = useThemeObserver();
   const cleanCode = useMemo(() => sanitizeMermaidCode(code), [code]);
+  const summary = useMemo(() => extractDiagramSummary(cleanCode), [cleanCode]);
+
+  const calculateInlineFitZoom = useCallback(() => {
+    if (!containerRef.current || !svgDims) return 1.0;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return 1.0;
+    const padX = 36;
+    const padY = 28;
+    const scaleX = (rect.width - padX) / svgDims.width;
+    const scaleY = (rect.height - padY) / svgDims.height;
+    const fit = Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1.15);
+    return Number(fit.toFixed(2));
+  }, [svgDims]);
+
+  const handleInlineFitView = useCallback(() => {
+    const fit = calculateInlineFitZoom();
+    setInlineZoom(fit);
+    setInlinePan({ x: 0, y: 0 });
+  }, [calculateInlineFitZoom]);
+
+  const handleInlineResetZoom = useCallback(() => {
+    setInlineZoom(1.0);
+    setInlinePan({ x: 0, y: 0 });
+  }, []);
+
+  const handleInlineDoubleClick = useCallback(() => {
+    const fit = calculateInlineFitZoom();
+    if (Math.abs(inlineZoom - fit) > 0.05) {
+      handleInlineFitView();
+    } else {
+      handleInlineResetZoom();
+    }
+  }, [calculateInlineFitZoom, inlineZoom, handleInlineFitView, handleInlineResetZoom]);
+
+  // Auto-fit diagram inside the compact 260px inline canvas whenever SVG dimensions or layout change
+  useEffect(() => {
+    if (!isExpanded || showSource || !svgDims) return;
+    const rafId = requestAnimationFrame(() => {
+      const fit = calculateInlineFitZoom();
+      setInlineZoom(fit);
+      setInlinePan({ x: 0, y: 0 });
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [svgDims, isExpanded, isFullWidth, showSource, calculateInlineFitZoom]);
+
+  // Non-passive cursor-centered wheel zoom on the inline 260px canvas
+  useEffect(() => {
+    if (!isExpanded || showSource || !containerRef.current) return;
+    const canvasEl = containerRef.current;
+
+    const handleInlineWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const rect = canvasEl.getBoundingClientRect();
+      const delta = -e.deltaY;
+      const factor = Math.exp(delta * 0.002);
+
+      setInlineZoom((prevZoom) => {
+        const newZoom = Math.min(Math.max(0.15, Number((prevZoom * factor).toFixed(3))), 4.0);
+        if (newZoom === prevZoom) return prevZoom;
+
+        const cursorX = e.clientX - (rect.left + rect.width / 2);
+        const cursorY = e.clientY - (rect.top + rect.height / 2);
+
+        setInlinePan((prevPan) => ({
+          x: Math.round(cursorX - (cursorX - prevPan.x) * (newZoom / prevZoom)),
+          y: Math.round(cursorY - (cursorY - prevPan.y) * (newZoom / prevZoom)),
+        }));
+
+        return newZoom;
+      });
+    };
+
+    canvasEl.addEventListener('wheel', handleInlineWheel, { passive: false });
+    return () => {
+      canvasEl.removeEventListener('wheel', handleInlineWheel);
+    };
+  }, [isExpanded, showSource, svgHtml]);
 
   const calculateFitZoom = useCallback(() => {
     if (!modalCanvasRef.current || !svgDims) return 1.0;
@@ -379,6 +526,15 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
     setPan({ x: 0, y: 0 });
   }, []);
 
+  const handleModalDoubleClick = useCallback(() => {
+    const fit = calculateFitZoom();
+    if (Math.abs(zoom - fit) > 0.05) {
+      handleFitView();
+    } else {
+      handleResetZoom();
+    }
+  }, [calculateFitZoom, zoom, handleFitView, handleResetZoom]);
+
   useEffect(() => {
     if (isModalOpen) {
       setPan({ x: 0, y: 0 });
@@ -389,6 +545,70 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
       return () => cancelAnimationFrame(rafId);
     }
   }, [isModalOpen, calculateFitZoom]);
+
+  // Non-passive cursor-centered wheel zoom in full-screen modal (Cyclode parity)
+  useEffect(() => {
+    if (!isModalOpen || !modalCanvasRef.current) return;
+    const canvasEl = modalCanvasRef.current;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = canvasEl.getBoundingClientRect();
+      const delta = -e.deltaY;
+      const factor = Math.exp(delta * 0.002);
+
+      setZoom((prevZoom) => {
+        const newZoom = Math.min(Math.max(0.15, Number((prevZoom * factor).toFixed(3))), 5.0);
+        if (newZoom === prevZoom) return prevZoom;
+
+        const cursorX = e.clientX - (rect.left + rect.width / 2);
+        const cursorY = e.clientY - (rect.top + rect.height / 2);
+
+        setPan((prevPan) => ({
+          x: Math.round(cursorX - (cursorX - prevPan.x) * (newZoom / prevZoom)),
+          y: Math.round(cursorY - (cursorY - prevPan.y) * (newZoom / prevZoom)),
+        }));
+
+        return newZoom;
+      });
+    };
+
+    canvasEl.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      canvasEl.removeEventListener('wheel', handleWheel);
+    };
+  }, [isModalOpen]);
+
+  // Keyboard navigation when modal is open (Cyclode parity)
+  useEffect(() => {
+    if (!isModalOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsModalOpen(false);
+      } else if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setZoom((z) => Math.min(5.0, Number((z + 0.25).toFixed(2))));
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setZoom((z) => Math.max(0.15, Number((z - 0.25).toFixed(2))));
+      } else if (e.key === '0') {
+        e.preventDefault();
+        handleResetZoom();
+      } else if (e.key === 'ArrowLeft') {
+        setPan((p) => ({ ...p, x: p.x + 50 }));
+      } else if (e.key === 'ArrowRight') {
+        setPan((p) => ({ ...p, x: p.x - 50 }));
+      } else if (e.key === 'ArrowUp') {
+        setPan((p) => ({ ...p, y: p.y + 50 }));
+      } else if (e.key === 'ArrowDown') {
+        setPan((p) => ({ ...p, y: p.y - 50 }));
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, handleResetZoom]);
 
   useEffect(() => {
     let isMounted = true;
@@ -500,62 +720,125 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   return (
     <>
       <div
-        className={`my-3 rounded-xl bg-[color-mix(in_srgb,var(--ui-bg-subtle)_60%,transparent)] border border-[var(--ui-border)] overflow-hidden shadow-xs group/mermaid transition-colors ${
+        className={`my-2.5 rounded-lg bg-[color-mix(in_srgb,var(--ui-bg-subtle)_60%,transparent)] border border-[var(--ui-border)] overflow-hidden shadow-xs group/mermaid transition-colors ${
           isFullWidth ? 'w-full !max-w-none' : 'w-full'
         } ${className}`}
       >
-        <div className="flex items-center justify-between px-3.5 py-1.5 bg-[color-mix(in_srgb,var(--ui-bg-surface)_60%,transparent)] border-b border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] text-[11px] text-[var(--ui-text-muted)] font-mono select-none">
-          <div className="flex items-center space-x-2">
-            <Sparkles className="w-3.5 h-3.5 text-[var(--ui-accent)]" />
-            <span className="text-[var(--ui-accent)] font-semibold uppercase tracking-wider text-[10.5px]">
+        <div
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className={`flex items-center justify-between gap-2 px-3 py-1.5 bg-[color-mix(in_srgb,var(--ui-bg-surface)_60%,transparent)] hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_85%,transparent)] ${
+            isExpanded ? 'border-b border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)]' : ''
+          } text-[11px] text-[var(--ui-text-muted)] font-mono select-none cursor-pointer transition-colors`}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            {isExpanded ? (
+              <ChevronDown className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
+            ) : (
+              <ChevronRight className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
+            )}
+            <Sparkles className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" />
+            <span className="text-[var(--ui-text-primary)] font-semibold text-[11.5px] shrink-0">
               Architecture Diagram
             </span>
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)] shrink-0">
+              {summary.kindLabel}
+              {summary.nodeCount > 0 ? ` · ${summary.nodeCount} nodes` : ''}
+            </span>
+            {!isExpanded && summary.previewLabel && (
+              <span className="text-[11.5px] font-sans text-[var(--ui-text-muted)] truncate hidden sm:inline">
+                — {summary.previewLabel}
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center space-x-1.5">
-            <button
-              type="button"
-              onClick={() => setShowSource((s) => !s)}
-              className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
-                showSource
-                  ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
-                  : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
-              }`}
-            >
-              <span>{showSource ? 'Diagram' : 'Source'}</span>
-            </button>
+          <div
+            className="flex items-center space-x-1 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {isExpanded && !showSource && (
+              <div className="flex items-center bg-[color-mix(in_srgb,var(--ui-bg-subtle)_90%,transparent)] border border-[var(--ui-border)] rounded-md p-0.5 mr-1">
+                <button
+                  type="button"
+                  onClick={() => setInlineZoom((z) => Math.max(0.15, Number((z - 0.2).toFixed(2))))}
+                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInlineResetZoom}
+                  className="px-1.5 py-0.2 text-[10px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[40px] text-center cursor-pointer"
+                  title="Reset to 100%"
+                >
+                  {Math.round(inlineZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInlineZoom((z) => Math.min(4.0, Number((z + 0.2).toFixed(2))))}
+                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleInlineFitView}
+                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] ml-0.5 border-l border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] cursor-pointer"
+                  title="Fit Diagram to 260px Viewport"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </div>
+            )}
 
-            <button
-              type="button"
-              onClick={() => setIsFullWidth(!isFullWidth)}
-              className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
-                isFullWidth
-                  ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
-                  : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
-              }`}
-            >
-              <ArrowLeftRight className="w-3 h-3" />
-              <span>{isFullWidth ? 'Standard' : 'Full Width'}</span>
-            </button>
+            {isExpanded && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowSource((s) => !s)}
+                  className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
+                    showSource
+                      ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
+                      : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
+                  }`}
+                >
+                  <span>{showSource ? 'Diagram' : 'Source'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsFullWidth(!isFullWidth)}
+                  className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
+                    isFullWidth
+                      ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
+                      : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
+                  }`}
+                >
+                  <ArrowLeftRight className="w-3 h-3" />
+                  <span>{isFullWidth ? 'Standard' : 'Full Width'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadSvg}
+                  disabled={!svgHtml}
+                  className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>SVG</span>
+                </button>
+              </>
+            )}
 
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
               className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer"
-              title="Expand in full-screen modal"
+              title="Open full-screen pan & zoom diagram viewer"
             >
               <Maximize2 className="w-3 h-3" />
               <span>Expand</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleDownloadSvg}
-              disabled={!svgHtml}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer disabled:opacity-40"
-            >
-              <Download className="w-3 h-3" />
-              <span>SVG</span>
             </button>
 
             <button
@@ -566,33 +849,91 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
               {copied ? <Check className="w-3 h-3 text-[var(--ui-ok)]" /> : <Copy className="w-3 h-3" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setIsExpanded((prev) => !prev)}
+              className="px-2 py-0.5 rounded text-[10.5px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] transition-colors cursor-pointer"
+            >
+              {isExpanded ? 'Hide' : 'Show'}
+            </button>
           </div>
         </div>
 
-        {showSource ? (
-          <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-[var(--ui-text-primary)] overflow-x-auto">
-            <code>{cleanCode}</code>
-          </pre>
-        ) : (
-          <div
-            ref={containerRef}
-            onDoubleClick={() => setIsModalOpen(true)}
-            title="Double-click to expand and inspect"
-            className="p-5 overflow-x-auto flex items-center justify-center min-h-[140px] [&>svg]:max-w-full [&>svg]:h-auto cursor-pointer"
-          >
-            {svgHtml ? (
-              <div
-                className="w-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:h-auto"
-                dangerouslySetInnerHTML={{ __html: svgHtml }}
-              />
-            ) : (
-              <div className="flex items-center gap-2 text-xs font-mono text-[var(--ui-text-muted)] py-6">
-                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--ui-accent)] border-t-transparent" />
-                <span>Rendering architecture diagram...</span>
-              </div>
-            )}
-          </div>
-        )}
+        {isExpanded &&
+          (showSource ? (
+            <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-[var(--ui-text-primary)] overflow-x-auto max-h-[260px] overflow-y-auto">
+              <code>{cleanCode}</code>
+            </pre>
+          ) : (
+            <div
+              ref={containerRef}
+              onDoubleClick={handleInlineDoubleClick}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                setIsInlineDragging(true);
+                inlineDragStartRef.current = {
+                  x: e.clientX,
+                  y: e.clientY,
+                  panX: inlinePan.x,
+                  panY: inlinePan.y,
+                };
+                (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                if (!isInlineDragging) return;
+                setInlinePan({
+                  x: Math.round(inlineDragStartRef.current.panX + (e.clientX - inlineDragStartRef.current.x)),
+                  y: Math.round(inlineDragStartRef.current.panY + (e.clientY - inlineDragStartRef.current.y)),
+                });
+              }}
+              onPointerUp={(e) => {
+                if (!isInlineDragging) return;
+                setIsInlineDragging(false);
+                try {
+                  (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                } catch {}
+              }}
+              onPointerCancel={(e) => {
+                if (!isInlineDragging) return;
+                setIsInlineDragging(false);
+                try {
+                  (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                } catch {}
+              }}
+              className={`relative h-[260px] overflow-hidden flex items-center justify-center select-none bg-[color-mix(in_srgb,var(--ui-bg-canvas)_35%,transparent)] ${
+                isInlineDragging ? 'cursor-grabbing' : 'cursor-grab'
+              }`}
+            >
+              {svgHtml ? (
+                <>
+                  <div
+                    style={{
+                      transform: `translate3d(${inlinePan.x}px, ${inlinePan.y}px, 0) scale(${inlineZoom})`,
+                      transformOrigin: 'center center',
+                      transition: isInlineDragging ? 'none' : 'transform 0.12s cubic-bezier(0.16, 1, 0.3, 1)',
+                      width: svgDims ? `${svgDims.width}px` : 'auto',
+                      height: svgDims ? `${svgDims.height}px` : 'auto',
+                    }}
+                    className="flex items-center justify-center pointer-events-none [&>svg]:!w-full [&>svg]:!h-full [&>svg]:!max-w-none [&>svg]:pointer-events-auto"
+                    dangerouslySetInnerHTML={{ __html: svgHtml }}
+                  />
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--ui-bg-surface)_90%,transparent)] backdrop-blur-xs border border-[var(--ui-border)] text-[10px] font-mono text-[var(--ui-text-muted)] pointer-events-none flex items-center space-x-1.5 select-none opacity-0 group-hover/mermaid:opacity-100 transition-opacity shadow-xs">
+                    <span>Drag to pan</span>
+                    <span className="opacity-40">·</span>
+                    <span>Scroll to zoom</span>
+                    <span className="opacity-40">·</span>
+                    <span>Double-click to toggle fit</span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 text-xs font-mono text-[var(--ui-text-muted)] py-6">
+                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--ui-accent)] border-t-transparent" />
+                  <span>Rendering architecture diagram...</span>
+                </div>
+              )}
+            </div>
+          ))}
       </div>
 
       {isModalOpen &&
@@ -614,34 +955,41 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   <span className="font-semibold text-xs text-[var(--ui-text-primary)]">
                     Architecture Diagram Inspection
                   </span>
+                  <span className="text-[10px] text-[var(--ui-text-muted)] font-mono hidden sm:inline px-1.5 py-0.5 rounded bg-[var(--ui-bg-surface)] border border-[var(--ui-border)]">
+                    Interactive Canvas
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <div className="flex items-center bg-[color-mix(in_srgb,var(--ui-bg-subtle)_90%,transparent)] border border-[var(--ui-border)] rounded-lg p-0.5 shadow-xs">
                     <button
                       type="button"
                       onClick={() => setZoom((z) => Math.max(0.15, Number((z - 0.25).toFixed(2))))}
-                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)]"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
+                      title="Zoom Out (-)"
                     >
                       <ZoomOut className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={handleResetZoom}
-                      className="px-2 py-0.5 text-[11px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[50px] text-center"
+                      className="px-2 py-0.5 text-[11px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[50px] text-center cursor-pointer"
+                      title="Reset to 100% (0)"
                     >
                       {Math.round(zoom * 100)}%
                     </button>
                     <button
                       type="button"
                       onClick={() => setZoom((z) => Math.min(5.0, Number((z + 0.25).toFixed(2))))}
-                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)]"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
+                      title="Zoom In (+)"
                     >
                       <ZoomIn className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={handleFitView}
-                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] ml-0.5 border-l border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)]"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] ml-0.5 border-l border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] cursor-pointer"
+                      title="Fit to Screen"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
@@ -649,7 +997,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadSvg}
-                    className="px-2.5 py-1 text-xs rounded-lg bg-[var(--ui-bg-surface)] hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_80%,transparent)] text-[var(--ui-text-secondary)] font-medium flex items-center space-x-1.5 border border-[var(--ui-border)]"
+                    className="px-2.5 py-1 text-xs rounded-lg bg-[var(--ui-bg-surface)] hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_80%,transparent)] text-[var(--ui-text-secondary)] font-medium flex items-center space-x-1.5 border border-[var(--ui-border)] cursor-pointer"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download SVG</span>
@@ -657,7 +1005,8 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="p-1.5 rounded-lg hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)]"
+                    className="p-1.5 rounded-lg hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] cursor-pointer"
+                    title="Close (Esc)"
                   >
                     <Minimize2 className="w-4 h-4" />
                   </button>
@@ -669,6 +1018,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                 className={`flex-1 relative overflow-hidden flex items-center justify-center select-none bg-[color-mix(in_srgb,var(--ui-bg-canvas)_40%,transparent)] ${
                   isDragging ? 'cursor-grabbing' : 'cursor-grab'
                 }`}
+                onDoubleClick={handleModalDoubleClick}
                 onPointerDown={(e) => {
                   if (e.button !== 0) return;
                   setIsDragging(true);
@@ -689,6 +1039,13 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                     (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                   } catch {}
                 }}
+                onPointerCancel={(e) => {
+                  if (!isDragging) return;
+                  setIsDragging(false);
+                  try {
+                    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+                  } catch {}
+                }}
               >
                 <div
                   style={{
@@ -701,6 +1058,15 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   className="flex items-center justify-center pointer-events-none [&>svg]:!w-full [&>svg]:!h-full [&>svg]:!max-w-none [&>svg]:pointer-events-auto"
                   dangerouslySetInnerHTML={{ __html: svgHtml }}
                 />
+
+                {/* Navigation Hint Pill */}
+                <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-[color-mix(in_srgb,var(--ui-bg-surface)_90%,transparent)] backdrop-blur-md border border-[var(--ui-border)] text-[10px] font-mono text-[var(--ui-text-muted)] pointer-events-none flex items-center space-x-2 select-none shadow-md">
+                  <span>Drag to pan</span>
+                  <span className="opacity-40">·</span>
+                  <span>Scroll to zoom</span>
+                  <span className="opacity-40">·</span>
+                  <span>Double-click to toggle fit</span>
+                </div>
               </div>
             </div>
           </div>,

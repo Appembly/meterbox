@@ -3,6 +3,7 @@ export * from './motion';
 export * from './components/primitives';
 export * from './context/ThemeContext';
 export * from './components/brand/AppemblyLogo';
+export * from './components/brand/ValiscaleIcon';
 export * from './components/brand/AdapptyIcon';
 export * from './components/brand/CyclodeIcon';
 export * from './components/brand/MeterboxIcon';

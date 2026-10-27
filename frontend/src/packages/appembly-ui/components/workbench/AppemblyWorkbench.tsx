@@ -34,8 +34,12 @@ import {
   AlertTriangle,
   AlertCircle,
   Flame,
+  MoreHorizontal,
+  Globe,
+  ExternalLink,
 } from 'lucide-react';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
+import { ValiscaleIcon } from '../brand/ValiscaleIcon';
 import { MermaidDiagram } from './MermaidDiagram';
 
 export type WorkbenchPreset = 'appembly_dash' | 'cyclode' | 'valiscale' | 'adappty';
@@ -80,6 +84,12 @@ export interface WorkbenchMessage {
   }>;
   attachments?: string[];
   contextRefs?: string[];
+  sources?: Array<{
+    title: string;
+    url: string;
+    domain?: string;
+    snippet?: string;
+  }>;
 }
 
 export interface WorkbenchPersonaOption {
@@ -113,6 +123,10 @@ export interface WorkbenchAuxTab {
   label: string;
   icon?: React.ReactNode;
   badge?: string | number;
+  count?: number;
+  isCore?: boolean;
+  isUsed?: boolean;
+  fullBleed?: boolean;
   render: () => React.ReactNode;
 }
 
@@ -158,6 +172,7 @@ export interface AppemblyWorkbenchProps {
   auxiliaryTabs?: WorkbenchAuxTab[];
   activeAuxTabId?: string;
   onActiveAuxTabChange?: (tabId: string) => void;
+  onOpenSourceUrl?: (url: string, title?: string) => void;
   defaultLayoutMode?: WorkbenchLayoutMode;
   layoutMode?: WorkbenchLayoutMode;
   onLayoutModeChange?: (mode: WorkbenchLayoutMode) => void;
@@ -333,12 +348,16 @@ const DEFAULT_CONTEXT_OPTIONS: WorkbenchContextOption[] = [
 ];
 
 /**
- * Formats inline markdown (**bold**, *italic*, `code`, [link](url)) cleanly into React nodes
- * with zero raw markdown characters leaking.
+ * Formats inline markdown (**bold**, *italic*, `code`, [link](url), and bare https:// URLs) cleanly into React nodes
+ * with zero raw markdown characters leaking, routing web links to the Web & Docs workbench tab when available.
  */
-function renderInlineMarkdown(text: string): React.ReactNode[] {
+function renderInlineMarkdown(
+  text: string,
+  onOpenSourceUrl?: (url: string, title?: string) => void
+): React.ReactNode[] {
   if (!text) return [];
-  const tokenRegex = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)]+\))/g;
+  const tokenRegex =
+    /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*|\[[^\]]+\]\([^)]+\)|https?:\/\/[^\s<>()]+(?:\([^\s<>()]*\)[^\s<>()]*)*)/g;
   const parts = text.split(tokenRegex);
   return parts.map((part, idx) => {
     if (!part) return null;
@@ -368,16 +387,55 @@ function renderInlineMarkdown(text: string): React.ReactNode[] {
     }
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
+      const label = linkMatch[1].trim();
+      const rawUrl = linkMatch[2].trim();
+      const isHttp = /^https?:\/\//i.test(rawUrl);
       return (
         <a
           key={idx}
-          href={linkMatch[2]}
+          href={rawUrl}
           target="_blank"
           rel="noreferrer"
-          className="text-[var(--ui-accent)] underline underline-offset-2 hover:opacity-80"
+          title={isHttp && onOpenSourceUrl ? `Open in Web & Docs: ${rawUrl}` : rawUrl}
+          onClick={(e) => {
+            if (isHttp && onOpenSourceUrl) {
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenSourceUrl(rawUrl, label);
+            }
+          }}
+          className="inline-flex items-center gap-0.5 text-[var(--ui-accent)] underline underline-offset-2 hover:opacity-80 cursor-pointer"
         >
-          {linkMatch[1]}
+          <span>{label}</span>
+          {isHttp && <ExternalLink className="w-3 h-3 inline shrink-0 opacity-75" />}
         </a>
+      );
+    }
+    if (/^https?:\/\//i.test(part)) {
+      const trailingPunctMatch = part.match(/^(.*?)([.,;:!?]+)$/);
+      const cleanUrl = trailingPunctMatch ? trailingPunctMatch[1] : part;
+      const trailingPunct = trailingPunctMatch ? trailingPunctMatch[2] : '';
+      return (
+        <React.Fragment key={idx}>
+          <a
+            href={cleanUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={onOpenSourceUrl ? `Open in Web & Docs: ${cleanUrl}` : cleanUrl}
+            onClick={(e) => {
+              if (onOpenSourceUrl) {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenSourceUrl(cleanUrl, cleanUrl);
+              }
+            }}
+            className="inline-flex items-center gap-0.5 text-[var(--ui-accent)] underline underline-offset-2 hover:opacity-80 font-mono text-[13px] cursor-pointer"
+          >
+            <span>{cleanUrl}</span>
+            <ExternalLink className="w-3 h-3 inline shrink-0 opacity-75" />
+          </a>
+          {trailingPunct}
+        </React.Fragment>
       );
     }
     return <React.Fragment key={idx}>{part}</React.Fragment>;
@@ -1010,7 +1068,8 @@ function highlightCodeLine(line: string, lang: string, lineIdx: number): React.R
 const RichMarkdownContent: React.FC<{
   content: string;
   onCopyCode?: (code: string) => void;
-}> = ({ content, onCopyCode }) => {
+  onOpenSourceUrl?: (url: string, title?: string) => void;
+}> = ({ content, onCopyCode, onOpenSourceUrl }) => {
   const [copiedBlockIdx, setCopiedBlockIdx] = useState<number | null>(null);
   const { cleanedContent } = useMemo(() => {
     const afterDecision = extractDecisionCardsFromMarkdown(content).cleanedContent;
@@ -1177,7 +1236,7 @@ const RichMarkdownContent: React.FC<{
                             hIdx
                           )}`}
                         >
-                          {renderInlineMarkdown(h)}
+                          {renderInlineMarkdown(h, onOpenSourceUrl)}
                         </th>
                       ))}
                     </tr>
@@ -1203,7 +1262,7 @@ const RichMarkdownContent: React.FC<{
                                 isCompact ? 'whitespace-nowrap' : 'min-w-[160px] break-normal'
                               } ${getAlignClass(cIdx)}`}
                             >
-                              {renderInlineMarkdown(cell)}
+                              {renderInlineMarkdown(cell, onOpenSourceUrl)}
                             </td>
                           );
                         })}
@@ -1284,7 +1343,7 @@ const RichMarkdownContent: React.FC<{
                   </div>
                   <div className="text-[var(--ui-text-secondary)] space-y-1">
                     {alertLines.map((al, aIdx) => (
-                      <p key={aIdx}>{renderInlineMarkdown(al)}</p>
+                      <p key={aIdx}>{renderInlineMarkdown(al, onOpenSourceUrl)}</p>
                     ))}
                   </div>
                 </div>
@@ -1311,7 +1370,7 @@ const RichMarkdownContent: React.FC<{
                 className="border-l-2 border-[color-mix(in_srgb,var(--ui-accent)_70%,transparent)] pl-3.5 py-2 my-2.5 bg-[color-mix(in_srgb,var(--ui-bg-surface)_35%,transparent)] rounded-r-lg text-[var(--ui-text-secondary)] text-[13.5px] leading-[1.7] space-y-1.5"
               >
                 {quoteLines.map((ql, qIdx) => (
-                  <p key={qIdx}>{renderInlineMarkdown(ql)}</p>
+                  <p key={qIdx}>{renderInlineMarkdown(ql, onOpenSourceUrl)}</p>
                 ))}
               </blockquote>
             );
@@ -1334,7 +1393,7 @@ const RichMarkdownContent: React.FC<{
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
               <h4 key={`${bIdx}-${lIdx}`} className="text-[14.5px] font-semibold text-[var(--ui-text-primary)] pt-1.5 pb-0.5">
-                {renderInlineMarkdown(line.slice(5))}
+                {renderInlineMarkdown(line.slice(5), onOpenSourceUrl)}
               </h4>
             );
             continue;
@@ -1344,7 +1403,7 @@ const RichMarkdownContent: React.FC<{
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
               <h3 key={`${bIdx}-${lIdx}`} className="text-[15.5px] font-semibold text-[var(--ui-text-primary)] pt-2 pb-0.5">
-                {renderInlineMarkdown(line.slice(4))}
+                {renderInlineMarkdown(line.slice(4), onOpenSourceUrl)}
               </h3>
             );
             continue;
@@ -1354,7 +1413,7 @@ const RichMarkdownContent: React.FC<{
             flushList(`${bIdx}-${lIdx}`);
             elements.push(
               <h2 key={`${bIdx}-${lIdx}`} className="text-[17px] font-bold text-[var(--ui-text-primary)] tracking-tight pt-3 pb-0.5">
-                {renderInlineMarkdown(line.slice(3))}
+                {renderInlineMarkdown(line.slice(3), onOpenSourceUrl)}
               </h2>
             );
             continue;
@@ -1367,7 +1426,7 @@ const RichMarkdownContent: React.FC<{
                 key={`${bIdx}-${lIdx}`}
                 className="text-[18.5px] font-bold text-[var(--ui-text-primary)] tracking-tight pt-3.5 pb-1 border-b border-[var(--ui-border)]"
               >
-                {renderInlineMarkdown(line.slice(2))}
+                {renderInlineMarkdown(line.slice(2), onOpenSourceUrl)}
               </h1>
             );
             continue;
@@ -1393,7 +1452,7 @@ const RichMarkdownContent: React.FC<{
                 <span className="font-mono text-[13.5px] font-semibold text-[var(--ui-accent)] shrink-0 mt-0.5 select-none">
                   {numLabel}.
                 </span>
-                <span className="flex-1 text-[var(--ui-text-secondary)]">{renderInlineMarkdown(itemText)}</span>
+                <span className="flex-1 text-[var(--ui-text-secondary)]">{renderInlineMarkdown(itemText, onOpenSourceUrl)}</span>
               </li>
             );
             continue;
@@ -1441,7 +1500,7 @@ const RichMarkdownContent: React.FC<{
                     }`}
                   />
                 )}
-                <span className="flex-1 text-[var(--ui-text-secondary)]">{renderInlineMarkdown(itemText)}</span>
+                <span className="flex-1 text-[var(--ui-text-secondary)]">{renderInlineMarkdown(itemText, onOpenSourceUrl)}</span>
               </li>
             );
             continue;
@@ -1450,7 +1509,7 @@ const RichMarkdownContent: React.FC<{
           flushList(`${bIdx}-${lIdx}`);
           elements.push(
             <p key={`${bIdx}-${lIdx}`} className="text-[15px] leading-[1.72] text-[var(--ui-text-secondary)]">
-              {renderInlineMarkdown(line)}
+              {renderInlineMarkdown(line, onOpenSourceUrl)}
             </p>
           );
         }
@@ -1471,9 +1530,364 @@ function getVerbDotColor(verb: string): string {
   const v = String(verb || '').toLowerCase();
   if (v.includes('edit') || v.includes('patch') || v.includes('update')) return 'var(--ui-warn)';
   if (v.includes('verif') || v.includes('guard') || v.includes('auth') || v.includes('policy')) return '#8F80FF';
-  if (v.includes('meter') || v.includes('synth') || v.includes('create') || v.includes('assembl')) return 'var(--ui-accent)';
+  if (v.includes('web') || v.includes('fetch') || v.includes('meter') || v.includes('synth') || v.includes('create') || v.includes('assembl')) return 'var(--ui-accent)';
   return 'var(--ui-text-muted)';
 }
+
+interface ParsedToolSearchResult {
+  title: string;
+  url: string;
+  snippet?: string;
+  source?: string;
+  domain: string;
+}
+
+interface ParsedToolStepMeta {
+  toolName: string;
+  verb: string;
+  displayTarget: string;
+  shortPillLabel: string;
+  summaryBadge?: string;
+  searchQuery?: string;
+  searchResults: ParsedToolSearchResult[];
+  fetchedPage?: {
+    url: string;
+    title?: string;
+    status?: number;
+    excerpt?: string;
+  };
+  commandStr?: string;
+  stdout?: string;
+  stderr?: string;
+  cleanOutputText: string;
+  rawPayloadText: string;
+}
+
+function parseToolStepMeta(step: any): ParsedToolStepMeta {
+  const rawTarget = String(step?.target || step?.tool_name || '').replace(
+    /^(appembly_unified|cyclode_coding|sauthen_identity|meterbox_finops|adappty_autonomic)\./i,
+    ''
+  );
+  const rawCmdOut = String(
+    step?.commandOutput || step?.diffPreview || step?.output || step?.detail || ''
+  );
+
+  // Extract tool_input and tool_output from either structured props or legacy "// Arguments ... // Output ..." string
+  let inputObj: any = step?.tool_input && typeof step.tool_input === 'object' ? step.tool_input : null;
+  let outputObj: any = step?.tool_output && typeof step.tool_output === 'object' ? step.tool_output : null;
+  let outputRawStr = '';
+
+  if (rawCmdOut.includes('// Arguments') || rawCmdOut.includes('// Output')) {
+    const parts = rawCmdOut.split(/\/\/\s*Output\s*\n?/i);
+    const argSection = parts[0]?.replace(/^\/\/\s*Arguments\s*\n?/i, '').trim() || '';
+    outputRawStr = (parts[1] || '').trim();
+    if (!inputObj && argSection.startsWith('{')) {
+      try {
+        inputObj = JSON.parse(argSection);
+      } catch {}
+    }
+    if (!outputObj && (outputRawStr.startsWith('{') || outputRawStr.startsWith('['))) {
+      try {
+        outputObj = JSON.parse(outputRawStr);
+      } catch {}
+    }
+  } else {
+    outputRawStr = rawCmdOut.trim();
+    if (!outputObj && (outputRawStr.startsWith('{') || outputRawStr.startsWith('['))) {
+      try {
+        outputObj = JSON.parse(outputRawStr);
+      } catch {}
+    }
+  }
+
+  // Determine canonical toolName
+  let toolName = String(step?.tool_name || '').replace(
+    /^(appembly_unified|cyclode_coding|sauthen_identity|meterbox_finops|adappty_autonomic)\./i,
+    ''
+  );
+  if (!toolName) {
+    const fnMatch = rawTarget.match(/^([a-z0-9_]+)\s*\(/i);
+    if (fnMatch) {
+      toolName = fnMatch[1].toLowerCase();
+    } else if (/^search_web\b/i.test(rawTarget) || (inputObj?.query && (outputRawStr.includes('"results"') || outputObj?.results))) {
+      toolName = 'search_web';
+    } else if (/^fetch_url\b/i.test(rawTarget)) {
+      toolName = 'fetch_url';
+    } else if (/^read_file\b/i.test(rawTarget)) {
+      toolName = 'read_file';
+    } else if (/^(edit_file|write_file)\b/i.test(rawTarget)) {
+      toolName = 'edit_file';
+    } else if (/^run_command\b/i.test(rawTarget)) {
+      toolName = 'run_command';
+    } else {
+      toolName = rawTarget.split(/\s+/)[0] || 'tool';
+    }
+  }
+
+  // Extract search results (handles both full JSON and truncated JSON strings via regex fallback)
+  const searchResults: ParsedToolSearchResult[] = [];
+  const seenUrls = new Set<string>();
+  const addResult = (r: any) => {
+    const url = String(r?.url || '').trim();
+    const title = String(r?.title || '').trim();
+    if (!url || !title || seenUrls.has(url)) return;
+    seenUrls.add(url);
+    let domain = '';
+    try {
+      domain = new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      domain = String(r?.source || 'web');
+    }
+    searchResults.push({
+      title,
+      url,
+      snippet: String(r?.summary || r?.snippet || '').trim() || undefined,
+      source: String(r?.source || '').trim() || undefined,
+      domain,
+    });
+  };
+
+  if (Array.isArray(outputObj?.results)) {
+    for (const r of outputObj.results) addResult(r);
+  } else if (outputRawStr.includes('"results"')) {
+    const objRegex = /\{[^{}]*"title"\s*:\s*"((?:[^"\\]|\\.)*)"[^{}]*"url"\s*:\s*"((?:[^"\\]|\\.)*)"[^{}]*\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = objRegex.exec(outputRawStr)) !== null) {
+      try {
+        addResult(JSON.parse(m[0]));
+      } catch {
+        addResult({ title: m[1], url: m[2] });
+      }
+    }
+  }
+
+  const resultsCountMatch = outputRawStr.match(/"results_count"\s*:\s*(\d+)/);
+  const totalResultsCount =
+    typeof outputObj?.results_count === 'number'
+      ? outputObj.results_count
+      : resultsCountMatch
+      ? Number(resultsCountMatch[1])
+      : searchResults.length;
+
+  const searchQuery =
+    String(
+      inputObj?.query ||
+        outputObj?.query ||
+        (rawCmdOut.match(/"query"\s*:\s*"((?:[^"\\]|\\.)*)"/) || [])[1] ||
+        ''
+    ).trim() || undefined;
+
+  if (toolName === 'search_web') {
+    const displayTarget = searchQuery
+      ? `"${searchQuery}"`
+      : rawTarget.replace(/^search_web\s*\((.*)\)$/i, '"$1"');
+    return {
+      toolName: 'search_web',
+      verb: 'Web searched',
+      displayTarget,
+      shortPillLabel: 'Web search',
+      summaryBadge:
+        totalResultsCount > 0
+          ? `${totalResultsCount} ${totalResultsCount === 1 ? 'result' : 'results'}`
+          : undefined,
+      searchQuery,
+      searchResults,
+      cleanOutputText: outputRawStr || rawCmdOut,
+      rawPayloadText: rawCmdOut,
+    };
+  }
+
+  if (toolName === 'fetch_url') {
+    const fetchedUrl = String(
+      inputObj?.url || outputObj?.url || rawTarget.replace(/^fetch_url\s*\((.*)\)$/i, '$1') || ''
+    ).trim();
+    const cleanHostPath = fetchedUrl.replace(/^https?:\/\//i, '');
+    const status = Number(outputObj?.status_code || outputObj?.status || 200);
+    return {
+      toolName: 'fetch_url',
+      verb: 'Fetched',
+      displayTarget: cleanHostPath || 'URL',
+      shortPillLabel: cleanHostPath.split('/')[0] || 'Fetched URL',
+      summaryBadge: status ? `${status} OK` : undefined,
+      searchResults: [],
+      fetchedPage: {
+        url: fetchedUrl.startsWith('http') ? fetchedUrl : `https://${fetchedUrl}`,
+        title: outputObj?.title || cleanHostPath,
+        status,
+        excerpt: String(outputObj?.content || outputObj?.excerpt || outputRawStr || '').slice(0, 600),
+      },
+      cleanOutputText: String(outputObj?.content || outputRawStr || rawCmdOut),
+      rawPayloadText: rawCmdOut,
+    };
+  }
+
+  const verb = step?.verb || 'Executed';
+  const displayTarget =
+    inputObj?.file_path ||
+    inputObj?.path ||
+    (inputObj?.command ? `$ ${inputObj.command}` : '') ||
+    rawTarget;
+
+  return {
+    toolName,
+    verb,
+    displayTarget,
+    shortPillLabel: rawTarget.replace(/\s*\(.*\)$/, ''),
+    searchResults,
+    commandStr: inputObj?.command || outputObj?.command,
+    stdout: outputObj?.stdout,
+    stderr: outputObj?.stderr,
+    cleanOutputText:
+      typeof outputObj === 'object' && outputObj !== null
+        ? JSON.stringify(outputObj, null, 2)
+        : outputRawStr || rawCmdOut,
+    rawPayloadText: rawCmdOut,
+  };
+}
+
+const FormattedToolStepBody: React.FC<{
+  meta: ParsedToolStepMeta;
+  onOpenSourceUrl?: (url: string, title?: string) => void;
+}> = ({ meta, onOpenSourceUrl }) => {
+  const [viewMode, setViewMode] = useState<'visual' | 'raw'>('visual');
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = viewMode === 'raw' ? meta.rawPayloadText : meta.cleanOutputText;
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <div className="border-t border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] bg-[color-mix(in_srgb,var(--ui-bg-canvas)_85%,transparent)]">
+      {/* Compact Cyclode Sub-Toolbar: [ Visual | Raw JSON ] + Copy */}
+      <div className="flex items-center justify-between px-3 py-1 border-b border-[color-mix(in_srgb,var(--ui-border)_45%,transparent)] text-[10.5px] font-mono select-none">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setViewMode('visual');
+            }}
+            className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+              viewMode === 'visual'
+                ? 'bg-[var(--ui-accent-soft)] text-[var(--ui-accent)] font-semibold border border-[color-mix(in_srgb,var(--ui-accent)_30%,transparent)]'
+                : 'text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)]'
+            }`}
+          >
+            Visual
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setViewMode('raw');
+            }}
+            className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+              viewMode === 'raw'
+                ? 'bg-[var(--ui-accent-soft)] text-[var(--ui-accent)] font-semibold border border-[color-mix(in_srgb,var(--ui-accent)_30%,transparent)]'
+                : 'text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)]'
+            }`}
+          >
+            Raw JSON
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] transition-colors cursor-pointer"
+          title="Copy step output"
+        >
+          {copied ? <Check className="w-3 h-3 text-[var(--ui-accent)]" /> : <Copy className="w-3 h-3" />}
+          <span>{copied ? 'Copied' : 'Copy'}</span>
+        </button>
+      </div>
+
+      {/* Body Content */}
+      <div className="p-2.5 max-h-64 overflow-y-auto">
+        {viewMode === 'raw' ? (
+          <pre className="font-mono text-[11px] leading-[1.55] text-[var(--ui-text-secondary)] whitespace-pre-wrap overflow-x-auto">
+            {meta.rawPayloadText}
+          </pre>
+        ) : meta.toolName === 'search_web' && meta.searchResults.length > 0 ? (
+          <div className="space-y-1.5">
+            {meta.searchResults.map((item, idx) => (
+              <a
+                key={`${item.url}-${idx}`}
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onOpenSourceUrl) {
+                    e.preventDefault();
+                    onOpenSourceUrl(item.url, item.title);
+                  }
+                }}
+                className="flex items-start justify-between gap-2.5 p-2 rounded-lg bg-[var(--ui-bg-surface)] hover:bg-[color-mix(in_srgb,var(--ui-accent-soft)_40%,var(--ui-bg-surface))] border border-[var(--ui-border)] hover:border-[color-mix(in_srgb,var(--ui-accent)_45%,var(--ui-border))] transition-colors no-underline group/slink cursor-pointer"
+              >
+                <div className="flex items-start gap-2 min-w-0 flex-1">
+                  <div className="w-5 h-5 rounded bg-[var(--ui-accent-soft)] border border-[color-mix(in_srgb,var(--ui-accent)_25%,transparent)] flex items-center justify-center shrink-0 text-[var(--ui-accent)] mt-0.5">
+                    <Globe className="w-3 h-3" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[12px] font-medium text-[var(--ui-text-primary)] group-hover/slink:text-[var(--ui-accent)] truncate transition-colors">
+                      {item.title}
+                    </div>
+                    {item.snippet && (
+                      <div className="text-[11px] text-[var(--ui-text-muted)] line-clamp-1 mt-0.5">
+                        {item.snippet}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 text-[10.5px] font-mono text-[var(--ui-text-muted)]">
+                  <span className="px-1.5 py-0.5 rounded bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)]">
+                    {item.domain}
+                  </span>
+                  <ExternalLink className="w-3 h-3 text-[var(--ui-text-muted)] group-hover/slink:text-[var(--ui-accent)]" />
+                </div>
+              </a>
+            ))}
+          </div>
+        ) : meta.toolName === 'fetch_url' && meta.fetchedPage ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[12px] font-semibold text-[var(--ui-text-primary)] truncate">
+                {meta.fetchedPage.title}
+              </span>
+              {onOpenSourceUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenSourceUrl(meta.fetchedPage!.url, meta.fetchedPage!.title);
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-[var(--ui-accent-soft)] text-[var(--ui-accent)] cursor-pointer shrink-0"
+                >
+                  <span>Open in Web &amp; Docs</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            {meta.fetchedPage.excerpt && (
+              <pre className="font-mono text-[11px] leading-[1.55] text-[var(--ui-text-secondary)] whitespace-pre-wrap">
+                {meta.fetchedPage.excerpt}
+              </pre>
+            )}
+          </div>
+        ) : (
+          <pre className="font-mono text-[11px] leading-[1.55] text-[var(--ui-text-secondary)] whitespace-pre-wrap overflow-x-auto">
+            {meta.cleanOutputText}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+};
 
 function parseTurnDate(raw?: string, idFallback?: string): Date | null {
   if (raw) {
@@ -1519,13 +1933,7 @@ function formatTurnDatetime(msg: WorkbenchMessage): { display: string; tooltip: 
 
   let display: string;
   if (isSameDay) {
-    if (diffSec < 60) {
-      display = `Just now · ${timeStr}`;
-    } else if (diffSec < 3600) {
-      display = `${Math.floor(diffSec / 60)}m ago · ${timeStr}`;
-    } else {
-      display = `Today, ${timeStr}`;
-    }
+    display = timeStr;
   } else if (isYesterday) {
     display = `Yesterday, ${timeStr}`;
   } else {
@@ -1584,6 +1992,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   auxiliaryTabs = [],
   activeAuxTabId: controlledAuxTabId,
   onActiveAuxTabChange,
+  onOpenSourceUrl,
   defaultLayoutMode = 'split',
   layoutMode: controlledLayoutMode,
   onLayoutModeChange,
@@ -1735,6 +2144,146 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   const activeAuxTabObj =
     auxiliaryTabs.find((t) => t.id === activeAuxTab) || auxiliaryTabs[0];
 
+  const [visitedAuxTabs, setVisitedAuxTabs] = useState<Set<string>>(() =>
+    new Set(activeAuxTabObj ? [activeAuxTabObj.id] : [])
+  );
+  const [showAuxMoreMenu, setShowAuxMoreMenu] = useState(false);
+  const auxMoreMenuRef = useRef<HTMLDivElement>(null);
+  const auxTabBarRef = useRef<HTMLDivElement>(null);
+  const [auxTabBarWidth, setAuxTabBarWidth] = useState<number>(640);
+
+  // Reset visited tabs when switching to a different session so unused tabs return to Additional Views
+  useEffect(() => {
+    setVisitedAuxTabs(new Set(activeAuxTabObj ? [activeAuxTabObj.id] : []));
+  }, [sessionTitle]);
+
+  useEffect(() => {
+    if (!activeAuxTabObj?.id) return;
+    setVisitedAuxTabs((prev) => {
+      if (prev.has(activeAuxTabObj.id)) return prev;
+      const next = new Set(prev);
+      next.add(activeAuxTabObj.id);
+      return next;
+    });
+  }, [activeAuxTabObj?.id]);
+
+  // Track available tab bar width dynamically via ResizeObserver
+  useEffect(() => {
+    const el = auxTabBarRef.current;
+    if (!el) return;
+    const updateWidth = () => {
+      if (el.clientWidth > 0) {
+        setAuxTabBarWidth(el.clientWidth);
+      }
+    };
+    updateWidth();
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => updateWidth());
+      ro.observe(el);
+      return () => ro.disconnect();
+    }
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [layoutMode, leftPanePercent, auxiliaryTabs.length]);
+
+  useEffect(() => {
+    if (!showAuxMoreMenu) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (auxMoreMenuRef.current && !auxMoreMenuRef.current.contains(e.target as Node)) {
+        setShowAuxMoreMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAuxMoreMenu]);
+
+  const { visibleAuxTabs, overflowAuxTabs } = useMemo(() => {
+    if (auxiliaryTabs.length === 0) {
+      return { visibleAuxTabs: [] as WorkbenchAuxTab[], overflowAuxTabs: [] as WorkbenchAuxTab[] };
+    }
+
+    const hasUsageMetadata = auxiliaryTabs.some((t) => t.isUsed !== undefined);
+    const hasExplicitCore = auxiliaryTabs.some((t) => t.isCore !== undefined);
+    const primaryTabId = auxiliaryTabs[0]?.id;
+    const activeId = activeAuxTabObj?.id;
+
+    const hasLiveSignal = (t: WorkbenchAuxTab) =>
+      (t.count !== undefined && t.count > 0) ||
+      (typeof t.badge === 'number' && t.badge > 0) ||
+      (typeof t.badge === 'string' && t.badge.trim().length > 0);
+
+    const isTabEligible = (t: WorkbenchAuxTab) => {
+      if (t.id === primaryTabId || t.id === activeId) return true;
+      if (visitedAuxTabs.has(t.id)) return true;
+      if (hasLiveSignal(t)) return true;
+      if (hasUsageMetadata) return Boolean(t.isUsed);
+      if (hasExplicitCore) return t.isCore !== false;
+      return true;
+    };
+
+    const estimateTabWidth = (t: WorkbenchAuxTab) => {
+      const countVal = t.count !== undefined ? t.count : typeof t.badge === 'number' ? t.badge : undefined;
+      const badgeExtra =
+        countVal !== undefined && countVal > 0
+          ? 14 + String(countVal).length * 7
+          : typeof t.badge === 'string' && t.badge.trim().length > 0
+          ? 14 + t.badge.length * 6
+          : 0;
+      return Math.ceil(44 + t.label.length * 7.2 + badgeExtra);
+    };
+
+    const eligibleTabs = auxiliaryTabs.filter(isTabEligible);
+    const hasUnusedTabs = eligibleTabs.length < auxiliaryTabs.length;
+
+    // Reserve padding + overflow trigger button width when any tab overflows
+    const moreBtnReserved = 48;
+    const baseAvailable = Math.max(140, auxTabBarWidth - 16);
+
+    const totalEligibleWidth = eligibleTabs.reduce((sum, t) => sum + estimateTabWidth(t), 0);
+    const allEligibleFit =
+      totalEligibleWidth <= (hasUnusedTabs ? baseAvailable - moreBtnReserved : baseAvailable);
+
+    if (allEligibleFit) {
+      const eligibleIds = new Set(eligibleTabs.map((t) => t.id));
+      return {
+        visibleAuxTabs: auxiliaryTabs.filter((t) => eligibleIds.has(t.id)),
+        overflowAuxTabs: auxiliaryTabs.filter((t) => !eligibleIds.has(t.id)),
+      };
+    }
+
+    // Space is tighter than eligible tabs: rank by priority and pack as many as fit
+    const budget = Math.max(120, baseAvailable - moreBtnReserved);
+    const priorityRank = (t: WorkbenchAuxTab, idx: number) => {
+      if (t.id === primaryTabId) return 10000 - idx;
+      if (t.id === activeId) return 9000 - idx;
+      if (hasLiveSignal(t)) return 8000 - idx;
+      if (visitedAuxTabs.has(t.id)) return 7000 - idx;
+      if (t.isCore !== false) return 6000 - idx;
+      return 5000 - idx;
+    };
+
+    const rankedEligible = eligibleTabs
+      .map((t, idx) => ({ tab: t, rank: priorityRank(t, idx), width: estimateTabWidth(t) }))
+      .sort((a, b) => b.rank - a.rank);
+
+    const fittingIds = new Set<string>();
+    let usedWidth = 0;
+    for (const item of rankedEligible) {
+      const mustInclude =
+        item.tab.id === primaryTabId ||
+        (item.tab.id === activeId && fittingIds.size <= 1);
+      if (mustInclude || usedWidth + item.width <= budget) {
+        fittingIds.add(item.tab.id);
+        usedWidth += item.width;
+      }
+    }
+
+    return {
+      visibleAuxTabs: auxiliaryTabs.filter((t) => fittingIds.has(t.id)),
+      overflowAuxTabs: auxiliaryTabs.filter((t) => !fittingIds.has(t.id)),
+    };
+  }, [auxiliaryTabs, activeAuxTabObj?.id, visitedAuxTabs, auxTabBarWidth]);
+
   return (
     <div
       ref={containerRef}
@@ -1843,6 +2392,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                 {messages.map((msg, msgIdx) => {
                   if (msg.role === 'user') {
                     const isEditingThis = editingMessageId === msg.id;
+                    const userTurnDatetime = formatTurnDatetime(msg);
                     const submitInlineEdit = () => {
                       const trimmedEdit = editingMessageText.trim();
                       if (!trimmedEdit || isStreaming) return;
@@ -1865,7 +2415,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         <div className="flex items-center gap-2 text-[11px] text-[var(--ui-text-muted)]">
                           <span>You</span>
                           <span>·</span>
-                          <span>{msg.timestamp}</span>
+                          <span title={userTurnDatetime.tooltip}>{userTurnDatetime.display}</span>
                         </div>
 
                         {isEditingThis ? (
@@ -2208,11 +2758,6 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                             className="w-full flex items-center justify-between px-3 py-1.5 text-[12px] text-[var(--ui-text-secondary)] hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_50%,transparent)] transition-colors"
                           >
                             <div className="flex items-center gap-2 min-w-0">
-                              {isTraceOpen ? (
-                                <ChevronDown className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
-                              ) : (
-                                <ChevronRight className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
-                              )}
                               <Terminal className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" />
                               <span className="font-medium text-[var(--ui-text-primary)] shrink-0">
                                 {msg.steps.length} {msg.steps.length === 1 ? 'step' : 'steps'} completed
@@ -2220,16 +2765,13 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                               {!isTraceOpen && (
                               <div className="flex items-center gap-1 overflow-hidden">
                                 {msg.steps.slice(0, 2).map((s: any, idx) => {
-                                  const shortTarget = String(s.target || s.tool_name || '').replace(
-                                    /^(appembly_unified|cyclode_coding|sauthen_identity|meterbox_finops|adappty_autonomic)\./i,
-                                    ''
-                                  );
+                                  const meta = parseToolStepMeta(s);
                                   return (
                                     <span
                                       key={idx}
                                       className="px-1.5 py-0.2 rounded text-[10.5px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)] truncate max-w-[260px]"
                                     >
-                                      {shortTarget.replace(/\s*\(.*\)$/, '')}
+                                      {meta.shortPillLabel}
                                     </span>
                                   );
                                 })}
@@ -2239,8 +2781,13 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                               </div>
                               )}
                             </div>
-                            <span className="text-[11px] font-mono text-[var(--ui-text-muted)] shrink-0 ml-2">
-                              {isTraceOpen ? 'Hide' : 'Details'}
+                            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-[var(--ui-text-muted)] shrink-0 ml-2">
+                              <span>{isTraceOpen ? 'Hide' : 'Details'}</span>
+                              {isTraceOpen ? (
+                                <ChevronDown className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
+                              )}
                             </span>
                           </button>
 
@@ -2248,12 +2795,10 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                             <div className="p-2.5 border-t border-[var(--ui-border)] space-y-1.5 bg-[color-mix(in_srgb,var(--ui-bg-canvas)_50%,transparent)]">
                               {msg.steps.map((step: any, sIdx) => {
                                 const stepKey = `${msg.id}-step-${sIdx}`;
-                                const fullOutput =
-                                  step.commandOutput ||
-                                  step.diffPreview ||
-                                  step.output ||
-                                  step.detail ||
-                                  '';
+                                const meta = parseToolStepMeta(step);
+                                const hasExpandable = Boolean(
+                                  meta.rawPayloadText || meta.cleanOutputText || meta.searchResults.length > 0
+                                );
                                 const isStepExpanded = expandedStepOutputs[stepKey] ?? false;
 
                                 return (
@@ -2264,7 +2809,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                                     <button
                                       type="button"
                                       onClick={() => {
-                                        if (fullOutput) {
+                                        if (hasExpandable) {
                                           setExpandedStepOutputs((prev) => ({
                                             ...prev,
                                             [stepKey]: !isStepExpanded,
@@ -2272,43 +2817,48 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                                         }
                                       }}
                                       className={`w-full flex items-center justify-between gap-2 px-2.5 py-1.5 text-left ${
-                                        fullOutput ? 'hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_40%,transparent)] cursor-pointer' : 'cursor-default'
+                                        hasExpandable ? 'hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_40%,transparent)] cursor-pointer' : 'cursor-default'
                                       } transition-colors`}
                                     >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        {fullOutput &&
+                                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                                        {hasExpandable &&
                                           (isStepExpanded ? (
                                             <ChevronDown className="w-3 h-3 text-[var(--ui-text-muted)] shrink-0" />
                                           ) : (
                                             <ChevronRight className="w-3 h-3 text-[var(--ui-text-muted)] shrink-0" />
                                           ))}
-                                        <span className="inline-flex items-center gap-1.5 w-[84px] shrink-0 text-[11.5px] font-medium text-[var(--ui-text-secondary)]">
-                                          <span
-                                            className="w-1.5 h-1.5 rounded-full shrink-0"
-                                            style={{ background: getVerbDotColor(step.verb || 'Executed') }}
-                                          />
-                                          {step.verb || 'Executed'}
-                                        </span>
-                                        <code className="font-mono text-[12px] text-[var(--ui-text-primary)] truncate">
-                                          {String(step.target || step.tool_name || '').replace(
-                                            /^(appembly_unified|cyclode_coding|sauthen_identity|meterbox_finops|adappty_autonomic)\./i,
-                                            ''
+                                        <span className="inline-flex items-center gap-1.5 shrink-0 text-[11.5px] font-semibold text-[var(--ui-accent)]">
+                                          {meta.toolName === 'search_web' ? (
+                                            <Globe className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" />
+                                          ) : (
+                                            <span
+                                              className="w-1.5 h-1.5 rounded-full shrink-0"
+                                              style={{ background: getVerbDotColor(meta.verb) }}
+                                            />
                                           )}
+                                          {meta.verb}
+                                        </span>
+                                        <code
+                                          className="font-mono text-[12px] text-[var(--ui-text-primary)] truncate min-w-0 flex-1"
+                                          title={meta.displayTarget}
+                                        >
+                                          {meta.displayTarget}
                                         </code>
-                                        {(() => {
-                                          const d = String(step.detail || step.output || '').trim();
-                                          if (!d || isStepExpanded || d.startsWith('{') || d.startsWith('[')) return null;
-                                          return (
-                                            <span className="text-[var(--ui-text-muted)] truncate hidden md:inline">— {d}</span>
-                                          );
-                                        })()}
                                       </div>
-                                      <Check className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" aria-label="Completed" />
+                                      <div className="flex items-center gap-2 shrink-0">
+                                        {meta.summaryBadge && (
+                                          <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)]">
+                                            {meta.summaryBadge}
+                                          </span>
+                                        )}
+                                        <Check className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" aria-label="Completed" />
+                                      </div>
                                     </button>
-                                    {isStepExpanded && fullOutput && (
-                                      <pre className="px-3 py-2 border-t border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] bg-[color-mix(in_srgb,var(--ui-bg-canvas)_80%,transparent)] font-mono text-[11.5px] leading-[1.55] text-[var(--ui-text-secondary)] overflow-x-auto whitespace-pre-wrap max-h-56 overflow-y-auto">
-                                        {fullOutput}
-                                      </pre>
+                                    {isStepExpanded && hasExpandable && (
+                                      <FormattedToolStepBody
+                                        meta={meta}
+                                        onOpenSourceUrl={onOpenSourceUrl}
+                                      />
                                     )}
                                   </div>
                                 );
@@ -2326,9 +2876,64 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                             <span>{msg.steps && msg.steps.length > 0 ? 'Writing the answer…' : 'Thinking…'}</span>
                           </div>
                         ) : (
-                          <RichMarkdownContent content={msg.content} />
+                          <RichMarkdownContent
+                            content={msg.content}
+                            onOpenSourceUrl={onOpenSourceUrl}
+                          />
                         )}
                       </div>
+
+                      {/* Grounded Web Sources Pills (1-click inspect in Web & Docs tab) */}
+                      {msg.sources && msg.sources.length > 0 && (
+                        <div className="pt-1.5 flex flex-col gap-1.5">
+                          <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-[var(--ui-text-muted)]">
+                            <Globe className="w-3 h-3 text-[var(--ui-accent)]" />
+                            <span>Grounded Web Sources ({msg.sources.length}) · Click to inspect in Web &amp; Docs</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {msg.sources.map((src: any, sIdx) => {
+                              const domain =
+                                src.domain ||
+                                (() => {
+                                  try {
+                                    return new URL(src.url).hostname.replace(/^www\./, '');
+                                  } catch {
+                                    return src.url;
+                                  }
+                                })();
+                              const srcDate = typeof src.date === 'string' ? src.date.trim() : '';
+                              return (
+                                <button
+                                  key={`${src.url}-${sIdx}`}
+                                  type="button"
+                                  onClick={() => {
+                                    if (onOpenSourceUrl) {
+                                      onOpenSourceUrl(src.url, src.title);
+                                    } else {
+                                      window.open(src.url, '_blank', 'noopener,noreferrer');
+                                    }
+                                  }}
+                                  title={src.snippet || src.title || src.url}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11.5px] bg-[var(--ui-bg-surface)] hover:bg-[var(--ui-bg-subtle)] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] border border-[var(--ui-border)] hover:border-[color-mix(in_srgb,var(--ui-accent)_55%,transparent)] transition-colors cursor-pointer max-w-[320px]"
+                                >
+                                  <Globe className="w-3 h-3 text-[var(--ui-accent)] shrink-0" />
+                                  <span className="font-mono text-[10.5px] text-[var(--ui-accent)] shrink-0">
+                                    {domain}
+                                  </span>
+                                  {srcDate && (
+                                    <span className="px-1 py-0.2 rounded bg-[var(--ui-bg-subtle)] border border-[color-mix(in_srgb,var(--ui-border)_75%,transparent)] font-mono text-[9.5px] text-[var(--ui-text-muted)] shrink-0">
+                                      {srcDate}
+                                    </span>
+                                  )}
+                                  <span className="text-[var(--ui-text-muted)] shrink-0">·</span>
+                                  <span className="truncate">{src.title || domain}</span>
+                                  <ExternalLink className="w-2.5 h-2.5 text-[var(--ui-text-muted)] shrink-0" />
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Interactive Stage 1/2 Scope & Defaults Decision Cards (<decision-card>) */}
                       {(() => {
@@ -2879,7 +3484,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
           />
         )}
 
-        {/* RIGHT PANE: Configurable Auxiliary Workbench (Blueprint / Files & Diff / Activity / Spec JSON) */}
+        {/* RIGHT PANE: Cyclode-Parity Auxiliary Workbench (5 Core Tabs + Overflow Menu + Keep-Alive DOM) */}
         {layoutMode !== 'chat' && auxiliaryTabs.length > 0 && (
           <div
             style={{
@@ -2888,40 +3493,127 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                   ? `${100 - leftPanePercent}%`
                   : '100%',
             }}
-            className="flex flex-col h-full min-w-0 bg-[color-mix(in_srgb,var(--ui-bg-subtle)_40%,transparent)] border-l border-[var(--ui-border)] select-text"
+            className="flex flex-col h-full min-w-0 bg-[var(--ui-bg-canvas)] border-l border-[var(--ui-border)] select-text overflow-hidden"
           >
-            {/* Workbench Tab Bar */}
-            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)] shrink-0 overflow-x-auto">
-              <div className="flex items-center gap-1">
-                {auxiliaryTabs.map((tab) => {
+            {/* Responsive Space-Aware & Activity-Aware Tab Bar + Additional Views Overflow */}
+            <div
+              ref={auxTabBarRef}
+              className="h-10 flex items-center justify-between px-2 border-b border-[var(--ui-border)] bg-[var(--ui-bg-subtle)] shrink-0"
+            >
+              <div className="flex items-center gap-1 overflow-hidden min-w-0 flex-1 flex-nowrap">
+                {visibleAuxTabs.map((tab) => {
                   const active = tab.id === activeAuxTabObj?.id;
+                  const countVal = tab.count !== undefined ? tab.count : typeof tab.badge === 'number' ? tab.badge : undefined;
+                  const dotBadge = typeof tab.badge === 'string' && tab.badge === '●';
+                  const textBadge = typeof tab.badge === 'string' && tab.badge !== '●' && tab.badge !== '' ? tab.badge : undefined;
                   return (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveAuxTab(tab.id)}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
+                      className={`relative inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[9px] text-[12px] whitespace-nowrap shrink-0 transition-all duration-150 cursor-pointer ${
                         active
-                          ? 'bg-[var(--ui-bg-surface)] text-[var(--ui-text-primary)] border border-[var(--ui-border)] shadow-sm'
-                          : 'text-[var(--ui-text-muted)] hover:text-[var(--ui-text-secondary)]'
+                          ? 'bg-[var(--ui-bg-surface)] text-[var(--ui-text-primary)] font-semibold border border-[var(--ui-border)] shadow-2xs'
+                          : 'bg-transparent text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[color-mix(in_srgb,var(--ui-text-primary)_5%,transparent)] font-medium border border-transparent'
                       }`}
                     >
-                      {tab.icon}
-                      <span>{tab.label}</span>
-                      {tab.badge !== undefined && (
-                        <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-[var(--ui-bg-canvas)] text-[var(--ui-accent)]">
-                          {tab.badge}
+                      <span className={`shrink-0 inline-flex items-center transition-transform duration-150 ${active ? 'text-[var(--ui-accent)]' : ''}`}>
+                        {tab.icon}
+                      </span>
+                      <span className="whitespace-nowrap">{tab.label}</span>
+                      {dotBadge && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--ui-ok,#10B981)] ml-0.5 shrink-0" />
+                      )}
+                      {countVal !== undefined && countVal > 0 && (
+                        <span className={`ml-0.5 text-[11px] font-mono tabular-nums transition-colors ${active ? 'text-[var(--ui-accent)] font-semibold' : 'text-[var(--ui-text-muted)]'}`}>
+                          {countVal}
+                        </span>
+                      )}
+                      {textBadge && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10.5px] font-mono whitespace-nowrap shrink-0 bg-[var(--ui-bg-canvas)] text-[var(--ui-accent)]">
+                          {textBadge}
                         </span>
                       )}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Overflow Dropdown for Secondary Views */}
+              {overflowAuxTabs.length > 0 && (
+                <div className="relative shrink-0 ml-1.5" ref={auxMoreMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuxMoreMenu((prev) => !prev)}
+                    className={`inline-flex items-center gap-1 px-2 py-1 text-[12px] rounded-[9px] transition-all cursor-pointer ${
+                      showAuxMoreMenu
+                        ? 'bg-[var(--ui-bg-surface)] font-semibold text-[var(--ui-text-primary)] border border-[var(--ui-border)] shadow-2xs'
+                        : 'bg-transparent hover:bg-[color-mix(in_srgb,var(--ui-text-primary)_5%,transparent)] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] border border-transparent'
+                    }`}
+                    title="More workspace views"
+                  >
+                    <MoreHorizontal className="w-3.5 h-3.5" />
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-150 ${showAuxMoreMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showAuxMoreMenu && (
+                    <div className="absolute right-0 top-full mt-1.5 w-48 bg-[var(--ui-bg-surface)] border border-[var(--ui-border-strong)] rounded-xl shadow-2xl py-1 z-50">
+                      <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--ui-text-muted)] border-b border-[var(--ui-border)]">
+                        Additional Views
+                      </div>
+                      {overflowAuxTabs.map((tab) => {
+                        const countVal = tab.count !== undefined ? tab.count : typeof tab.badge === 'number' ? tab.badge : undefined;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              setActiveAuxTab(tab.id);
+                              setShowAuxMoreMenu(false);
+                            }}
+                            className="w-full flex items-center justify-between px-2.5 py-1.5 text-[12.5px] text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-subtle)] transition-colors text-left cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="text-[var(--ui-text-muted)]">{tab.icon}</span>
+                              <span>{tab.label}</span>
+                            </span>
+                            {tab.badge === '●' && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-[var(--ui-ok,#10B981)]" />
+                            )}
+                            {countVal !== undefined && countVal > 0 && (
+                              <span className="text-[11px] font-mono text-[var(--ui-text-muted)]">{countVal}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Active Auxiliary Tab Viewport */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {activeAuxTabObj?.render()}
+            {/* Persistent Keep-Alive Auxiliary Tab Body */}
+            <div className="flex-1 relative overflow-hidden">
+              {auxiliaryTabs.map((tab) => {
+                if (!visitedAuxTabs.has(tab.id) && tab.id !== activeAuxTabObj?.id) {
+                  return null;
+                }
+                const isActive = tab.id === activeAuxTabObj?.id;
+                const isFullBleed = tab.fullBleed !== false;
+                return (
+                  <div
+                    key={tab.id}
+                    className={`absolute inset-0 w-full h-full transition-opacity duration-150 ${
+                      isActive
+                        ? 'opacity-100 pointer-events-auto z-10 visible'
+                        : 'opacity-0 pointer-events-none z-0 invisible'
+                    } ${isFullBleed ? 'overflow-hidden flex flex-col' : 'overflow-y-auto p-4'}`}
+                    aria-hidden={!isActive}
+                  >
+                    {tab.render()}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
