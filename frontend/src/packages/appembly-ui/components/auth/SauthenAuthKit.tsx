@@ -23,6 +23,7 @@ import {
 import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
 import { SauthenIcon } from '../brand/SauthenIcon';
+import { ValiscaleIcon } from '../brand/ValiscaleIcon';
 import { AppemblyLogo } from '../brand/AppemblyLogo';
 
 export type SauthenPresetApp =
@@ -180,22 +181,24 @@ export const SAUTHEN_BRAND_PRESETS: Record<SauthenPresetApp, SauthenBrandConfig>
   valiscale: {
     appId: 'valiscale',
     appName: 'Valiscale',
-    tagline: '3-Stage Concept Validation, Autonomous Build & Turnkey Scaling',
-    theme: 'dark',
-    accent: '#38BDF8',
-    accentSoft: 'rgba(56, 189, 248, 0.14)',
-    surface: '#0A0E17',
-    cardBg: '#111827',
-    inputBg: '#0D1320',
-    border: '#1F2937',
-    text: '#F9FAFB',
-    muted: '#9CA3AF',
-    icon: <AppemblyLogo size={20} />,
-    methods: ['passkey', 'github', 'google', 'password'],
+    tagline: '3-Stage Concept Validation, 4-Pillar Assembly & Autonomous Scaling',
+    theme: 'light',
+    accent: '#4F73FF',
+    accentSoft: 'rgba(79, 115, 255, 0.12)',
+    surface: '#F6F8FC',
+    cardBg: '#FFFFFF',
+    inputBg: '#F0F4FA',
+    border: '#DCE2EE',
+    text: '#0F1E59',
+    muted: '#52607A',
+    icon: <ValiscaleIcon size={22} primaryColor="#4F73FF" secondaryColor="#0F1E59" />,
+    methods: ['passkey', 'github', 'google', 'saml', 'password'],
     features: [
-      'Turnkey OAuth 2.1 client provisioning for Stage-3 graduated apps',
-      'Shared Meterbox billing namespace across validation experiments',
+      'Stage 1 Idea Validation scorecard with live unit-economics modeling',
+      'Turnkey 4-Pillar assembly: Sauthen OIDC, Harnway AI, Meterbox & Adappty',
+      'Clean Next.js + FastAPI repository handoff to Cyclode worktrees',
     ],
+    defaultRedirectUrl: 'http://localhost:6002',
   },
   swarmteam: {
     appId: 'swarmteam',
@@ -256,19 +259,51 @@ export const SAUTHEN_BRAND_PRESETS: Record<SauthenPresetApp, SauthenBrandConfig>
 export function resolveBrandConfig(
   brand?: SauthenPresetApp | Partial<SauthenBrandConfig> | string,
 ): SauthenBrandConfig {
-  if (!brand) return SAUTHEN_BRAND_PRESETS.sauthen;
-  if (typeof brand === 'string') {
+  let resolved: SauthenBrandConfig;
+  if (!brand) {
+    resolved = SAUTHEN_BRAND_PRESETS.sauthen;
+  } else if (typeof brand === 'string') {
     const key = brand.toLowerCase() as SauthenPresetApp;
-    if (SAUTHEN_BRAND_PRESETS[key]) return SAUTHEN_BRAND_PRESETS[key];
-    return {
+    resolved = SAUTHEN_BRAND_PRESETS[key] || {
       ...SAUTHEN_BRAND_PRESETS.sauthen,
       appId: brand,
       appName: brand.charAt(0).toUpperCase() + brand.slice(1),
     };
+  } else {
+    const baseKey = (brand.appId?.toLowerCase() as SauthenPresetApp) || 'sauthen';
+    const base = SAUTHEN_BRAND_PRESETS[baseKey] || SAUTHEN_BRAND_PRESETS.sauthen;
+    resolved = { ...base, ...brand };
   }
-  const baseKey = (brand.appId?.toLowerCase() as SauthenPresetApp) || 'sauthen';
-  const base = SAUTHEN_BRAND_PRESETS[baseKey] || SAUTHEN_BRAND_PRESETS.sauthen;
-  return { ...base, ...brand };
+
+  if (resolved.appId === 'valiscale' && typeof window !== 'undefined') {
+    try {
+      const savedMode = localStorage.getItem('appembly_theme_mode') || 'light';
+      const isDark =
+        savedMode === 'dark' ||
+        (savedMode === 'system' &&
+          window.matchMedia &&
+          window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (isDark) {
+        return {
+          ...resolved,
+          theme: 'dark',
+          accent: '#4F73FF',
+          accentSoft: 'rgba(79, 115, 255, 0.16)',
+          surface: '#0B1021',
+          cardBg: '#111830',
+          inputBg: '#161F3D',
+          border: '#233058',
+          text: '#F1F5F9',
+          muted: '#94A3B8',
+          icon: <ValiscaleIcon size={22} primaryColor="#4F73FF" secondaryColor="#E2E8F0" />,
+        };
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+  }
+
+  return resolved;
 }
 
 /* ============================================================================
@@ -1904,6 +1939,23 @@ const SAG_CSS = `
 .sag-app-meterbox .sag-hero-bg{background:radial-gradient(640px 420px at 100% 0%,rgba(78,128,103,.16),transparent 60%),radial-gradient(rgba(17,22,24,.09) 1px,transparent 1px);background-size:auto,18px 18px}
 .sag-app-sauthen{--sag-hero:#07080D}
 .sag-app-sauthen .sag-hero-bg{background:radial-gradient(640px 440px at 12% 8%,rgba(143,128,255,.2),transparent 60%),radial-gradient(420px 320px at 92% 88%,rgba(247,170,46,.1),transparent 60%)}
+.sag-app-valiscale{--sag-hero:#ECF0FA}
+.sag-app-valiscale[data-theme="dark"]{--sag-hero:#090D1C}
+.sag-app-valiscale .sag-logo,.sag-card[data-app="valiscale"] .sag-logo{background:var(--sag-card);border:1px solid var(--sag-border);box-shadow:0 4px 12px -4px rgba(15,30,89,.14)}
+.sag-app-valiscale .sag-hero-bg{background:radial-gradient(680px 440px at 100% 0%,rgba(79,115,255,.16),transparent 62%),radial-gradient(rgba(15,30,89,.08) 1px,transparent 1px);background-size:auto,18px 18px}
+.sag-app-valiscale[data-theme="dark"] .sag-hero-bg{background:radial-gradient(680px 440px at 8% 6%,rgba(79,115,255,.22),transparent 62%),linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:auto,28px 28px,28px 28px}
+.sag-vs{display:flex;flex-direction:column;gap:10px;max-width:560px}
+.sag-vs-card{background:var(--sag-card);border:1px solid var(--sag-border);border-radius:14px;padding:14px 16px;box-shadow:0 1px 2px rgba(16,24,20,.04),0 18px 36px -26px rgba(16,24,20,.22);animation:sag-in .45s ease both}
+.sag-vs-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sag-vs-stage{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--sag-accent)}
+.sag-vs-stage b{width:18px;height:18px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;background:var(--sag-accent-soft);color:var(--sag-accent);font-size:10.5px}
+.sag-vs-pill{font-family:var(--sag-mono);font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--sag-accent-soft);color:var(--sag-accent);border:1px solid color-mix(in srgb,var(--sag-accent) 30%,transparent)}
+.sag-vs-title{font-size:14px;font-weight:650;color:var(--sag-text);margin:8px 0 4px}
+.sag-vs-sub{font-size:12px;color:var(--sag-muted);margin:0}
+.sag-vs-pillars{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
+.sag-vs-pillar{padding:7px 8px;border-radius:9px;background:var(--sag-input);border:1px solid var(--sag-border);font-size:11px}
+.sag-vs-pillar span{display:block;font-size:10px;color:var(--sag-muted);text-transform:uppercase;letter-spacing:.03em}
+.sag-vs-pillar strong{display:block;margin-top:2px;font-weight:600;color:var(--sag-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* cyclode terminal */
 .sag-term{position:relative;margin-bottom:40px;border-radius:14px;border:1px solid #3E4451;background:#21252B;box-shadow:0 40px 80px -40px rgba(0,0,0,.9),0 0 0 1px rgba(229,192,123,.08);font-family:var(--sag-mono);font-size:12px;line-height:1.75;max-width:560px}
@@ -2084,6 +2136,71 @@ const SauthenHeroVisual: React.FC = () => {
   );
 };
 
+const ValiscaleHeroVisual: React.FC = () => {
+  const pillars = [
+    { k: 'Identity', v: 'Sauthen OIDC' },
+    { k: 'AI Fabric', v: 'Harnway Router' },
+    { k: 'Billing', v: 'Meterbox Live' },
+    { k: 'Runtime', v: 'Adappty SRE' },
+  ];
+  return (
+    <div className="sag-vs">
+      <div className="sag-vs-card" style={{ animationDelay: '0.1s' }}>
+        <div className="sag-vs-top">
+          <span className="sag-vs-stage">
+            <b>1</b> Idea Validation Scorecard
+          </span>
+          <span className="sag-vs-pill">88 / 100 · VALIDATED</span>
+        </div>
+        <div className="sag-vs-title">Autonomous B2B Revenue &amp; Contract Co-Pilot</div>
+        <p className="sag-vs-sub">
+          Strong willingness-to-pay · 78% gross AI margin after token metering
+        </p>
+      </div>
+
+      <div className="sag-vs-card" style={{ animationDelay: '0.25s' }}>
+        <div className="sag-vs-top">
+          <span className="sag-vs-stage">
+            <b>2</b> 4-Pillar Application Blueprint
+          </span>
+          <span className="sag-vs-pill">ns_live_appembly</span>
+        </div>
+        <div className="sag-vs-pillars">
+          {pillars.map((p) => (
+            <div key={p.k} className="sag-vs-pillar">
+              <span>{p.k}</span>
+              <strong>{p.v}</strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className="sag-vs-card"
+        style={{
+          animationDelay: '0.4s',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div>
+          <span className="sag-vs-stage">
+            <b>3</b> Production Repository &amp; Fleet
+          </span>
+          <div className="sag-mono" style={{ fontSize: 12, color: 'var(--sag-muted)', marginTop: 4 }}>
+            @appembly/rev-copilot · Next.js 15 + FastAPI · us-east-1 (arm64)
+          </div>
+        </div>
+        <span className="sag-vs-pill">
+          ● Live
+        </span>
+      </div>
+    </div>
+  );
+};
+
 /* ============================================================================
    4. `<SauthenAuthGuard />` — Pattern A: Strict Branded Auth Gate
    ============================================================================ */
@@ -2101,6 +2218,17 @@ const GATE_HERO: Record<
   string,
   { eyebrow: string; headline: string; body: string; proof: string[]; Visual: React.FC }
 > = {
+  valiscale: {
+    eyebrow: 'Concept validation & autonomous app studio',
+    headline: 'Validate the idea. Assemble the four pillars. Ship to production.',
+    body: 'Valiscale scores unit economics before you write a line of code, then wires Sauthen identity, Harnway AI routing, Meterbox usage billing, and Adappty operations into a clean repository.',
+    proof: [
+      'Stage-1 viability & margin scorecard',
+      'Pre-wired OIDC, AI routing & usage billing',
+      'Clean repo handoff to Cyclode worktrees',
+    ],
+    Visual: ValiscaleHeroVisual,
+  },
   cyclode: {
     eyebrow: 'Autonomous engineering workstation',
     headline: 'Hand off the ticket. Review the pull request.',
@@ -2197,7 +2325,7 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
             onAuthenticated?.(payload);
           }}
         />
-        <p className="sag-pane-hint">One Appembly account works across Cyclode, Meterbox and Sauthen.</p>
+        <p className="sag-pane-hint">One Appembly account works across Valiscale, Cyclode, Meterbox and Sauthen.</p>
       </main>
     </div>
   );
