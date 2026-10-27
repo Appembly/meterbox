@@ -2,18 +2,24 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import '../styles/theme.css';
 import { AppemblyThemeProvider } from '../context/ThemeContext';
+import { ToastProvider } from '../components/primitives/Toast';
 import { ValiscalePreview } from './ValiscalePreview';
 import { AppemblyLandingPage } from '../components/marketing/AppemblyLandingPage';
 
+type ShowcaseView = 'studio' | 'primitives' | 'landing';
+
 const ShowcaseRoot: React.FC = () => {
-  const [view, setView] = useState<'studio' | 'landing'>(() =>
-    window.location.hash === '#landing' ? 'landing' : 'studio'
-  );
+  const [view, setView] = useState<ShowcaseView>(() => {
+    if (window.location.hash === '#landing') return 'landing';
+    if (window.location.hash === '#primitives') return 'primitives';
+    return 'studio';
+  });
 
   useEffect(() => {
     const onHash = () => {
       if (window.location.hash === '#landing') setView('landing');
-      if (window.location.hash === '#studio') setView('studio');
+      else if (window.location.hash === '#primitives') setView('primitives');
+      else if (window.location.hash === '#studio') setView('studio');
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -29,7 +35,7 @@ const ShowcaseRoot: React.FC = () => {
           }}
         />
       ) : (
-        <ValiscalePreview />
+        <ValiscalePreview initialTabId={view === 'primitives' ? 'primitives' : 'overview'} />
       )}
 
       {/* Floating Showcase Switcher Pill */}
@@ -45,6 +51,20 @@ const ShowcaseRoot: React.FC = () => {
           }`}
         >
           Valiscale Studio
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            window.location.hash = '#primitives';
+            setView('primitives');
+          }}
+          className={`px-3 py-1 rounded-full font-semibold transition-colors cursor-pointer ${
+            view === 'primitives'
+              ? 'bg-[#4E8067] text-[#F6F7F5]'
+              : 'text-[#A9AFAB] hover:text-[#F6F7F5]'
+          }`}
+        >
+          Primitives
         </button>
         <button
           type="button"
@@ -66,7 +86,9 @@ const ShowcaseRoot: React.FC = () => {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <AppemblyThemeProvider defaultTheme="light">
-      <ShowcaseRoot />
+      <ToastProvider>
+        <ShowcaseRoot />
+      </ToastProvider>
     </AppemblyThemeProvider>
   </React.StrictMode>
 );

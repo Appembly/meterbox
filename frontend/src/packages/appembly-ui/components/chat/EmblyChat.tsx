@@ -1241,7 +1241,7 @@ export const EmblyChat: React.FC<EmblyChatProps> = ({
           className="group absolute inset-y-0 -left-1.5 w-3 cursor-col-resize z-30 flex items-center justify-center"
         >
           <div
-            className="w-[3px] h-12 rounded-full transition-all duration-150 opacity-0 group-hover:opacity-100"
+            className="w-[3px] h-12 rounded-full transition-opacity duration-150 opacity-0 group-hover:opacity-100"
             style={{
               backgroundColor: activeAccent,
               opacity: isResizing ? 1 : undefined,

@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import "./primitives.css";
+
+@custom-variant dark ([data-theme="dark"] &);
 
 :root,
 [data-theme="light"] {
@@ -10,6 +13,30 @@
   --appembly-sage-soft: rgba(78, 128, 103, 0.12);
   --appembly-silver: #A9AFAB;
 
+  /* Motion Duration & Easing Tokens */
+  --motion-instant: 90ms;
+  --motion-fast: 150ms;
+  --motion-base: 220ms;
+  --motion-slow: 320ms;
+  --motion-story: 600ms;
+
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* Geometry & Z-Index Scale */
+  --ui-radius-sm: 8px;
+  --ui-radius: 12px;
+  --ui-radius-lg: 16px;
+  --ui-radius-pill: 9px;
+
+  --ui-z-dropdown: 40;
+  --ui-z-sheet: 60;
+  --ui-z-dialog: 70;
+  --ui-z-toast: 80;
+  --ui-z-tooltip: 90;
+
   /* Semantic Surface & Text Tokens (Light Mode — Off White #F6F7F5 Canvas) */
   --ui-bg-canvas: #F6F7F5;
   --ui-bg-sidebar: #F6F7F5;
@@ -20,9 +47,27 @@
   --ui-border-strong: #CFD4D0;
   --ui-text-primary: #111618;
   --ui-text-secondary: #525956;
-  --ui-text-muted: #7C8380;
+  --ui-text-muted: #6B726F;
   --ui-accent: #4E8067;
+  --ui-accent-hover: #3F6B55;
+  --ui-accent-soft: rgba(78, 128, 103, 0.12);
   --ui-accent-fg: #F6F7F5;
+
+  /* Semantic Status Tokens (Light Mode) */
+  --ui-ok: #15803D;
+  --ui-ok-soft: rgba(21, 128, 61, 0.12);
+  --ui-warn: #C47608;
+  --ui-warn-soft: rgba(196, 118, 8, 0.12);
+  --ui-danger: #C93B4A;
+  --ui-danger-soft: rgba(201, 59, 74, 0.12);
+  --ui-approval: #C44854;
+  --ui-approval-soft: rgba(196, 72, 84, 0.12);
+
+  /* Elevation & Focus Ring (Light Mode) */
+  --ui-shadow-1: 0 1px 2px rgba(17, 22, 24, 0.05);
+  --ui-shadow-2: 0 6px 20px -4px rgba(17, 22, 24, 0.10), 0 2px 6px -1px rgba(17, 22, 24, 0.06);
+  --ui-shadow-3: 0 20px 44px -10px rgba(17, 22, 24, 0.18), 0 6px 16px -4px rgba(17, 22, 24, 0.08);
+  --ui-focus-ring: 0 0 0 2px var(--ui-bg-canvas), 0 0 0 4px var(--ui-accent);
 
   /* Brand Mark Adaptive Tokens (Light Mode) */
   --mbx-mark-arch-1: #569475;
@@ -55,7 +100,25 @@
   --ui-text-secondary: #C5CAC7;
   --ui-text-muted: #A9AFAB;
   --ui-accent: #5C9679;
+  --ui-accent-hover: #6DA98B;
+  --ui-accent-soft: rgba(92, 150, 121, 0.14);
   --ui-accent-fg: #111618;
+
+  /* Semantic Status Tokens (Dark Mode) */
+  --ui-ok: #34D399;
+  --ui-ok-soft: rgba(52, 211, 153, 0.14);
+  --ui-warn: #F7AA2E;
+  --ui-warn-soft: rgba(247, 170, 46, 0.14);
+  --ui-danger: #F06572;
+  --ui-danger-soft: rgba(240, 101, 114, 0.14);
+  --ui-approval: #D95C68;
+  --ui-approval-soft: rgba(217, 92, 104, 0.14);
+
+  /* Elevation & Focus Ring (Dark Mode) */
+  --ui-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.32);
+  --ui-shadow-2: 0 8px 24px -4px rgba(0, 0, 0, 0.45), 0 2px 6px -1px rgba(0, 0, 0, 0.30);
+  --ui-shadow-3: 0 24px 52px -12px rgba(0, 0, 0, 0.65), 0 8px 20px -4px rgba(0, 0, 0, 0.40);
+  --ui-focus-ring: 0 0 0 2px var(--ui-bg-canvas), 0 0 0 4px var(--ui-accent);
 
   /* Brand Mark Adaptive Tokens (Dark Mode) */
   --mbx-mark-arch-1: #66BD8E;
@@ -73,6 +136,18 @@
   --appembly-border: var(--ui-border);
   --appembly-text: var(--ui-text-primary);
   --appembly-text-muted: var(--ui-text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-theme="light"],
+  [data-theme="dark"] {
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+    --motion-story: 0ms;
+  }
 }
 
 body {

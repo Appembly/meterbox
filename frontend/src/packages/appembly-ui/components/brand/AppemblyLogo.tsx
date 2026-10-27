@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface AppemblyLogoProps {
   /**
@@ -23,7 +23,7 @@ export interface AppemblyLogoProps {
   /**
    * Animation cadence:
    * - 'ambient' (default): 13.5s calm loop for persistent navbar/footer lockups
-   * - 'loader': 3.2s immediate-start loop (skips initial idle rest frame) for app entry & route transitions
+   * - 'loader': 3.2s immediate-start loop (no sub-120ms blink flicker) for app entry & route transitions
    */
   speed?: 'ambient' | 'loader';
 }
@@ -136,7 +136,10 @@ export const APPEMBLY_MONOGRAM_COMPACT_PATH = orthoLoopsToSvgPath(
   8.5
 );
 
+const STYLE_ELEMENT_ID = 'appembly-logo-animated-styles';
+
 const ANIMATED_CORE_STYLES = `
+  /* Ambient 13.5s keyframes */
   @keyframes ap-cell-a {
     0%, 7% { x: 30.5px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
     8.2% { x: 30.5px; y: 39.2px; width: 19.5px; height: 2.2px; rx: 1.1px; }
@@ -190,51 +193,178 @@ const ANIMATED_CORE_STYLES = `
     0%, 59% { transform: rotate(0deg); }
     73%, 100% { transform: rotate(360deg); }
   }
+
+  /* Loader 3.2s keyframes: every stage >= 4.5% (>= 144ms) to avoid sub-120ms flicker */
+  @keyframes ap-loader-cell-a {
+    0%, 4% { x: 30.5px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    9%, 13.5% { x: 30.5px; y: 39.2px; width: 19.5px; height: 2.2px; rx: 1.1px; }
+    18.5%, 23% { x: 30.5px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    28%, 35% { x: 22.5px; y: 30.5px; width: 16px; height: 19.5px; rx: 7.5px; }
+    40%, 47% { x: 48px; y: 30.5px; width: 16px; height: 19.5px; rx: 7.5px; }
+    52%, 57% { x: 22px; y: 30.5px; width: 18px; height: 19.5px; rx: 7px; }
+    62%, 78% { x: 30.5px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    83%, 88% { x: 28.5px; y: 29.8px; width: 20.5px; height: 20.8px; rx: 7.5px; }
+    93%, 100% { x: 30.5px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+  }
+  @keyframes ap-loader-cell-b {
+    0%, 4% { x: 50px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    9%, 13.5% { x: 50px; y: 39.2px; width: 19.5px; height: 2.2px; rx: 1.1px; }
+    18.5%, 23% { x: 50px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    28%, 35% { x: 36px; y: 30.5px; width: 16px; height: 19.5px; rx: 7.5px; }
+    40%, 47% { x: 61.5px; y: 30.5px; width: 16px; height: 19.5px; rx: 7.5px; }
+    52%, 57% { x: 60px; y: 30.5px; width: 18px; height: 19.5px; rx: 7px; }
+    62%, 78% { x: 50px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+    83%, 88% { x: 51px; y: 29.8px; width: 20.5px; height: 20.8px; rx: 7.5px; }
+    93%, 100% { x: 50px; y: 30.5px; width: 19.5px; height: 19.5px; rx: 7.5px; }
+  }
+  @keyframes ap-loader-cell-bridge {
+    0%, 4% { x: 42px; y: 30.5px; width: 16px; height: 19.5px; }
+    9%, 13.5% { x: 42px; y: 39.2px; width: 16px; height: 2.2px; }
+    18.5%, 23% { x: 42px; y: 30.5px; width: 16px; height: 19.5px; }
+    28%, 35% { x: 30px; y: 30.5px; width: 14px; height: 19.5px; }
+    40%, 47% { x: 55.5px; y: 30.5px; width: 14px; height: 19.5px; }
+    52%, 57% { x: 49px; y: 40.25px; width: 2px; height: 0px; }
+    62%, 78% { x: 42px; y: 30.5px; width: 16px; height: 19.5px; }
+    83%, 88% { x: 41px; y: 30px; width: 18px; height: 20.5px; }
+    93%, 100% { x: 42px; y: 30.5px; width: 16px; height: 19.5px; }
+  }
+  @keyframes ap-loader-bot-rot {
+    0%, 60% { transform: rotate(0deg); }
+    80%, 100% { transform: rotate(360deg); }
+  }
+
   .ap-core-rot {
     transform-origin: 50px 50px;
     animation: ap-bot-rot var(--ap-dur, 13.5s) cubic-bezier(0.65, 0, 0.35, 1) var(--ap-delay, 0s) infinite;
+    animation-play-state: var(--ap-play-state, running);
   }
   .ap-cell-a {
     animation: ap-cell-a var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
+    animation-play-state: var(--ap-play-state, running);
   }
   .ap-cell-b {
     animation: ap-cell-b var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
+    animation-play-state: var(--ap-play-state, running);
   }
   .ap-cell-bridge {
     animation: ap-cell-bridge var(--ap-dur, 13.5s) cubic-bezier(0.45, 0, 0.25, 1) var(--ap-delay, 0s) infinite;
+    animation-play-state: var(--ap-play-state, running);
   }
+
+  .ap-loader-core-rot {
+    transform-origin: 50px 50px;
+    animation: ap-loader-bot-rot 3.2s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    animation-play-state: var(--ap-play-state, running);
+  }
+  .ap-loader-cell-a {
+    animation: ap-loader-cell-a 3.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation-play-state: var(--ap-play-state, running);
+  }
+  .ap-loader-cell-b {
+    animation: ap-loader-cell-b 3.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation-play-state: var(--ap-play-state, running);
+  }
+  .ap-loader-cell-bridge {
+    animation: ap-loader-cell-bridge 3.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+    animation-play-state: var(--ap-play-state, running);
+  }
+
+  [data-paused="true"] .ap-core-rot,
+  [data-paused="true"] .ap-cell-a,
+  [data-paused="true"] .ap-cell-b,
+  [data-paused="true"] .ap-cell-bridge,
+  [data-paused="true"] .ap-loader-core-rot,
+  [data-paused="true"] .ap-loader-cell-a,
+  [data-paused="true"] .ap-loader-cell-b,
+  [data-paused="true"] .ap-loader-cell-bridge {
+    animation-play-state: paused !important;
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .ap-core-rot, .ap-cell-a, .ap-cell-b, .ap-cell-bridge {
+    .ap-core-rot, .ap-cell-a, .ap-cell-b, .ap-cell-bridge,
+    .ap-loader-core-rot, .ap-loader-cell-a, .ap-loader-cell-b, .ap-loader-cell-bridge {
       animation: none !important;
     }
   }
 `;
 
+let stylesInjected = false;
+
+function ensureAnimatedLogoStyles(): void {
+  if (typeof document === 'undefined') return;
+  if (stylesInjected && document.getElementById(STYLE_ELEMENT_ID)) return;
+  const existing = document.getElementById(STYLE_ELEMENT_ID);
+  if (existing) {
+    stylesInjected = true;
+    return;
+  }
+  const styleEl = document.createElement('style');
+  styleEl.id = STYLE_ELEMENT_ID;
+  styleEl.textContent = ANIMATED_CORE_STYLES;
+  document.head.appendChild(styleEl);
+  stylesInjected = true;
+}
+
 /**
  * Renders the animated Fused Modular Mark using an SVG mask so the interior
- * modular visor performs double-blink, left/right gaze, split & merge/join,
- * continuous smooth 360° core rotation, and staggered cell spawning while
- * keeping the outer 4×4 silhouette 100% unchanged.
+ * modular visor performs blink, left/right gaze, split & merge/join,
+ * and smooth 360° core rotation while keeping the outer 4×4 silhouette 100% unchanged.
+ * Automatically pauses when off-screen or when `document.hidden` is true.
  */
 export const AnimatedModularMarkGraphic: React.FC<{
   fill: string;
   maskId: string;
   speed?: 'ambient' | 'loader';
 }> = ({ fill, maskId, speed = 'ambient' }) => {
-  const timingVars =
-    speed === 'loader'
-      ? ({ '--ap-dur': '3.2s', '--ap-delay': '-0.24s' } as React.CSSProperties)
-      : undefined;
+  const groupRef = useRef<SVGGElement | null>(null);
+  const [inViewport, setInViewport] = useState(true);
+  const [docHidden, setDocHidden] = useState(() =>
+    typeof document !== 'undefined' ? document.hidden : false
+  );
+
+  useEffect(() => {
+    ensureAnimatedLogoStyles();
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => setDocHidden(document.hidden);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+
+  useEffect(() => {
+    const node = groupRef.current?.ownerSVGElement ?? groupRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          setInViewport(entry.isIntersecting);
+        }
+      },
+      { threshold: 0 }
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, []);
+
+  const isLoader = speed === 'loader';
+  const paused = !inViewport || docHidden;
+  const playVar = {
+    '--ap-play-state': paused ? 'paused' : 'running',
+  } as React.CSSProperties;
+
   return (
-    <>
-      <style>{ANIMATED_CORE_STYLES}</style>
+    <g ref={groupRef} data-paused={paused ? 'true' : 'false'} style={playVar}>
       <defs>
         <mask id={maskId}>
           <path d={APPEMBLY_OUTER_FRAME_PATH} fill="white" />
-          <g className="ap-core-rot" fill="black" style={timingVars}>
+          <g
+            className={isLoader ? 'ap-loader-core-rot' : 'ap-core-rot'}
+            fill="black"
+          >
             <rect
-              className="ap-cell-a"
-              style={timingVars}
+              className={isLoader ? 'ap-loader-cell-a' : 'ap-cell-a'}
               x="30.5"
               y="30.5"
               width="19.5"
@@ -242,8 +372,7 @@ export const AnimatedModularMarkGraphic: React.FC<{
               rx="7.5"
             />
             <rect
-              className="ap-cell-b"
-              style={timingVars}
+              className={isLoader ? 'ap-loader-cell-b' : 'ap-cell-b'}
               x="50"
               y="30.5"
               width="19.5"
@@ -251,8 +380,7 @@ export const AnimatedModularMarkGraphic: React.FC<{
               rx="7.5"
             />
             <rect
-              className="ap-cell-bridge"
-              style={timingVars}
+              className={isLoader ? 'ap-loader-cell-bridge' : 'ap-cell-bridge'}
               x="42"
               y="30.5"
               width="16"
@@ -263,7 +391,7 @@ export const AnimatedModularMarkGraphic: React.FC<{
         </mask>
       </defs>
       <path d={APPEMBLY_OUTER_FRAME_PATH} fill={fill} mask={`url(#${maskId})`} />
-    </>
+    </g>
   );
 };
 
@@ -371,7 +499,7 @@ export const AppemblyLogo: React.FC<AppemblyLogoProps> = ({
           {productName}
         </span>
         {tagline && (
-          <span className="text-[11px] font-medium text-[#4E8067] leading-tight truncate">
+          <span className="text-[11px] font-medium text-[var(--ui-accent,#4E8067)] leading-tight truncate">
             {tagline}
           </span>
         )}

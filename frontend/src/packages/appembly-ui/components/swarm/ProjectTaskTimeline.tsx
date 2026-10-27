@@ -176,7 +176,7 @@ export const ProjectTaskTimeline: React.FC<ProjectTaskTimelineProps> = ({
                   >
                     <div
                       style={{ width: `${task.progress}%` }}
-                      className={`absolute inset-y-0 left-0 ${badge.bar} opacity-20 transition-all`}
+                      className={`absolute inset-y-0 left-0 ${badge.bar} opacity-20 transition-[width]`}
                     />
                     <div
                       style={{ width: `${task.progress}%` }}

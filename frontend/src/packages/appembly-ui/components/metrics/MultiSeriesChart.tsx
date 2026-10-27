@@ -166,7 +166,7 @@ export const MultiSeriesChart: React.FC<MultiSeriesChartProps> = ({
             style={{
               left: `${Math.min(72, Math.max(18, (hoverIndex / Math.max(1, labels.length - 1)) * 75 + 8))}%`,
             }}
-            className="absolute top-8 z-20 w-56 rounded-xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] shadow-lg p-3.5 pointer-events-none transition-all duration-150"
+            className="absolute top-8 z-20 w-56 rounded-xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] shadow-lg p-3.5 pointer-events-none transition-[left,opacity] duration-150"
           >
             <div className="text-[11.5px] font-medium text-[var(--ui-text-muted)] pb-2 mb-2 border-b border-[var(--ui-border)]">
               {labels[hoverIndex]}

@@ -474,7 +474,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   if (error) {
     return (
       <div
-        className={`my-3 rounded-xl bg-onedark-darker border border-onedark-borderSubtle overflow-hidden text-xs ${className}`}
+        className={`my-3 rounded-xl bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)] overflow-hidden text-xs ${className}`}
       >
         <div className="flex items-center justify-between px-3.5 py-2 bg-amber-500/10 border-b border-amber-500/20 text-amber-400">
           <div className="flex items-center space-x-2">
@@ -484,13 +484,13 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
           <button
             type="button"
             onClick={handleCopy}
-            className="flex items-center space-x-1 hover:text-onedark-fgBright transition-colors text-[11px] font-mono cursor-pointer"
+            className="flex items-center space-x-1 hover:text-[var(--ui-text-primary)] transition-colors text-[11px] font-mono cursor-pointer"
           >
             {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
             <span>{copied ? 'Copied' : 'Copy Source'}</span>
           </button>
         </div>
-        <div className="p-3 font-mono text-[11px] text-onedark-fg/80 whitespace-pre-wrap overflow-x-auto leading-relaxed bg-onedark-darkest/40">
+        <div className="p-3 font-mono text-[11px] text-[color-mix(in_srgb,var(--ui-text-secondary)_80%,transparent)] whitespace-pre-wrap overflow-x-auto leading-relaxed bg-[color-mix(in_srgb,var(--ui-bg-sidebar)_40%,transparent)]">
           {cleanCode || code}
         </div>
       </div>
@@ -500,14 +500,14 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   return (
     <>
       <div
-        className={`my-3 rounded-xl bg-onedark-darker/60 border border-onedark-borderSubtle overflow-hidden shadow-xs group/mermaid transition-all ${
+        className={`my-3 rounded-xl bg-[color-mix(in_srgb,var(--ui-bg-subtle)_60%,transparent)] border border-[var(--ui-border)] overflow-hidden shadow-xs group/mermaid transition-colors ${
           isFullWidth ? 'w-full !max-w-none' : 'w-full'
         } ${className}`}
       >
-        <div className="flex items-center justify-between px-3.5 py-1.5 bg-onedark-surface/60 border-b border-onedark-borderSubtle/60 text-[11px] text-onedark-muted font-mono select-none">
+        <div className="flex items-center justify-between px-3.5 py-1.5 bg-[color-mix(in_srgb,var(--ui-bg-surface)_60%,transparent)] border-b border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] text-[11px] text-[var(--ui-text-muted)] font-mono select-none">
           <div className="flex items-center space-x-2">
-            <Sparkles className="w-3.5 h-3.5 text-onedark-accent" />
-            <span className="text-onedark-accent font-semibold uppercase tracking-wider text-[10.5px]">
+            <Sparkles className="w-3.5 h-3.5 text-[var(--ui-accent)]" />
+            <span className="text-[var(--ui-accent)] font-semibold uppercase tracking-wider text-[10.5px]">
               Architecture Diagram
             </span>
           </div>
@@ -518,8 +518,8 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
               onClick={() => setShowSource((s) => !s)}
               className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
                 showSource
-                  ? 'bg-onedark-accent/20 text-onedark-accent font-semibold'
-                  : 'hover:text-onedark-fgBright hover:bg-onedark-surface text-onedark-muted'
+                  ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
+                  : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
               }`}
             >
               <span>{showSource ? 'Diagram' : 'Source'}</span>
@@ -530,8 +530,8 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
               onClick={() => setIsFullWidth(!isFullWidth)}
               className={`flex items-center space-x-1 transition-colors px-2 py-0.5 rounded text-[10.5px] cursor-pointer ${
                 isFullWidth
-                  ? 'bg-onedark-accent/20 text-onedark-accent font-semibold'
-                  : 'hover:text-onedark-fgBright hover:bg-onedark-surface text-onedark-muted'
+                  ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
+                  : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
               }`}
             >
               <ArrowLeftRight className="w-3 h-3" />
@@ -541,7 +541,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-onedark-fgBright hover:bg-onedark-surface text-onedark-muted transition-colors cursor-pointer"
+              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer"
               title="Expand in full-screen modal"
             >
               <Maximize2 className="w-3 h-3" />
@@ -552,7 +552,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
               type="button"
               onClick={handleDownloadSvg}
               disabled={!svgHtml}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-onedark-fgBright hover:bg-onedark-surface text-onedark-muted transition-colors cursor-pointer disabled:opacity-40"
+              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer disabled:opacity-40"
             >
               <Download className="w-3 h-3" />
               <span>SVG</span>
@@ -561,16 +561,16 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             <button
               type="button"
               onClick={handleCopy}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-onedark-fgBright hover:bg-onedark-surface text-onedark-muted transition-colors cursor-pointer"
+              className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer"
             >
-              {copied ? <Check className="w-3 h-3 text-onedark-green" /> : <Copy className="w-3 h-3" />}
+              {copied ? <Check className="w-3 h-3 text-[var(--ui-ok)]" /> : <Copy className="w-3 h-3" />}
               <span>{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
         {showSource ? (
-          <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-onedark-fgBright overflow-x-auto">
+          <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-[var(--ui-text-primary)] overflow-x-auto">
             <code>{cleanCode}</code>
           </pre>
         ) : (
@@ -578,7 +578,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             ref={containerRef}
             onDoubleClick={() => setIsModalOpen(true)}
             title="Double-click to expand and inspect"
-            className="p-5 overflow-x-auto flex items-center justify-center min-h-[140px] [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:transition-all cursor-pointer"
+            className="p-5 overflow-x-auto flex items-center justify-center min-h-[140px] [&>svg]:max-w-full [&>svg]:h-auto cursor-pointer"
           >
             {svgHtml ? (
               <div
@@ -586,8 +586,8 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                 dangerouslySetInnerHTML={{ __html: svgHtml }}
               />
             ) : (
-              <div className="flex items-center gap-2 text-xs font-mono text-onedark-muted py-6">
-                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-onedark-accent border-t-transparent" />
+              <div className="flex items-center gap-2 text-xs font-mono text-[var(--ui-text-muted)] py-6">
+                <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--ui-accent)] border-t-transparent" />
                 <span>Rendering architecture diagram...</span>
               </div>
             )}
@@ -605,43 +605,43 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             onClick={() => setIsModalOpen(false)}
           >
             <div
-              className="relative w-full max-w-6xl h-[85vh] flex flex-col bg-onedark-darker border border-onedark-border rounded-2xl overflow-hidden shadow-2xl"
+              className="relative w-full max-w-6xl h-[85vh] flex flex-col bg-[var(--ui-bg-subtle)] border border-[var(--ui-border)] rounded-2xl overflow-hidden shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-5 py-3 border-b border-onedark-borderSubtle bg-onedark-surface/40 select-none flex-wrap gap-2">
+              <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--ui-border)] bg-[color-mix(in_srgb,var(--ui-bg-surface)_40%,transparent)] select-none flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
-                  <Sparkles className="w-4 h-4 text-onedark-accent" />
-                  <span className="font-semibold text-xs text-onedark-fgBright">
+                  <Sparkles className="w-4 h-4 text-[var(--ui-accent)]" />
+                  <span className="font-semibold text-xs text-[var(--ui-text-primary)]">
                     Architecture Diagram Inspection
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <div className="flex items-center bg-onedark-darker/90 border border-onedark-border rounded-lg p-0.5 shadow-xs">
+                  <div className="flex items-center bg-[color-mix(in_srgb,var(--ui-bg-subtle)_90%,transparent)] border border-[var(--ui-border)] rounded-lg p-0.5 shadow-xs">
                     <button
                       type="button"
                       onClick={() => setZoom((z) => Math.max(0.15, Number((z - 0.25).toFixed(2))))}
-                      className="p-1 rounded text-onedark-muted hover:text-onedark-fgBright hover:bg-onedark-surface"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)]"
                     >
                       <ZoomOut className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={handleResetZoom}
-                      className="px-2 py-0.5 text-[11px] font-mono font-medium text-onedark-fgBright hover:text-onedark-accent min-w-[50px] text-center"
+                      className="px-2 py-0.5 text-[11px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[50px] text-center"
                     >
                       {Math.round(zoom * 100)}%
                     </button>
                     <button
                       type="button"
                       onClick={() => setZoom((z) => Math.min(5.0, Number((z + 0.25).toFixed(2))))}
-                      className="p-1 rounded text-onedark-muted hover:text-onedark-fgBright hover:bg-onedark-surface"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)]"
                     >
                       <ZoomIn className="w-3.5 h-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={handleFitView}
-                      className="p-1 rounded text-onedark-muted hover:text-onedark-fgBright hover:bg-onedark-surface ml-0.5 border-l border-onedark-borderSubtle/60"
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] ml-0.5 border-l border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)]"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
@@ -649,7 +649,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   <button
                     type="button"
                     onClick={handleDownloadSvg}
-                    className="px-2.5 py-1 text-xs rounded-lg bg-onedark-surface hover:bg-onedark-surface/80 text-onedark-fg font-medium flex items-center space-x-1.5 border border-onedark-borderSubtle"
+                    className="px-2.5 py-1 text-xs rounded-lg bg-[var(--ui-bg-surface)] hover:bg-[color-mix(in_srgb,var(--ui-bg-surface)_80%,transparent)] text-[var(--ui-text-secondary)] font-medium flex items-center space-x-1.5 border border-[var(--ui-border)]"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download SVG</span>
@@ -657,7 +657,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="p-1.5 rounded-lg hover:bg-onedark-surface text-onedark-muted hover:text-onedark-fgBright"
+                    className="p-1.5 rounded-lg hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)]"
                   >
                     <Minimize2 className="w-4 h-4" />
                   </button>
@@ -666,7 +666,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
 
               <div
                 ref={modalCanvasRef}
-                className={`flex-1 relative overflow-hidden flex items-center justify-center select-none bg-onedark-bg/40 ${
+                className={`flex-1 relative overflow-hidden flex items-center justify-center select-none bg-[color-mix(in_srgb,var(--ui-bg-canvas)_40%,transparent)] ${
                   isDragging ? 'cursor-grabbing' : 'cursor-grab'
                 }`}
                 onPointerDown={(e) => {

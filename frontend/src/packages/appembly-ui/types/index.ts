@@ -2,21 +2,31 @@ import React from 'react';
 
 export type AppemblyThemeMode = 'light' | 'dark';
 
-export interface NavSubItem {
+export type NavIconType =
+  | React.ComponentType<{ className?: string }>
+  | React.ReactNode;
+
+export interface NavItem {
   id: string;
   label: string;
-  icon?: React.ReactNode;
+  icon?: NavIconType;
   badge?: string | number;
   statusColor?: 'sage' | 'emerald' | 'amber' | 'rose' | 'silver';
   meta?: string;
 }
 
+/** Legacy alias preserved for backward compatibility */
+export type NavSubItem = NavItem;
+
 export interface NavSection {
   id: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon?: NavIconType;
   badge?: string | number;
   defaultOpen?: boolean;
+  /** Flat destination items under this uppercase section label */
+  items?: NavItem[];
+  /** Legacy nested items — automatically flattened into section label + items */
   children?: NavSubItem[];
 }
 

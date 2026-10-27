@@ -15,14 +15,19 @@ import {
 import {
   AppemblyAppShell,
   AppemblyLogo,
+  CommandItem,
+  CommandPalette,
   CostIntelligenceCard,
   KpiSummaryCard,
   MultiSeriesChart,
+  NavItem,
   NavSection,
   ProjectTaskTimeline,
   SegmentedTabs,
   TimelineTaskItem,
+  useToast,
 } from '../index';
+import { PrimitivesShowcaseSection } from './PrimitivesShowcase';
 
 const PROJECTS_MAP: Record<
   string,
@@ -234,178 +239,211 @@ const SAMPLE_TIMELINE_TASKS: TimelineTaskItem[] = [
   },
 ];
 
-export const ValiscalePreview: React.FC = () => {
+export const ValiscalePreview: React.FC<{ initialTabId?: string }> = ({
+  initialTabId = 'overview',
+}) => {
   const [activeNavId, setActiveNavId] = useState<string>('proj-finops');
-  const [activeTabId, setActiveTabId] = useState<string>('overview');
+  const [activeTabId, setActiveTabId] = useState<string>(initialTabId);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isCmdkOpen, setIsCmdkOpen] = useState<boolean>(false);
+  const { toast } = useToast();
+
+  React.useEffect(() => {
+    setActiveTabId(initialTabId);
+  }, [initialTabId]);
 
   const activeProject =
     PROJECTS_MAP[activeNavId] || PROJECTS_MAP['proj-finops'];
 
-  const navSections: NavSection[] = [
+  const topItems: NavItem[] = [
     {
       id: 'exec-overview',
-      label: 'Executive Overview',
+      label: 'Overview',
       icon: LayoutDashboard,
     },
     {
-      id: 'concept-lab',
-      label: 'Concept Lab (Ideas)',
-      icon: Lightbulb,
-      badge: 6,
-      children: [
-        { id: 'concept-1', label: 'AI Cloud Cost Optimizer', statusColor: 'sage', badge: '88' },
-        { id: 'concept-2', label: 'Autonomous QA Replay', statusColor: 'amber', badge: '74' },
-        { id: 'concept-3', label: 'Instant OAuth Broker', statusColor: 'sage', badge: '96' },
-      ],
+      id: 'approvals-queue',
+      label: 'Approvals',
+      icon: ShieldCheck,
+      badge: 2,
     },
+  ];
+
+  const navSections: NavSection[] = [
     {
       id: 'active-projects',
       label: 'Active Projects',
       icon: FolderKanban,
-      defaultOpen: true,
-      badge: 5,
-      children: [
+      items: [
         {
           id: 'proj-finops',
           label: 'AI FinOps Copilot',
-          statusColor: 'sage',
-          badge: 'W2',
+          icon: FolderKanban,
+          badge: 4,
         },
         {
           id: 'proj-wotneed',
           label: 'Wotneed Concierge',
-          statusColor: 'emerald',
-          badge: 'W3',
+          icon: ShoppingBag,
+          badge: 3,
         },
         {
           id: 'proj-sauthen',
           label: 'Sauthen SSO Broker',
-          statusColor: 'sage',
-          badge: 'W2',
+          icon: ShieldCheck,
         },
-        {
-          id: 'proj-cyclode',
-          label: 'Cyclode Workstation',
-          statusColor: 'emerald',
-          badge: 'Live',
-        },
-        {
-          id: 'proj-gatharoom',
-          label: 'Gatharoom Focus Live',
-          statusColor: 'amber',
-          badge: 'Beta',
-        },
+      ],
+    },
+    {
+      id: 'concept-lab',
+      label: 'Concept Lab',
+      icon: Lightbulb,
+      items: [
+        { id: 'concept-1', label: 'Cloud Cost Optimizer', icon: Lightbulb },
+        { id: 'concept-2', label: 'Autonomous QA Replay', icon: Activity },
       ],
     },
     {
       id: 'swarm-orchestration',
-      label: 'Swarmteam Pods',
+      label: 'Operate & Swarm',
       icon: GitBranch,
-      badge: 4,
-      children: [
-        { id: 'pod-1', label: 'pod-finops-schema', statusColor: 'sage' },
-        { id: 'pod-2', label: 'pod-finops-ui', statusColor: 'sage' },
-        { id: 'pod-3', label: 'pod-sauthen-oidc', statusColor: 'emerald' },
+      items: [
+        { id: 'pod-1', label: 'Swarmteam Pods', icon: GitBranch, badge: 4 },
+        { id: 'room-1', label: 'Gatharoom Live', icon: Radio },
+        { id: 'scale-prod', label: 'Production Fleet', icon: Rocket },
+        { id: 'brand-system', label: 'Primitives & Brand', icon: Sparkles },
       ],
     },
+  ];
+
+  const commandItems: CommandItem[] = [
     {
-      id: 'gatharoom-research',
-      label: 'Gatharoom Focus Groups',
-      icon: Radio,
-      children: [
-        { id: 'room-1', label: 'FinOps Buyer Panel #4', statusColor: 'sage' },
-        { id: 'room-2', label: 'Shopify Merchant Live', statusColor: 'amber' },
-      ],
+      id: 'cmd-primitives',
+      label: 'Open Primitives & Motion Showcase',
+      group: 'Navigation',
+      shortcut: '⌘P',
+      onSelect: () => setActiveTabId('primitives'),
     },
     {
-      id: 'scaled-deployments',
-      label: 'Scaled Deployments',
-      icon: Rocket,
-      children: [
-        { id: 'scale-prod', label: 'Production Fleet', statusColor: 'emerald' },
-        { id: 'scale-stage', label: 'Staging Canaries', statusColor: 'sage' },
-      ],
+      id: 'cmd-overview',
+      label: 'Go to Project Overview',
+      group: 'Navigation',
+      onSelect: () => setActiveTabId('overview'),
     },
     {
-      id: 'brand-system',
-      label: 'Appembly Brand System',
-      icon: Sparkles,
+      id: 'cmd-finops',
+      label: 'Switch Project: AI FinOps Copilot',
+      group: 'Projects',
+      onSelect: () => setActiveNavId('proj-finops'),
+    },
+    {
+      id: 'cmd-sauthen',
+      label: 'Switch Project: Sauthen OAuth & Agent Broker',
+      group: 'Projects',
+      onSelect: () => setActiveNavId('proj-sauthen'),
     },
   ];
 
   return (
-    <AppemblyAppShell
-      sidebarProps={{
-        brandTitle: 'Valiscale',
-        brandSubtitle: 'Appembly · Idea-to-Scale',
-        sections: navSections,
-        activeItemId: activeNavId,
-        onSelectItem: (id) => setActiveNavId(id),
-        isCollapsed: isSidebarCollapsed,
-        onToggleCollapse: () => setIsSidebarCollapsed((prev) => !prev),
-        onPrimaryAction: () => setActiveTabId('timeline'),
-        primaryActionLabel: 'New Concept or Project Task',
-      }}
-      breadcrumbProps={{
-        segments: [
-          { id: 'root', label: 'Valiscale' },
-          {
-            id: 'section',
-            label: 'Active Projects',
-            options: [
-              { id: 'active-projects', label: 'Active Projects' },
-              { id: 'concept-lab', label: 'Concept Lab (Ideas)' },
-              { id: 'swarm-orchestration', label: 'Swarmteam Pods' },
+    <>
+      <AppemblyAppShell
+        sidebarProps={{
+          brandTitle: 'Valiscale',
+          brandSubtitle: 'Appembly · Idea-to-Scale',
+          topItems,
+          sections: navSections,
+          activeItemId: activeNavId,
+          onSelectItem: (id) => {
+            setActiveNavId(id);
+            if (id === 'brand-system') setActiveTabId('primitives');
+          },
+          isCollapsed: isSidebarCollapsed,
+          onToggleCollapse: () => setIsSidebarCollapsed((prev) => !prev),
+          onOpenSettings: () =>
+            toast({
+              title: 'Workspace Settings',
+              description: 'Opened Valiscale organization & policy settings.',
+            }),
+        }}
+        breadcrumbProps={{
+          segments: [
+            {
+              id: 'org',
+              label: 'Appembly Core',
+              options: [
+                { id: 'appembly-core', label: 'Appembly Core' },
+                { id: 'appembly-labs', label: 'Appembly Labs' },
+              ],
+            },
+            {
+              id: 'env',
+              label: 'Production',
+              options: [
+                { id: 'prod', label: 'Production' },
+                { id: 'staging', label: 'Staging' },
+              ],
+            },
+            {
+              id: 'project',
+              label: activeProject.name,
+              icon: <AppemblyLogo variant="app-icon" size={18} />,
+              options: [
+                { id: 'proj-finops', label: 'AI FinOps Copilot' },
+                { id: 'proj-wotneed', label: 'Wotneed Commerce Concierge' },
+                { id: 'proj-sauthen', label: 'Sauthen OAuth & Agent Broker' },
+              ],
+              onSelectOption: (id) => setActiveNavId(id),
+            },
+          ],
+          onOpenCommandPalette: () => setIsCmdkOpen(true),
+          envStatus: {
+            label: 'Swarm Wave 2 Active',
+            tone: 'ok',
+            live: true,
+          },
+          avatar: {
+            name: 'Ken M',
+            menuItems: [
+              { id: 'profile', label: 'Operator Profile', shortcut: '⌘U' },
+              { id: 'tokens', label: 'Sauthen STS Leases' },
+              { id: 'signout', label: 'Sign Out', tone: 'danger' },
             ],
           },
-          {
-            id: 'project',
-            label: activeProject.name,
-            icon: <AppemblyLogo variant="app-icon" size={18} />,
-            options: [
-              { id: 'proj-finops', label: 'AI FinOps Copilot' },
-              { id: 'proj-wotneed', label: 'Wotneed Commerce Concierge' },
-              { id: 'proj-sauthen', label: 'Sauthen OAuth & Agent Broker' },
-            ],
-            onSelectOption: (id) => setActiveNavId(id),
-          },
-        ],
-        rightActions: (
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11.5px] font-medium bg-[#4E8067]/15 text-[#4E8067]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#4E8067] animate-ping" />
-              <span>Swarm Wave 2 Active</span>
-            </span>
-          </div>
-        ),
-      }}
-      pageTitle={activeProject.name}
-      pageSubtitle={activeProject.subtitle}
-      tabsToolbar={
-        <SegmentedTabs
-          tabs={[
-            { id: 'overview', label: 'Overview' },
-            { id: 'timeline', label: 'Task Timeline & Swarm', badge: 5 },
-            { id: 'validation', label: 'Concept Scorecard', badge: '88' },
-            { id: 'brand', label: 'Appembly Brand Kit' },
-          ]}
-          activeTabId={activeTabId}
-          onSelectTab={setActiveTabId}
-          dateRangeLabel="Oct 10, 2026 – Oct 18, 2026"
-          filterLabel="Filter"
-        />
-      }
-    >
+        }}
+        pageTitle={activeTabId === 'primitives' ? 'Calm UI Primitives & Tokens' : activeProject.name}
+        pageSubtitle={
+          activeTabId === 'primitives'
+            ? 'Shared @appembly/ui design system foundations, overlays, and motion primitives.'
+            : activeProject.subtitle
+        }
+        tabsToolbar={
+          <SegmentedTabs
+            tabs={[
+              { id: 'overview', label: 'Overview' },
+              { id: 'primitives', label: 'Primitives & Motion', badge: 'New' },
+              { id: 'timeline', label: 'Task Timeline & Swarm', badge: 5 },
+              { id: 'brand', label: 'Appembly Brand Kit' },
+            ]}
+            activeTabId={activeTabId}
+            onSelectTab={setActiveTabId}
+            dateRangeLabel="Oct 10, 2026 – Oct 18, 2026"
+            filterLabel="Filter"
+          />
+        }
+      >
       {/* Top KPI Summary Card (matches "Performance Summary" in reference design) */}
-      <KpiSummaryCard
-        title="Performance &amp; Validation Summary"
-        subtitle="Real-time concept viability, Swarmteam task velocity, and Runctor evaluation gate metrics."
-        metrics={activeProject.kpis}
-      />
+      {activeTabId !== 'primitives' && (
+        <KpiSummaryCard
+          title="Performance &amp; Validation Summary"
+          subtitle="Real-time concept viability, Swarmteam task velocity, and Runctor evaluation gate metrics."
+          metrics={activeProject.kpis}
+        />
+      )}
 
       {/* Tab-Specific Primary Content + Always-Accessible Timeline & Trajectory Chart */}
-      {activeTabId === 'brand' ? (
+      {activeTabId === 'primitives' ? (
+        <PrimitivesShowcaseSection />
+      ) : activeTabId === 'brand' ? (
         <section className="rounded-2xl bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] p-6 shadow-2xs space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -573,6 +611,12 @@ export const ValiscalePreview: React.FC = () => {
           />
         </>
       )}
-    </AppemblyAppShell>
+      </AppemblyAppShell>
+      <CommandPalette
+        open={isCmdkOpen}
+        onClose={() => setIsCmdkOpen(false)}
+        items={commandItems}
+      />
+    </>
   );
 };

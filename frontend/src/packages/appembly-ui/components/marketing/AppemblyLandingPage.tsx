@@ -27,6 +27,7 @@ import { AdapptyIcon } from '../brand/AdapptyIcon';
 import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
 import { SauthenIcon } from '../brand/SauthenIcon';
+import { useCountUp, useReducedMotion } from '../../motion';
 import './landing.css';
 
 export interface AppemblyLandingPageProps {
@@ -399,18 +400,7 @@ const NAV_LINKS = [
 /*                                Motion hooks                                */
 /* -------------------------------------------------------------------------- */
 
-function usePrefersReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(mq.matches);
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, []);
-  return reduced;
-}
+const usePrefersReducedMotion = useReducedMotion;
 
 /** Fires once when the element first enters (or is about to enter) the viewport. */
 function useInView<T extends Element>(threshold = 0.02, rootMargin = '0px 0px 80px 0px') {
@@ -459,26 +449,7 @@ const Reveal: React.FC<{
 
 const CountUp: React.FC<{ value: number }> = ({ value }) => {
   const [ref, inView] = useInView<HTMLSpanElement>(0.4);
-  const reduced = usePrefersReducedMotion();
-  const [display, setDisplay] = useState(0);
-
-  useEffect(() => {
-    if (!inView) return;
-    if (reduced) {
-      setDisplay(value);
-      return;
-    }
-    let raf = 0;
-    const duration = 1200;
-    const start = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / duration);
-      setDisplay(Math.round(value * (1 - Math.pow(1 - t, 4))));
-      if (t < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [inView, reduced, value]);
+  const display = useCountUp(value, { duration: 1200, enabled: inView });
 
   return (
     <span ref={ref} className="tabular-nums">
@@ -976,7 +947,7 @@ const Hero: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAccess })
             <button
               type="button"
               onClick={() => onRequestAccess(undefined, undefined, 'assemble')}
-              className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] shadow-[0_8px_24px_-8px_rgba(78,128,103,0.6)] transition-all cursor-pointer"
+              className="group inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl text-[14.5px] font-semibold bg-[var(--ui-accent)] text-[#F6F7F5] hover:bg-[var(--appembly-sage-hover)] shadow-[0_8px_24px_-8px_rgba(78,128,103,0.6)] transition-colors cursor-pointer"
             >
               Assemble with us
               <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
@@ -1271,7 +1242,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                 return (
                   <div
                     key={item.id}
-                    className={`rounded-2xl border p-4 sm:p-5 transition-all duration-300 relative overflow-hidden ${
+                    className={`rounded-2xl border p-4 sm:p-5 transition-colors duration-300 relative overflow-hidden ${
                       isActive
                         ? 'bg-[var(--ui-bg-surface)] border-[var(--ui-border-strong)] shadow-[0_12px_40px_-20px_rgba(17,22,24,0.35)]'
                         : 'bg-[var(--ui-bg-surface)]/40 lg:bg-transparent border-[var(--ui-border)] lg:border-transparent hover:bg-[var(--ui-bg-surface)]/60'

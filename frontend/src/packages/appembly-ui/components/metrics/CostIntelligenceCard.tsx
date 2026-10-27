@@ -230,22 +230,22 @@ export const CostIntelligenceCard: React.FC<CostIntelligenceCardProps> = ({
         <div className="h-2.5 w-full rounded-full bg-[var(--ui-bg-subtle,var(--color-darker,#21252B))] overflow-hidden flex gap-0.5 p-0.5 border border-[var(--ui-border,var(--color-border-subtle,#31363F))]">
           <div
             style={{ width: `${Math.max(4, cachedPct)}%` }}
-            className="h-full bg-[#98C379] rounded-l-full transition-all"
+            className="h-full bg-[#98C379] rounded-l-full transition-[width]"
             title={`Cached Context: ${tokens.cached.toLocaleString()} tokens (${cachedPct}%)`}
           />
           <div
             style={{ width: `${Math.max(4, promptPct)}%` }}
-            className="h-full bg-blue-500 transition-all"
+            className="h-full bg-blue-500 transition-[width]"
             title={`Uncached Prompt Input: ${tokens.prompt.toLocaleString()} tokens (${promptPct}%)`}
           />
           <div
             style={{ width: `${Math.max(3, reasoningPct)}%` }}
-            className="h-full bg-[#C678DD] transition-all"
+            className="h-full bg-[#C678DD] transition-[width]"
             title={`Reasoning / CoT: ${tokens.reasoning.toLocaleString()} tokens (${reasoningPct}%)`}
           />
           <div
             style={{ width: `${Math.max(4, completionPct)}%` }}
-            className="h-full bg-[#E5C07B] rounded-r-full transition-all"
+            className="h-full bg-[#E5C07B] rounded-r-full transition-[width]"
             title={`Completion Output: ${tokens.completion.toLocaleString()} tokens (${completionPct}%)`}
           />
         </div>

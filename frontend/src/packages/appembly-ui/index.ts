@@ -1,4 +1,6 @@
 export * from './types';
+export * from './motion';
+export * from './components/primitives';
 export * from './context/ThemeContext';
 export * from './components/brand/AppemblyLogo';
 export * from './components/brand/AdapptyIcon';
@@ -17,7 +19,3 @@ export * from './components/swarm/ProjectTaskTimeline';
 export * from './components/marketing/AppemblyLandingPage';
 export * from './components/chat/EmblyChat';
 export * from './components/workbench/AppemblyWorkbench';
-
-
-
-

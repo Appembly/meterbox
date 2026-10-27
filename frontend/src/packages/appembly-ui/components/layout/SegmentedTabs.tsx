@@ -41,7 +41,7 @@ export const SegmentedTabs: React.FC<SegmentedTabsProps> = ({
               )}
               <button
                 onClick={() => onSelectTab(tab.id)}
-                className={`px-4 py-1.5 rounded-lg text-[13px] transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-4 py-1.5 rounded-lg text-[13px] transition-colors cursor-pointer flex items-center gap-1.5 ${
                   isActive
                     ? 'bg-[var(--ui-bg-surface)] text-[var(--ui-text-primary)] font-semibold shadow-xs border border-[var(--ui-border)]/80'
                     : 'text-[var(--ui-text-secondary)] hover:text-[var(--ui-text-primary)] font-normal'
