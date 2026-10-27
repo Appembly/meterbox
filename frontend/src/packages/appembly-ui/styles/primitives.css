@@ -1370,3 +1370,12 @@
   color: var(--ui-text-secondary, #525956);
 }
 
+/* Crisp ink (#080a09) for .text-[var(--ui-text-secondary)] in light mode */
+.text-\[var\(--ui-text-secondary\)\] {
+  color: #080a09;
+}
+[data-theme="dark"] .text-\[var\(--ui-text-secondary\)\],
+html.dark-theme .text-\[var\(--ui-text-secondary\)\] {
+  color: var(--ui-text-secondary);
+}
+

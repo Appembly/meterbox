@@ -62,6 +62,8 @@ export interface WorkbenchMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
+  createdAt?: string;
+  updatedAt?: string;
   personaId?: string;
   personaLabel?: string;
   modelId?: string;
@@ -1473,9 +1475,89 @@ function getVerbDotColor(verb: string): string {
   return 'var(--ui-text-muted)';
 }
 
+function parseTurnDate(raw?: string, idFallback?: string): Date | null {
+  if (raw) {
+    const trimmed = raw.trim();
+    if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed) || /^\d{4}-\d{2}-\d{2}\s/.test(trimmed)) {
+      const parsed = new Date(trimmed);
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
+  if (idFallback) {
+    const m = String(idFallback).match(/(?:^|_)(1[6-9]\d{11}|2\d{12})(?:$|_)/);
+    if (m) {
+      const parsed = new Date(Number(m[1]));
+      if (!Number.isNaN(parsed.getTime())) return parsed;
+    }
+  }
+  return null;
+}
+
+function formatTurnDatetime(msg: WorkbenchMessage): { display: string; tooltip: string } {
+  const updatedDate = parseTurnDate(msg.updatedAt || msg.timestamp, msg.id);
+  const createdDate = parseTurnDate(msg.createdAt, msg.id) || updatedDate;
+  const dt = updatedDate || createdDate;
+  if (!dt) {
+    const raw = (msg.timestamp || '').trim();
+    return { display: raw, tooltip: raw };
+  }
+
+  const now = new Date();
+  const diffSec = Math.max(0, Math.floor((now.getTime() - dt.getTime()) / 1000));
+  const timeStr = dt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const isSameDay =
+    dt.getFullYear() === now.getFullYear() &&
+    dt.getMonth() === now.getMonth() &&
+    dt.getDate() === now.getDate();
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday =
+    dt.getFullYear() === yesterday.getFullYear() &&
+    dt.getMonth() === yesterday.getMonth() &&
+    dt.getDate() === yesterday.getDate();
+
+  let display: string;
+  if (isSameDay) {
+    if (diffSec < 60) {
+      display = `Just now · ${timeStr}`;
+    } else if (diffSec < 3600) {
+      display = `${Math.floor(diffSec / 60)}m ago · ${timeStr}`;
+    } else {
+      display = `Today, ${timeStr}`;
+    }
+  } else if (isYesterday) {
+    display = `Yesterday, ${timeStr}`;
+  } else {
+    const dateStr = dt.toLocaleDateString([], {
+      month: 'short',
+      day: 'numeric',
+      ...(dt.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+    });
+    display = `${dateStr}, ${timeStr}`;
+  }
+
+  const fullUpdated = dt.toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'medium',
+  });
+  const wasEdited =
+    createdDate &&
+    updatedDate &&
+    Math.abs(updatedDate.getTime() - createdDate.getTime()) > 2000;
+  const tooltip = wasEdited
+    ? `Last updated: ${fullUpdated} (Created: ${createdDate.toLocaleString([], {
+        dateStyle: 'medium',
+        timeStyle: 'medium',
+      })})`
+    : `Created: ${fullUpdated}`;
+
+  return { display, tooltip };
+}
+
 export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   preset = 'appembly_dash',
-  accentColor = '#4E8067',
+  accentColor = 'var(--ui-accent)',
   sessionTitle = 'Interactive Assembly Session',
   sessionStatus = 'AI Gateway · Zero-Trust Guardrails Active',
   messages,
@@ -1975,6 +2057,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                     .reverse()
                     .find((m) => m.role === 'user');
 
+                  const turnDatetime = !isTurnStreaming ? formatTurnDatetime(msg) : null;
+
                   return (
                     <div
                       key={msg.id}
@@ -2004,9 +2088,12 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                               {msg.modelLabel}
                             </span>
                           )}
-                          {!isTurnStreaming && msg.timestamp && (
-                            <span className="text-[11px] text-[var(--ui-text-muted)]">
-                              {msg.timestamp}
+                          {!isTurnStreaming && turnDatetime?.display && (
+                            <span
+                              className="text-[11px] text-[var(--ui-text-muted)]"
+                              title={turnDatetime.tooltip}
+                            >
+                              {turnDatetime.display}
                             </span>
                           )}
                         </div>
