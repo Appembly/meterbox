@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   Building2,
@@ -110,6 +110,21 @@ const DEFAULT_SAUTHEN_API =
   window.location.hostname !== '127.0.0.1'
     ? 'https://auth.appembly.com'
     : 'http://localhost:6021';
+
+export function resolveSuiteAppUrl(appId: 'sauthen' | 'cyclode' | 'meterbox'): string {
+  const isProd =
+    typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+  switch (appId) {
+    case 'sauthen':
+      return isProd ? 'https://auth.appembly.com' : 'http://localhost:6020';
+    case 'cyclode':
+      return isProd ? 'https://cyclode.appembly.com' : 'http://localhost:6013';
+    case 'meterbox':
+      return isProd ? 'https://meter.appembly.com' : 'http://localhost:6070';
+  }
+}
 
 export const SAUTHEN_BRAND_PRESETS: Record<SauthenPresetApp, SauthenBrandConfig> = {
   cyclode: {
@@ -330,32 +345,125 @@ export function saveSauthenSession(payload: SauthenAuthPayload) {
   }
 }
 
-function isSauthenJwtExpired(rawToken?: string, graceSeconds = 86400): boolean {
-  if (!rawToken || typeof rawToken !== 'string') return true;
+let consumedUrlOAuthPayload: SauthenAuthPayload | null = null;
+
+function parseSauthenJwtClaims(rawToken?: string): Record<string, any> | null {
+  if (!rawToken || typeof rawToken !== 'string') return null;
   const clean = rawToken.trim().replace(/^st_(sess|agt)_/, '');
   const parts = clean.split('.');
-  if (parts.length !== 3) return true;
+  if (parts.length !== 3) return null;
   try {
     const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
-    const payload = JSON.parse(atob(padded)) as { exp?: number };
-    if (typeof payload.exp === 'number' && payload.exp > 0) {
-      return Math.floor(Date.now() / 1000) >= payload.exp + graceSeconds;
-    }
-    return false;
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+    const jsonStr = typeof TextDecoder !== 'undefined' ? new TextDecoder().decode(bytes) : binary;
+    return JSON.parse(jsonStr) as Record<string, any>;
   } catch {
-    return true;
+    return null;
   }
+}
+
+function isSauthenJwtExpired(rawToken?: string, graceSeconds = 86400): boolean {
+  const payload = parseSauthenJwtClaims(rawToken);
+  if (!payload) return true;
+  if (typeof payload.exp === 'number' && payload.exp > 0) {
+    return Math.floor(Date.now() / 1000) >= payload.exp + graceSeconds;
+  }
+  return false;
+}
+
+export function consumeUrlOAuthSession(): SauthenAuthPayload | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    if (window.location.search) {
+      const sp = new URLSearchParams(window.location.search);
+      const rawUrlToken = (sp.get('sauthen_token') || '').trim();
+      if (rawUrlToken && !isSauthenJwtExpired(rawUrlToken, 86400)) {
+        const rawUrlNs = (sp.get('sauthen_ns') || '').trim();
+        const rawOrgSlug = (sp.get('sauthen_org_slug') || '').trim();
+        const rawOrgName = (sp.get('sauthen_org_name') || '').trim();
+        const claims = parseSauthenJwtClaims(rawUrlToken) || {};
+        const ns = rawUrlNs || (typeof claims.om_ns === 'string' && claims.om_ns) || 'ns_live_appembly';
+        const orgId = (typeof claims.org_id === 'string' && claims.org_id) || 'org_appembly';
+        const inferredSlug =
+          rawOrgSlug ||
+          ns.replace(/^ns_(live|test)_/, '') ||
+          orgId.replace(/^org_/, '').replace(/_/g, '-') ||
+          'appembly';
+        const displayName = (typeof claims.name === 'string' && claims.name) || 'Authenticated User';
+        const email = (typeof claims.email === 'string' && claims.email) || '';
+        const userId = (typeof claims.sub === 'string' && claims.sub) || 'usr_oauth';
+        const roles = Array.isArray(claims.roles) ? claims.roles : ['org:owner'];
+        const orgIds = Array.isArray(claims.org_ids) ? claims.org_ids : [orgId];
+        const appClient = (typeof claims.aud === 'string' && claims.aud) || 'cyclode';
+        const sessId = (typeof claims.jti === 'string' && claims.jti) || 'sess_oauth';
+
+        const payload: SauthenAuthPayload = {
+          user: {
+            id: userId,
+            email,
+            display_name: displayName,
+            title: 'Founder & Workspace Owner',
+            role: roles[0] || 'org:owner',
+            org_ids: orgIds,
+            passkey_registered: false,
+            mfa_enabled: false,
+          },
+          organization: {
+            id: orgId,
+            name: rawOrgName || `${displayName}'s Workspace`,
+            slug: inferredSlug,
+            plan_tier: 'pro',
+            meterbox_live_ns: ns,
+          },
+          namespace: ns,
+          access_token: rawUrlToken,
+          session: {
+            id: sessId,
+            token_preview: `${rawUrlToken.slice(0, 18)}...${rawUrlToken.slice(-6)}`,
+            auth_method: 'github_oauth',
+            app_client: appClient,
+          },
+        };
+
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem('sth.auth.signed_out');
+        }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        consumedUrlOAuthPayload = payload;
+
+        sp.delete('sauthen_token');
+        sp.delete('sauthen_ns');
+        sp.delete('sauthen_org_slug');
+        sp.delete('sauthen_org_name');
+        sp.delete('sauthen_error');
+        const nextSearch = sp.toString();
+        const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', nextUrl);
+        window.dispatchEvent(new CustomEvent('sauthen-auth-change', { detail: payload }));
+        return payload;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return consumedUrlOAuthPayload;
+}
+
+if (typeof window !== 'undefined') {
+  consumeUrlOAuthSession();
 }
 
 export function loadSauthenSession(): SauthenAuthPayload | null {
   try {
+    const urlPayload = consumeUrlOAuthSession();
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) return urlPayload;
     const parsed = JSON.parse(raw) as SauthenAuthPayload;
     if (isSauthenJwtExpired(parsed?.access_token, 86400)) {
       localStorage.removeItem(STORAGE_KEY);
-      return null;
+      return urlPayload;
     }
     return parsed;
   } catch {
@@ -365,6 +473,7 @@ export function loadSauthenSession(): SauthenAuthPayload | null {
 
 export function clearSauthenSession(notifyServer = true, apiUrl = DEFAULT_SAUTHEN_API) {
   try {
+    consumedUrlOAuthPayload = null;
     const stored = loadSauthenSession();
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem('sth.auth.signed_out', '1');
@@ -405,13 +514,15 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
 
   const syncWithBackend = useCallback(async () => {
     try {
+      const urlPayload = consumeUrlOAuthSession();
       const stored = loadSauthenSession();
-      const ns = namespace || stored?.namespace || 'ns_live_appembly';
+      const activeToken = urlPayload?.access_token || stored?.access_token || '';
+      const ns = urlPayload?.namespace || namespace || stored?.namespace || 'ns_live_appembly';
       const appQuery = appClient ? `?app_client=${encodeURIComponent(appClient)}` : '';
-      if (stored?.access_token) {
+      if (activeToken) {
         const headers: Record<string, string> = {
           'X-OpenMeter-Namespace': ns,
-          Authorization: `Bearer ${stored.access_token}`,
+          Authorization: `Bearer ${activeToken}`,
           ...(appClient ? { 'X-Sauthen-App': appClient } : {}),
         };
         const res = await fetch(`${apiUrl}/api/v1/auth/me${appQuery}`, {
@@ -432,20 +543,16 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
           setOrgs(data.organizations);
         }
         if (data.user && data.organization) {
-          const freshToken = data.access_token || data.session?.token_jwt || stored.access_token || '';
+          const freshToken = data.access_token || data.session?.token_jwt || activeToken;
           const hydrated: SauthenAuthPayload = {
-            ...stored,
+            ...(stored || {}),
             user: data.user,
             organization: data.organization,
-            namespace: data.namespace || stored.namespace || ns,
+            namespace: data.namespace || stored?.namespace || ns,
             access_token: freshToken,
-            session: data.session || stored.session,
+            session: data.session || stored?.session,
           };
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
-          } catch {
-            /* ignore storage quota error */
-          }
+          saveSauthenSession(hydrated);
           setSession(hydrated);
         }
       } else {
@@ -585,6 +692,7 @@ export interface SauthenAuthCardProps {
   showAppSwitcher?: boolean;
   allowBrandSwitch?: boolean;
   showDemoAccounts?: boolean;
+  skipSuccessScreen?: boolean;
   onSuccess?: (payload: SauthenAuthPayload) => void;
   onAuthenticated?: (payload: SauthenAuthPayload) => void;
   onCancel?: () => void;
@@ -611,6 +719,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
   showAppSwitcher = false,
   allowBrandSwitch = false,
   showDemoAccounts = true,
+  skipSuccessScreen = false,
   onSuccess,
   onAuthenticated,
   onCancel,
@@ -635,7 +744,64 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
   const [samlDomain, setSamlDomain] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [inlinePrompt, setInlinePrompt] = useState<string | null>(null);
+  const [magicLinkSentTo, setMagicLinkSentTo] = useState<string | null>(null);
   const [mintedResult, setMintedResult] = useState<SauthenAuthPayload | null>(null);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.search) {
+      const sp = new URLSearchParams(window.location.search);
+      const oauthErr = sp.get('sauthen_error');
+      if (oauthErr) {
+        setError(oauthErr);
+        sp.delete('sauthen_error');
+        const nextSearch = sp.toString();
+        const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', nextUrl);
+        return;
+      }
+    }
+    const oauthPayload = consumeUrlOAuthSession();
+    if (oauthPayload) {
+      consumedUrlOAuthPayload = null;
+      setBusy(true);
+      const appQuery = cfg.appId ? `?app_client=${encodeURIComponent(cfg.appId)}` : '';
+      fetch(`${apiUrl}/api/v1/auth/me${appQuery}`, {
+        headers: {
+          'X-OpenMeter-Namespace': oauthPayload.namespace || namespace,
+          Authorization: `Bearer ${oauthPayload.access_token}`,
+          ...(cfg.appId ? { 'X-Sauthen-App': cfg.appId } : {}),
+        },
+        credentials: 'include',
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.user && data?.organization) {
+              const hydrated: SauthenAuthPayload = {
+                ...oauthPayload,
+                user: data.user,
+                organization: data.organization,
+                namespace: data.namespace || oauthPayload.namespace,
+                access_token: data.access_token || oauthPayload.access_token,
+                session: data.session || oauthPayload.session,
+              };
+              completeAuth(hydrated);
+              return;
+            }
+          }
+          completeAuth(oauthPayload);
+        })
+        .catch(() => {
+          completeAuth(oauthPayload);
+        })
+        .finally(() => {
+          setBusy(false);
+        });
+    }
+  }, []);
 
   const handleOrgNameChange = (val: string) => {
     setOrgName(val);
@@ -650,7 +816,9 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
 
   const completeAuth = (payload: SauthenAuthPayload) => {
     saveSauthenSession(payload);
-    setMintedResult(payload);
+    if (!skipSuccessScreen || redirectUri) {
+      setMintedResult(payload);
+    }
     if (onSuccess) {
       onSuccess(payload);
     }
@@ -659,16 +827,54 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
     }
   };
 
-  const handleSignIn = async (method: string, overrideEmail?: string, overrideNamespace?: string) => {
+  const focusEmailWithPrompt = (msg: string) => {
+    setError(null);
+    setInlinePrompt(msg);
+    setTimeout(() => {
+      emailInputRef.current?.focus();
+    }, 20);
+  };
+
+  const handleGitHubOAuth = () => {
+    setError(null);
+    setInlinePrompt(null);
     setBusy(true);
+    const returnTo =
+      redirectUri ||
+      (typeof window !== 'undefined' ? window.location.href : cfg.defaultRedirectUrl || 'http://localhost:6013');
+    const targetUrl = `${apiUrl.replace(/\/$/, '')}/api/v1/auth/github/start?app_client=${encodeURIComponent(
+      cfg.appId,
+    )}&namespace=${encodeURIComponent(namespace)}&return_to=${encodeURIComponent(returnTo)}`;
+    if (typeof window !== 'undefined') {
+      window.location.assign(targetUrl);
+    }
+  };
+
+  const handleMagicLinkRequest = () => {
+    setError(null);
+    const targetEmail = email.trim();
+    if (!targetEmail) {
+      focusEmailWithPrompt('Enter your work email below to receive a sign-in link.');
+      return;
+    }
+    setInlinePrompt(null);
+    setMagicLinkSentTo(targetEmail);
+  };
+
+  const handleSignIn = async (method: string, overrideEmail?: string, overrideNamespace?: string) => {
     setError(null);
     const targetEmail = (overrideEmail || email).trim();
     const targetNamespace = overrideNamespace || namespace;
     if (!targetEmail) {
-      setError('Enter your work email.');
-      setBusy(false);
+      if (method === 'passkey') {
+        focusEmailWithPrompt('Enter your work email below, then click Continue with passkey.');
+      } else {
+        focusEmailWithPrompt('Enter your work email to continue.');
+      }
       return;
     }
+    setInlinePrompt(null);
+    setBusy(true);
     try {
       const res = await fetch(`${apiUrl}/api/v1/auth/signin`, {
         method: 'POST',
@@ -749,6 +955,8 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
   const switchMode = (next: SauthenAuthMode) => {
     setMode(next);
     setError(null);
+    setInlinePrompt(null);
+    setMagicLinkSentTo(null);
     setMintedResult(null);
   };
 
@@ -794,15 +1002,12 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
             </div>
             <h2 className="sag-h">You&apos;re in, {firstName}</h2>
             <p className="sag-sub">
-              {mintedResult.organization?.name} · <span className="sag-mono">{mintedResult.namespace}</span>
+              Signed in to <strong>{mintedResult.organization?.name || cfg.appName}</strong>
             </p>
-            <div className="sag-token">
-              <span className="sag-token-tag">st_sess</span>
-              <code className="sag-mono">{mintedResult.access_token.slice(0, 34)}…</code>
-            </div>
             {redirectUri ? (
               <a
                 className="sag-btn sag-btn-primary"
+                style={{ marginTop: 18 }}
                 href={`${redirectUri}${redirectUri.includes('?') ? '&' : '?'}token=${encodeURIComponent(
                   mintedResult.access_token,
                 )}&ns=${encodeURIComponent(mintedResult.namespace)}`}
@@ -811,10 +1016,30 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                 <ArrowRight size={15} />
               </a>
             ) : (
-              <div className="sag-redirecting" style={{ display: 'flex', justifyContent: 'center', padding: '14px 0' }}>
-                <AppemblyLogo variant="mark" size={28} strokeColor={cfg.accent} animated speed="loader" />
+              <div className="sag-redirecting" style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 8px' }}>
+                <AppemblyLogo variant="mark" size={32} strokeColor={cfg.accent} animated speed="loader" />
               </div>
             )}
+          </div>
+        ) : magicLinkSentTo ? (
+          /* ---------------- Magic Link Sent ---------------- */
+          <div className="sag-success sag-fade">
+            <div className="sag-success-icon">
+              <Mail size={20} strokeWidth={2.2} />
+            </div>
+            <h2 className="sag-h">Check your email</h2>
+            <p className="sag-sub" style={{ marginBottom: 18 }}>
+              We sent a sign-in link to <strong>{magicLinkSentTo}</strong>.
+            </p>
+            <button
+              type="button"
+              className="sag-btn"
+              onClick={() => {
+                setMagicLinkSentTo(null);
+              }}
+            >
+              Back to sign in
+            </button>
           </div>
         ) : mode === 'sso' ? (
           /* ---------------- Enterprise SSO ---------------- */
@@ -897,7 +1122,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                         <button
                           type="button"
                           disabled={busy}
-                          onClick={() => handleSignIn('github_oauth')}
+                          onClick={handleGitHubOAuth}
                           className="sag-btn"
                         >
                           <GitHubMark />
@@ -923,12 +1148,14 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                   <span>or with email</span>
                 </div>
 
+                {inlinePrompt && <div className="sag-prompt">{inlinePrompt}</div>}
+
                 <form
                   className="sag-form"
                   onSubmit={(e) => {
                     e.preventDefault();
                     if (!email.trim()) {
-                      setError('Enter your work email.');
+                      focusEmailWithPrompt('Enter your work email.');
                       return;
                     }
                     handleSignIn('password_pkce');
@@ -939,19 +1166,23 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                     <span className="sag-input-wrap">
                       <Mail size={15} className="sag-input-icon" />
                       <input
+                        ref={emailInputRef}
                         className="sag-input sag-input-iconed"
                         type="email"
                         autoComplete="email"
                         placeholder="you@company.com"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        onChange={(e) => {
+                          setEmail(e.target.value);
+                          if (inlinePrompt) setInlinePrompt(null);
+                        }}
                       />
                     </span>
                   </label>
                   <label className="sag-field">
                     <span className="sag-label">
                       Password
-                      <button type="button" className="sag-link" onClick={() => handleSignIn('magic_link')}>
+                      <button type="button" className="sag-link" onClick={handleMagicLinkRequest}>
                         Email me a link
                       </button>
                     </span>
@@ -986,7 +1217,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                       type="button"
                       disabled={busy}
                       className="sag-demo-btn"
-                      title={`${DEMO_ACCOUNT.email} · Isolated Demo AI workspace (${DEMO_ACCOUNT.namespace})`}
+                      title="Explore an isolated interactive Demo AI workspace"
                       onClick={() => {
                         setEmail(DEMO_ACCOUNT.email);
                         handleSignIn('passkey', DEMO_ACCOUNT.email, DEMO_ACCOUNT.namespace);
@@ -996,8 +1227,8 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                         <Sparkles size={15} />
                         <span>Try interactive demo</span>
                       </span>
-                      <span className="sag-demo-btn-meta sag-mono">
-                        {DEMO_ACCOUNT.orgName} · {DEMO_ACCOUNT.email}
+                      <span className="sag-demo-btn-meta">
+                        {DEMO_ACCOUNT.orgName} workspace
                       </span>
                     </button>
                   </div>
@@ -1038,7 +1269,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                       className="sag-input sag-input-iconed"
                       type="password"
                       autoComplete="new-password"
-                      placeholder="At least 6 characters (or leave blank for passkey-only)"
+                      placeholder="At least 6 characters (or leave blank for passkey)"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
@@ -1051,7 +1282,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                       <span className="sag-toggle-title">
                         <Building2 size={14} /> Create an organization
                       </span>
-                      <span className="sag-toggle-sub">Isolated live &amp; test workspaces for your team</span>
+                      <span className="sag-toggle-sub">Includes isolated Production &amp; Sandbox environments</span>
                     </span>
                     <input
                       type="checkbox"
@@ -1073,7 +1304,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                         />
                       </label>
                       <div className="sag-slug">
-                        <span className="sag-slug-prefix sag-mono">{cfg.appId}.appembly.dev/</span>
+                        <span className="sag-slug-prefix sag-mono">appembly.com/</span>
                         <input
                           className="sag-slug-input sag-mono"
                           value={orgSlug}
@@ -1083,24 +1314,33 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
                           }
                         />
                       </div>
-                      <div className="sag-ns-row">
-                        <span className="sag-ns sag-mono" data-kind="live">
-                          ns_live_{orgSlug || 'slug'}
-                        </span>
-                        <span className="sag-ns sag-mono" data-kind="test">
-                          ns_test_{orgSlug || 'slug'}
-                        </span>
-                      </div>
                     </div>
                   )}
                 </div>
 
                 <button type="submit" disabled={busy} className="sag-btn sag-btn-primary">
-                  {busy ? <span className="sag-spinner" /> : <Fingerprint size={16} />}
-                  {busy ? 'Setting up your workspace…' : 'Create account with passkey'}
+                  {busy ? (
+                    <span className="sag-spinner" />
+                  ) : password.trim() ? null : (
+                    <Fingerprint size={16} />
+                  )}
+                  {busy
+                    ? 'Setting up your workspace…'
+                    : password.trim()
+                      ? 'Create account'
+                      : 'Create account with passkey'}
+                  {!busy && password.trim() ? <ArrowRight size={15} /> : null}
                 </button>
                 <p className="sag-legal">
-                  By continuing you agree to the Appembly <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.
+                  By continuing you agree to the Appembly{' '}
+                  <a href="https://www.appembly.com/terms" target="_blank" rel="noopener noreferrer">
+                    Terms
+                  </a>{' '}
+                  and{' '}
+                  <a href="https://www.appembly.com/privacy" target="_blank" rel="noopener noreferrer">
+                    Privacy Policy
+                  </a>
+                  .
                 </p>
               </form>
             )}
@@ -1114,7 +1354,7 @@ export const SauthenAuthCard: React.FC<SauthenAuthCardProps> = ({
         <span className="sag-secured">
           <SauthenIcon size={12} /> Secured by Sauthen
         </span>
-        <span className="sag-mono">{clientId || `st_cli_${cfg.appId}`}</span>
+        <span>{clientId ? <code className="sag-mono">{clientId}</code> : 'One Appembly account'}</span>
       </div>
     </div>
   );
@@ -1455,7 +1695,7 @@ export const SauthenUserBadge: React.FC<SauthenUserBadgeProps> = ({
                   <div className="grid grid-cols-2 gap-1">
                     {cfg.appId !== 'sauthen' && (
                       <a
-                        href="http://localhost:6020"
+                        href={resolveSuiteAppUrl('sauthen')}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ borderColor: cfg.border, color: cfg.text }}
@@ -1467,7 +1707,7 @@ export const SauthenUserBadge: React.FC<SauthenUserBadgeProps> = ({
                     )}
                     {cfg.appId !== 'cyclode' && (
                       <a
-                        href="http://localhost:6013"
+                        href={resolveSuiteAppUrl('cyclode')}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ borderColor: cfg.border, color: cfg.text }}
@@ -1479,7 +1719,7 @@ export const SauthenUserBadge: React.FC<SauthenUserBadgeProps> = ({
                     )}
                     {cfg.appId !== 'meterbox' && (
                       <a
-                        href="http://localhost:6070"
+                        href={resolveSuiteAppUrl('meterbox')}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{ borderColor: cfg.border, color: cfg.text }}
@@ -1832,19 +2072,20 @@ const SAG_CSS = `
 .sag-btn:active{transform:translateY(1px)}
 .sag-btn:disabled{opacity:.6;cursor:progress}
 .sag-btn:focus-visible,.sag-seg button:focus-visible,.sag-chip:focus-visible{outline:2px solid var(--sag-accent);outline-offset:2px}
-.sag-btn-primary{background:var(--sag-accent);border-color:transparent;color:var(--sag-on-accent);box-shadow:0 10px 24px -14px var(--sag-accent),inset 0 1px 0 rgba(255,255,255,.16)}
-.sag-btn-primary:hover{filter:brightness(1.07);border-color:transparent}
-.sag-btn-passkey{height:44px;background:var(--sag-accent-soft);border-color:color-mix(in srgb,var(--sag-accent) 42%,transparent);color:var(--sag-text)}
+.sag-btn-primary{background:var(--sag-accent);border-color:transparent;color:var(--sag-on-accent);box-shadow:0 4px 14px -6px color-mix(in srgb,var(--sag-accent) 45%,transparent),inset 0 1px 0 rgba(255,255,255,.16)}
+.sag-btn-primary:hover{filter:brightness(1.06);border-color:transparent}
+.sag-btn-passkey{height:42px;background:var(--sag-input);border-color:var(--sag-border);color:var(--sag-text)}
 .sag-btn-passkey svg{color:var(--sag-accent)}
-.sag-btn-passkey:hover{border-color:var(--sag-accent)}
+.sag-btn-passkey:hover{border-color:var(--sag-border-strong)}
 .sag-divider{display:flex;align-items:center;gap:12px;margin:20px 0 16px;color:var(--sag-faint);font-size:11.5px}
 .sag-divider:before,.sag-divider:after{content:'';flex:1;height:1px;background:var(--sag-border)}
+.sag-prompt{margin:0 0 12px;padding:9px 12px;border-radius:10px;border:1px solid color-mix(in srgb,var(--sag-accent) 35%,var(--sag-border));background:var(--sag-accent-soft);color:var(--sag-text);font-size:12.5px}
 .sag-form{display:flex;flex-direction:column;gap:14px;margin-top:20px}
-.sag-divider + .sag-form{margin-top:0}
+.sag-divider + .sag-form,.sag-prompt + .sag-form{margin-top:0}
 .sag-field{display:flex;flex-direction:column;gap:6px;min-width:0}
 .sag-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--sag-text)}
-.sag-link{border:0;background:none;padding:0;font:inherit;font-size:12px;font-weight:500;color:var(--sag-accent);cursor:pointer}
-.sag-link:hover{text-decoration:underline}
+.sag-link{border:0;background:none;padding:0;font:inherit;font-size:12px;font-weight:500;color:var(--sag-muted);cursor:pointer;transition:color .15s}
+.sag-link:hover{color:var(--sag-text);text-decoration:underline}
 .sag-input-wrap{position:relative;display:block}
 .sag-input-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--sag-faint);pointer-events:none}
 .sag-input{width:100%;height:42px;padding:0 12px;border-radius:10px;border:1px solid var(--sag-border);background:var(--sag-input);color:var(--sag-text);font:inherit;font-size:13.5px;outline:none;transition:border-color .15s,box-shadow .15s,background .15s}
@@ -1854,9 +2095,9 @@ const SAG_CSS = `
 .sag-input:focus{border-color:var(--sag-accent);box-shadow:0 0 0 3px var(--sag-accent-soft);background:var(--sag-card)}
 .sag-sso-link{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:14px;border:0;background:none;color:var(--sag-muted);font:inherit;font-size:12.5px;font-weight:500;cursor:pointer}
 .sag-sso-link:hover{color:var(--sag-text)}
-.sag-demo{margin-top:18px;padding-top:16px;border-top:1px dashed var(--sag-border)}
-.sag-demo-btn{width:100%;min-height:42px;padding:8px 12px;border-radius:11px;border:1px solid color-mix(in srgb,var(--sag-accent) 38%,var(--sag-border));background:var(--sag-accent-soft);color:var(--sag-text);font:inherit;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:border-color .15s,filter .15s,transform .06s}
-.sag-demo-btn:hover{border-color:var(--sag-accent);filter:brightness(1.05)}
+.sag-demo{margin-top:18px;padding-top:16px;border-top:1px solid var(--sag-border)}
+.sag-demo-btn{width:100%;min-height:40px;padding:8px 12px;border-radius:11px;border:1px solid var(--sag-border);background:var(--sag-input);color:var(--sag-text);font:inherit;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;transition:border-color .15s,background .15s,transform .06s}
+.sag-demo-btn:hover{border-color:var(--sag-border-strong)}
 .sag-demo-btn:active{transform:translateY(1px)}
 .sag-demo-btn:disabled{opacity:.6;cursor:progress}
 .sag-demo-btn-left{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:650}
@@ -2261,13 +2502,36 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
   children,
 }) => {
   const cfg = resolveBrandConfig(brand);
-  const { session, authenticated, refresh } = useSauthenSession(apiUrl, namespace, cfg.appId);
+  const { session, authenticated, loading, refresh } = useSauthenSession(apiUrl, namespace, cfg.appId);
   const [mounted, setMounted] = useState(false);
+  const notifiedUserRef = useRef<string | null>(null);
   useEffect(() => setMounted(true), []);
 
-  // Avoid SSR/localStorage hydration mismatch: render a neutral surface until mounted.
-  if (!mounted) {
-    return <div className="sag-blank" style={{ minHeight: '100vh', background: cfg.surface }} />;
+  useEffect(() => {
+    if (authenticated && session?.user?.id && notifiedUserRef.current !== session.user.id) {
+      notifiedUserRef.current = session.user.id;
+      consumedUrlOAuthPayload = null;
+      onAuthenticated?.(session);
+    } else if (!authenticated) {
+      notifiedUserRef.current = null;
+    }
+  }, [authenticated, session, onAuthenticated]);
+
+  // Avoid SSR/localStorage hydration mismatch & cross-app SSO flash: render the brand loader until session check completes.
+  if (!mounted || (loading && !authenticated)) {
+    return (
+      <div
+        className="sag-blank"
+        style={{
+          minHeight: '100vh',
+          background: cfg.surface,
+          display: 'grid',
+          placeItems: 'center',
+        }}
+      >
+        <AppemblyLogo variant="mark" size={48} strokeColor={cfg.accent} animated speed="loader" />
+      </div>
+    );
   }
   if (authenticated) {
     return <React.Fragment key={session?.user?.id || 'authenticated'}>{children}</React.Fragment>;
@@ -2320,12 +2584,12 @@ export const SauthenAuthGuard: React.FC<SauthenAuthGuardProps> = ({
           initialMode={initialMode}
           apiUrl={apiUrl}
           namespace={namespace}
+          skipSuccessScreen
           onSuccess={(payload) => {
             refresh();
             onAuthenticated?.(payload);
           }}
         />
-        <p className="sag-pane-hint">One Appembly account works across Valiscale, Cyclode, Meterbox and Sauthen.</p>
       </main>
     </div>
   );

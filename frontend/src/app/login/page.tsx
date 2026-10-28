@@ -12,9 +12,10 @@ export default function MeterboxLoginPage() {
       <SauthenAuthCard
         brand="meterbox"
         initialMode="signin"
+        skipSuccessScreen
         onSuccess={(payload) => {
           const slug = payload.organization?.slug || "appembly";
-          setTimeout(() => router.push(`/${slug}/production/overview`), 500);
+          router.push(`/${slug}/production/overview`);
         }}
       />
     </div>
