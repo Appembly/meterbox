@@ -3621,6 +3621,180 @@ func (s *MultiTenantStore) reconcileCustomerTenantsLocked() {
 			)
 			dirty = true
 		}
+
+		// Ensure Valiscale Studio (`ws_valiscale_studio`) has rich Valiscale-scoped events, entitlements, DLQ, and invoice
+		s.ensureSubjectTokenEntitlementLocked(appNS, "ws_valiscale_studio")
+		hasValiscaleRichEvents := false
+		for _, ev := range s.events {
+			if ev.Namespace == appNS && ev.ID == fmt.Sprintf("evt_seed_%s_valiscale_02", appNS) {
+				hasValiscaleRichEvents = true
+				break
+			}
+		}
+		if !hasValiscaleRichEvents {
+			s.events = append(s.events,
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_valiscale_02", appNS),
+					Source:      "urn:appembly:valiscale:validator",
+					Type:        "ai.llm.tokens",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-180 * time.Minute),
+					Data:        map[string]interface{}{"tokens": 48200.0, "model": "claude-3-7-sonnet", "token_type": "input", "persona": "ConceptExplorer", "tool": "valiscale_score_concept"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-180 * time.Minute),
+					StoredAt:    now.Add(-180 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_valiscale_03", appNS),
+					Source:      "urn:appembly:valiscale:assembler",
+					Type:        "ai.llm.tokens",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-110 * time.Minute),
+					Data:        map[string]interface{}{"tokens": 64500.0, "model": "claude-3-7-sonnet", "token_type": "cached", "persona": "AppBuilder", "tool": "valiscale_assemble_blueprint"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-110 * time.Minute),
+					StoredAt:    now.Add(-110 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_valiscale_04", appNS),
+					Source:      "urn:appembly:valiscale:studio",
+					Type:        "ai.llm.tokens",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-45 * time.Minute),
+					Data:        map[string]interface{}{"tokens": 22400.0, "model": "gemini-3.8-flash", "token_type": "output", "persona": "AgentAssembler", "tool": "valiscale_wire_agent"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-45 * time.Minute),
+					StoredAt:    now.Add(-45 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_valiscale_tool_01", appNS),
+					Source:      "urn:appembly:valiscale:validator",
+					Type:        "ai.agent.tool_call",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-95 * time.Minute),
+					Data:        map[string]interface{}{"count": 12.0, "persona": "ConceptExplorer", "tool": "valiscale_score_concept"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-95 * time.Minute),
+					StoredAt:    now.Add(-95 * time.Minute),
+					Lane:        "realtime",
+				},
+				models.CloudEvent{
+					SpecVersion: "1.0",
+					ID:          fmt.Sprintf("evt_seed_%s_valiscale_tool_02", appNS),
+					Source:      "urn:appembly:valiscale:assembler",
+					Type:        "ai.agent.tool_call",
+					Subject:     "ws_valiscale_studio",
+					Time:        now.Add(-30 * time.Minute),
+					Data:        map[string]interface{}{"count": 8.0, "persona": "AppBuilder", "tool": "valiscale_assemble_blueprint"},
+					Namespace:   appNS,
+					IngestedAt:  now.Add(-30 * time.Minute),
+					StoredAt:    now.Add(-30 * time.Minute),
+					Lane:        "realtime",
+				},
+			)
+			dirty = true
+		}
+
+		hasValiscaleDLQ := false
+		for _, d := range s.dlqEvents {
+			if d.OpenMeterNamespace == appNS && strings.Contains(d.EventID, "valiscale") {
+				hasValiscaleDLQ = true
+				break
+			}
+		}
+		if !hasValiscaleDLQ {
+			vDlqID := s.NextID("dlq")
+			s.dlqEvents[vDlqID] = models.DLQEvent{
+				ID:                 vDlqID,
+				OpenMeterNamespace: appNS,
+				EventID:            fmt.Sprintf("evt_malformed_valiscale_%s", appNS),
+				RawPayload: map[string]interface{}{
+					"specversion": "1.0",
+					"id":          fmt.Sprintf("evt_malformed_valiscale_%s", appNS),
+					"source":      "urn:appembly:valiscale:validator",
+					"type":        "ai.llm.tokens",
+					"subject":     "ws_valiscale_studio",
+					"data": map[string]interface{}{
+						"total_tokens": 14200,
+						"model":        "claude-3-7-sonnet",
+						"token_type":   "output",
+						"persona":      "ConceptExplorer",
+						"tool":         "valiscale_score_concept",
+					},
+				},
+				ErrorCode:   "missing_value_property",
+				ErrorReason: "Meter 'llm_tokens_total' requires property $.tokens in event data payload",
+				Status:      "pending",
+				FailedAt:    now.Add(-18 * time.Minute),
+			}
+			dirty = true
+		}
+
+		if appNS == "ns_live_appembly" {
+			hasValiscaleInv := false
+			for _, inv := range s.invoices {
+				if inv.Namespace == appNS && inv.SubjectKey == "ws_valiscale_studio" {
+					hasValiscaleInv = true
+					break
+				}
+			}
+			if !hasValiscaleInv {
+				vInv := models.Invoice{
+					ID:                  s.NextID("inv"),
+					Namespace:           appNS,
+					SubjectKey:          "ws_valiscale_studio",
+					PlanSlug:            "appembly_autonomous_pro",
+					Currency:            "USD",
+					SubtotalCents:       34850,
+					CreditsAppliedCents: 2900,
+					TaxCents:            0,
+					TotalCents:          31950,
+					Status:              "synced_stripe",
+					StripeInvoiceID:     "in_stripe_valiscale_studio_01",
+					LineItems: []models.InvoiceLineItem{
+						{
+							Description:    "Valiscale Venture Studio Pro ($299/mo + Concept Validation & Blueprint Synthesis)",
+							Quantity:       1,
+							IncludedUnits:  0,
+							BillableUnits:  1,
+							UnitPriceCents: 29900,
+							AmountCents:    29900,
+						},
+						{
+							Description:    "Valiscale LLM Token Consumption (llm_tokens_total)",
+							MeterSlug:      "llm_tokens_total",
+							Quantity:       154600,
+							IncludedUnits:  50000,
+							BillableUnits:  104600,
+							UnitPriceCents: 0.039,
+							AmountCents:    4085,
+						},
+						{
+							Description:    "Valiscale App Preview Sandbox Compute (sandbox_compute_seconds)",
+							MeterSlug:      "sandbox_compute_seconds",
+							Quantity:       960,
+							IncludedUnits:  0,
+							BillableUnits:  960,
+							UnitPriceCents: 0.90,
+							AmountCents:    865,
+						},
+					},
+					PeriodStart: periodStart,
+					PeriodEnd:   periodStart.AddDate(0, 1, 0),
+					IssuedAt:    now.Add(-3 * time.Hour),
+					CreatedAt:   now.Add(-3 * time.Hour),
+				}
+				s.invoices[vInv.ID] = vInv
+				dirty = true
+			}
+		}
 	}
 
 	// 2. Purge any previously seeded demo/default entities from customer organizations so they start 100% clean
@@ -3960,4 +4134,443 @@ func (s *MultiTenantStore) ensureNamespaceDefaultKeysLocked(env models.Environme
 	}
 	return changed
 }
+
+// ============================================================================
+// APP-SCOPED FILTERING HELPERS (`?app=<app_id>` / `X-Appembly-App: <app_id>`)
+// ============================================================================
+
+// MatchesAppFilter checks whether a subject key, CloudEvent source, or data["app"] belongs to the requested app slug.
+// When appFilter is empty, all records match (used by the global Meterbox Console on :6070).
+func MatchesAppFilter(appFilter, subjectKey, source string, data map[string]interface{}, metadata map[string]string) bool {
+	app := strings.ToLower(strings.TrimSpace(appFilter))
+	if app == "" || app == "all" || app == "meterbox" {
+		return true
+	}
+	if metadata != nil {
+		if mApp := strings.ToLower(strings.TrimSpace(metadata["app"])); mApp != "" {
+			return mApp == app || strings.Contains(mApp, app)
+		}
+	}
+	if data != nil {
+		if dApp := strings.ToLower(extractMapStr(data, "app", "product")); dApp != "" {
+			return dApp == app || strings.Contains(dApp, app)
+		}
+	}
+	src := strings.ToLower(strings.TrimSpace(source))
+	if strings.Contains(src, app) {
+		return true
+	}
+	subj := strings.ToLower(strings.TrimSpace(subjectKey))
+	if strings.Contains(subj, app) {
+		return true
+	}
+	return false
+}
+
+// QueryMeterForApp computes a meter aggregation filtered to a specific product app when appFilter is non-empty.
+func (s *MultiTenantStore) QueryMeterForApp(ns, slug, subjectFilter, appFilter string, from, to *time.Time, windowOverride ...string) (models.MeterQueryResult, error) {
+	if strings.TrimSpace(appFilter) == "" {
+		return s.QueryMeter(ns, slug, subjectFilter, from, to, windowOverride...)
+	}
+	s.mu.RLock()
+	meter, ok := s.meters[ns+":"+slug]
+	if !ok {
+		s.mu.RUnlock()
+		return models.MeterQueryResult{}, fmt.Errorf("meter %q not found in namespace %q", slug, ns)
+	}
+	filteredEvents := make([]models.CloudEvent, 0, len(s.events))
+	for _, ev := range s.events {
+		if ev.Namespace == ns && MatchesAppFilter(appFilter, ev.Subject, ev.Source, ev.Data, nil) {
+			filteredEvents = append(filteredEvents, ev)
+		}
+	}
+	s.mu.RUnlock()
+
+	return s.chClient.AggregateMeter(meter, filteredEvents, subjectFilter, from, to, windowOverride...), nil
+}
+
+func (s *MultiTenantStore) ListRecentEventsForApp(ns string, limit int, appFilter string) []models.CloudEvent {
+	if strings.TrimSpace(appFilter) == "" {
+		return s.ListRecentEvents(ns, limit)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if limit <= 0 {
+		limit = 50
+	}
+	out := make([]models.CloudEvent, 0)
+	for i := len(s.events) - 1; i >= 0; i-- {
+		ev := s.events[i]
+		if ev.Namespace == ns && MatchesAppFilter(appFilter, ev.Subject, ev.Source, ev.Data, nil) {
+			out = append(out, ev)
+			if len(out) >= limit {
+				break
+			}
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) ListSubjectsForApp(ns, appFilter string) []models.Subject {
+	all := s.ListSubjects(ns)
+	if strings.TrimSpace(appFilter) == "" {
+		return all
+	}
+	out := make([]models.Subject, 0, len(all))
+	for _, sub := range all {
+		if MatchesAppFilter(appFilter, sub.Key, "", nil, sub.Metadata) {
+			out = append(out, sub)
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) ListEntitlementsForApp(ns, subjectFilter, appFilter string) []models.Entitlement {
+	all := s.ListEntitlements(ns, subjectFilter)
+	if strings.TrimSpace(appFilter) == "" {
+		return all
+	}
+	out := make([]models.Entitlement, 0, len(all))
+	for _, ent := range all {
+		if MatchesAppFilter(appFilter, ent.SubjectKey, "", nil, ent.StaticConfig) {
+			out = append(out, ent)
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) ListAllGrantsForApp(ns, subjectFilter, appFilter string) []models.EntitlementGrant {
+	all := s.ListAllGrants(ns, subjectFilter)
+	if strings.TrimSpace(appFilter) == "" {
+		return all
+	}
+	out := make([]models.EntitlementGrant, 0, len(all))
+	for _, g := range all {
+		if MatchesAppFilter(appFilter, g.SubjectKey, "", nil, nil) {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) ListDLQEventsForApp(ns, appFilter string) []models.DLQEvent {
+	all := s.ListDLQEvents(ns)
+	if strings.TrimSpace(appFilter) == "" {
+		return all
+	}
+	out := make([]models.DLQEvent, 0, len(all))
+	for _, d := range all {
+		subj := extractMapStr(d.RawPayload, "subject")
+		src := extractMapStr(d.RawPayload, "source")
+		var innerData map[string]interface{}
+		if rawData, ok := d.RawPayload["data"].(map[string]interface{}); ok {
+			innerData = rawData
+		}
+		if MatchesAppFilter(appFilter, subj, src, innerData, nil) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) ListInvoicesForApp(ns, appFilter string) []models.Invoice {
+	all := s.ListInvoices(ns)
+	if strings.TrimSpace(appFilter) == "" {
+		return all
+	}
+	out := make([]models.Invoice, 0, len(all))
+	for _, inv := range all {
+		if MatchesAppFilter(appFilter, inv.SubjectKey, "", nil, nil) {
+			out = append(out, inv)
+		}
+	}
+	return out
+}
+
+func (s *MultiTenantStore) GetCostIntelligenceForApp(ns, appFilter string) models.CostIntelligenceReport {
+	if strings.TrimSpace(appFilter) == "" {
+		return s.GetCostIntelligence(ns)
+	}
+	s.mu.RLock()
+	eventsCopy := make([]models.CloudEvent, 0)
+	for _, ev := range s.events {
+		if ev.Namespace == ns && (ev.Type == "ai.llm.tokens" || ev.Type == "infra.sandbox.seconds" || ev.Type == "infra.gpu.seconds") {
+			if MatchesAppFilter(appFilter, ev.Subject, ev.Source, ev.Data, nil) {
+				eventsCopy = append(eventsCopy, ev)
+			}
+		}
+	}
+	subjectsMap := make(map[string]models.Subject)
+	for _, sub := range s.subjects {
+		if sub.Namespace == ns && MatchesAppFilter(appFilter, sub.Key, "", nil, sub.Metadata) {
+			subjectsMap[sub.Key] = sub
+		}
+	}
+	hasSubscriptions := false
+	for _, sub := range s.subscriptions {
+		if sub.Namespace == ns && sub.Status == "active" && MatchesAppFilter(appFilter, sub.SubjectKey, "", nil, nil) {
+			hasSubscriptions = true
+			break
+		}
+	}
+	s.mu.RUnlock()
+
+	var totalTokens, inputTokens, cachedTokens, reasoningTokens, outputTokens float64
+	var sandboxSeconds, sandboxCostUSD, sandboxBilledUSD float64
+	var totalCostUSD float64
+
+	type aggBucket struct {
+		tokens         float64
+		sandboxSeconds float64
+		costUSD        float64
+		billedUSD      float64
+		events         int
+	}
+	byModel := make(map[string]*aggBucket)
+	byTool := make(map[string]*aggBucket)
+	byPersona := make(map[string]*aggBucket)
+	bySubject := make(map[string]*aggBucket)
+
+	for _, ev := range eventsCopy {
+		if ev.Type == "infra.sandbox.seconds" || ev.Type == "infra.gpu.seconds" {
+			sec := extractMapFloat(ev.Data, "duration_sec")
+			if sec <= 0 {
+				continue
+			}
+			isGPU := ev.Type == "infra.gpu.seconds"
+			runtimeName := extractMapStr(ev.Data, "runtime", "gpu_class")
+			if runtimeName == "" {
+				if isGPU {
+					runtimeName = "nvidia-h100-80gb"
+				} else {
+					runtimeName = "graviton-c7g-2vcpu-4gb"
+				}
+			}
+			toolName := extractMapStr(ev.Data, "tool")
+			if toolName == "" {
+				if isGPU {
+					toolName = "gpu_container_exec"
+				} else {
+					toolName = "sandbox_exec"
+				}
+			}
+			personaName := extractMapStr(ev.Data, "persona")
+			if personaName == "" {
+				personaName = "AutonomousAgent"
+			}
+			cogsPerSec := 0.000018
+			billedPerSec := 0.00009
+			if isGPU {
+				cogsPerSec = 0.00045
+				billedPerSec = 0.0011
+			}
+			evCost := sec * cogsPerSec
+			evBilled := sec * billedPerSec
+			sandboxSeconds += sec
+			sandboxCostUSD += evCost
+			sandboxBilledUSD += evBilled
+			totalCostUSD += evCost
+
+			for _, m := range []struct {
+				b map[string]*aggBucket
+				k string
+			}{{byModel, runtimeName}, {byTool, toolName}, {byPersona, personaName}, {bySubject, ev.Subject}} {
+				if m.b[m.k] == nil {
+					m.b[m.k] = &aggBucket{}
+				}
+				m.b[m.k].sandboxSeconds += sec
+				m.b[m.k].costUSD += evCost
+				m.b[m.k].billedUSD += evBilled
+				m.b[m.k].events++
+			}
+			continue
+		}
+
+		toks := extractMapFloat(ev.Data, "tokens")
+		if toks <= 0 {
+			continue
+		}
+		modelName := extractMapStr(ev.Data, "model")
+		if modelName == "" {
+			modelName = "claude-3-7-sonnet"
+		}
+		tokType := strings.ToLower(extractMapStr(ev.Data, "token_type", "type"))
+		if tokType == "" {
+			tokType = "input"
+		}
+		toolName := extractMapStr(ev.Data, "tool")
+		if toolName == "" {
+			toolName = "agent_step_turn"
+		}
+		personaName := extractMapStr(ev.Data, "persona")
+		if personaName == "" {
+			personaName = "AutonomousAgent"
+		}
+		totalTokens += toks
+		switch tokType {
+		case "cached":
+			cachedTokens += toks
+		case "reasoning":
+			reasoningTokens += toks
+		case "output":
+			outputTokens += toks
+		default:
+			inputTokens += toks
+		}
+		ratePerM := modelTokenCostPerMillionUSD(modelName, tokType)
+		evCost := (toks / 1_000_000.0) * ratePerM
+		evBilled := evCost * 2.65
+		totalCostUSD += evCost
+
+		for _, m := range []struct {
+			b map[string]*aggBucket
+			k string
+		}{{byModel, modelName}, {byTool, toolName}, {byPersona, personaName}, {bySubject, ev.Subject}} {
+			if m.b[m.k] == nil {
+				m.b[m.k] = &aggBucket{}
+			}
+			m.b[m.k].tokens += toks
+			m.b[m.k].costUSD += evCost
+			m.b[m.k].billedUSD += evBilled
+			m.b[m.k].events++
+		}
+	}
+
+	cacheSavingsUSD := (cachedTokens / 1_000_000.0) * (3.00 - 0.30)
+	llmCostUSD := totalCostUSD - sandboxCostUSD
+	totalBilledUSD := (llmCostUSD * 2.65) + sandboxBilledUSD
+	if hasSubscriptions && (totalTokens > 0 || sandboxSeconds > 0) && totalBilledUSD < 45.0 {
+		totalBilledUSD = math.Round((49.0+llmCostUSD*2.4+sandboxBilledUSD)*100) / 100
+	}
+	grossMarginPct := 0.0
+	if totalBilledUSD > 0 {
+		grossMarginPct = math.Round(((totalBilledUSD-totalCostUSD)/totalBilledUSD)*1000) / 10
+	}
+
+	buildBreakdown := func(src map[string]*aggBucket, withRev bool) []models.DimensionCostBreakdown {
+		out := make([]models.DimensionCostBreakdown, 0, len(src))
+		for k, b := range src {
+			share := 0.0
+			if totalCostUSD > 0 {
+				share = math.Round((b.costUSD/totalCostUSD)*1000) / 10
+			} else if totalTokens > 0 {
+				share = math.Round((b.tokens/totalTokens)*1000) / 10
+			}
+			item := models.DimensionCostBreakdown{
+				Dimension:  k,
+				Tokens:     b.tokens,
+				SharePct:   share,
+				CostUSD:    math.Round(b.costUSD*10000) / 10000,
+				EventCount: b.events,
+			}
+			if withRev {
+				rev := math.Round(b.billedUSD*10000) / 10000
+				margin := 0.0
+				if rev > 0 {
+					margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
+				}
+				item.RevenueUSD = rev
+				item.MarginPct = margin
+			}
+			out = append(out, item)
+		}
+		sort.Slice(out, func(i, j int) bool { return out[i].CostUSD > out[j].CostUSD })
+		return out
+	}
+
+	subjectsOut := make([]models.SubjectMarginBreakdown, 0, len(bySubject))
+	for subjKey, b := range bySubject {
+		disp := subjKey
+		if sObj, ok := subjectsMap[subjKey]; ok && sObj.DisplayName != "" {
+			disp = sObj.DisplayName
+		}
+		baseFee := 0.0
+		if hasSubscriptions {
+			baseFee = 29.0
+		}
+		rev := math.Round((baseFee+b.billedUSD)*100) / 100
+		margin := 0.0
+		if rev > 0 {
+			margin = math.Round(((rev-b.costUSD)/rev)*1000) / 10
+		}
+		status := "healthy"
+		if margin < 40 {
+			status = "at_risk"
+		} else if margin < 60 {
+			status = "watch"
+		}
+		subjectsOut = append(subjectsOut, models.SubjectMarginBreakdown{
+			SubjectKey:     subjKey,
+			DisplayName:    disp,
+			Tokens:         b.tokens,
+			SandboxSeconds: b.sandboxSeconds,
+			CostUSD:        math.Round(b.costUSD*10000) / 10000,
+			RevenueUSD:     rev,
+			MarginPct:      margin,
+			Status:         status,
+		})
+	}
+	sort.Slice(subjectsOut, func(i, j int) bool { return subjectsOut[i].CostUSD > subjectsOut[j].CostUSD })
+
+	return models.CostIntelligenceReport{
+		Namespace:        ns,
+		TotalTokens:      totalTokens,
+		InputTokens:      inputTokens,
+		CachedTokens:     cachedTokens,
+		ReasoningTokens:  reasoningTokens,
+		OutputTokens:     outputTokens,
+		SandboxSeconds:   sandboxSeconds,
+		SandboxCostUSD:   math.Round(sandboxCostUSD*10000) / 10000,
+		SandboxBilledUSD: math.Round(sandboxBilledUSD*10000) / 10000,
+		TotalCostUSD:     math.Round(totalCostUSD*10000) / 10000,
+		TotalBilledUSD:   math.Round(totalBilledUSD*100) / 100,
+		GrossMarginPct:   grossMarginPct,
+		CacheSavingsUSD:  math.Round(cacheSavingsUSD*10000) / 10000,
+		ByModel:          buildBreakdown(byModel, true),
+		ByTool:           buildBreakdown(byTool, false),
+		ByPersona:        buildBreakdown(byPersona, false),
+		BySubject:        subjectsOut,
+	}
+}
+
+func (s *MultiTenantStore) GetTelemetryForApp(ns, appFilter string) models.TelemetrySnapshot {
+	base := s.GetTelemetry(ns)
+	if strings.TrimSpace(appFilter) == "" {
+		return base
+	}
+	events := s.ListRecentEventsForApp(ns, 1000, appFilter)
+	rtEv := 0
+	bulkEv := 0
+	for _, ev := range events {
+		if ev.Lane == "bulk" {
+			bulkEv++
+		} else {
+			rtEv++
+		}
+	}
+	dlqs := s.ListDLQEventsForApp(ns, appFilter)
+	dlqPending := 0
+	for _, d := range dlqs {
+		if d.Status == "pending" {
+			dlqPending++
+		}
+	}
+	subs := s.ListSubjectsForApp(ns, appFilter)
+	ents := s.ListEntitlementsForApp(ns, "", appFilter)
+	recent := events
+	if len(recent) > 35 {
+		recent = recent[:35]
+	}
+	base.TotalEventsIngested = len(events)
+	base.IngestedEvents = len(events)
+	base.RealtimeLaneEvents = rtEv
+	base.BulkLaneEvents = bulkEv
+	base.PendingDLQEvents = dlqPending
+	base.DLQPendingCount = dlqPending
+	base.ActiveSubjects = len(subs)
+	base.ActiveEntitlements = len(ents)
+	base.RecentEvents = recent
+	return base
+}
+
 

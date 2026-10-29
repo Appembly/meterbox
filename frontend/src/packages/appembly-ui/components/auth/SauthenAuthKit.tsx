@@ -504,6 +504,9 @@ export function clearSauthenSession(notifyServer = true, apiUrl = DEFAULT_SAUTHE
   }
 }
 
+let globalSyncInFlight = false;
+let globalLastSyncTime = 0;
+
 export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: string, appClient?: string) {
   const [session, setSession] = useState<SauthenAuthPayload | null>(() =>
     typeof window !== 'undefined' ? loadSauthenSession() : null,
@@ -511,8 +514,21 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
   const [pendingStepUps, setPendingStepUps] = useState<SauthenStepUpItem[]>([]);
   const [orgs, setOrgs] = useState<SauthenAuthOrg[]>([]);
   const [loading, setLoading] = useState(true);
+  const lastUserIdRef = useRef<string | undefined>(session?.user?.id);
+  const lastOrgIdRef = useRef<string | undefined>(session?.organization?.id);
 
-  const syncWithBackend = useCallback(async () => {
+  const syncWithBackend = useCallback(async (force = false) => {
+    if (globalSyncInFlight) {
+      setLoading(false);
+      return;
+    }
+    const now = Date.now();
+    if (!force && now - globalLastSyncTime < 5000) {
+      setLoading(false);
+      return;
+    }
+    globalSyncInFlight = true;
+    globalLastSyncTime = now;
     try {
       const urlPayload = consumeUrlOAuthSession();
       const stored = loadSauthenSession();
@@ -530,6 +546,8 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
           credentials: 'include',
         });
         if (res.status === 401) {
+          lastUserIdRef.current = undefined;
+          lastOrgIdRef.current = undefined;
           clearSauthenSession(false, apiUrl);
           setSession(null);
           return;
@@ -552,8 +570,15 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
             access_token: freshToken,
             session: data.session || stored?.session,
           };
-          saveSauthenSession(hydrated);
+          lastUserIdRef.current = hydrated.user.id;
+          lastOrgIdRef.current = hydrated.organization.id;
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(hydrated));
+          } catch {
+            /* ignore */
+          }
           setSession(hydrated);
+          window.dispatchEvent(new CustomEvent('sauthen-auth-change', { detail: hydrated }));
         }
       } else {
         if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('sth.auth.signed_out') === '1') {
@@ -574,6 +599,8 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
               access_token: ssoData.access_token,
               session: ssoData.session,
             };
+            lastUserIdRef.current = ssoPayload.user.id;
+            lastOrgIdRef.current = ssoPayload.organization.id;
             saveSauthenSession(ssoPayload);
             setSession(ssoPayload);
             if (Array.isArray(ssoData.pending_step_ups)) {
@@ -588,34 +615,41 @@ export function useSauthenSession(apiUrl = DEFAULT_SAUTHEN_API, namespace?: stri
     } catch {
       /* network error during background sync */
     } finally {
+      globalSyncInFlight = false;
       setLoading(false);
     }
   }, [apiUrl, namespace, appClient]);
 
   const handleSignOut = useCallback(async () => {
+    lastUserIdRef.current = undefined;
+    lastOrgIdRef.current = undefined;
     clearSauthenSession(true, apiUrl);
     setSession(null);
   }, [apiUrl]);
 
   useEffect(() => {
-    syncWithBackend();
+    syncWithBackend(false);
     const onAuthChange = () => {
       const next = loadSauthenSession();
       setSession(next);
-      if (next) {
-        syncWithBackend();
+      const nextUserId = next?.user?.id;
+      const nextOrgId = next?.organization?.id;
+      if (next && (nextUserId !== lastUserIdRef.current || nextOrgId !== lastOrgIdRef.current)) {
+        lastUserIdRef.current = nextUserId;
+        lastOrgIdRef.current = nextOrgId;
+        syncWithBackend(true);
       }
     };
     const onFocusOrVisible = () => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-        syncWithBackend();
+        syncWithBackend(false);
       }
     };
     const heartbeat = window.setInterval(() => {
       if (typeof document === 'undefined' || document.visibilityState === 'visible') {
-        syncWithBackend();
+        syncWithBackend(false);
       }
-    }, 15 * 1000);
+    }, 30 * 1000);
     window.addEventListener('sauthen-auth-change', onAuthChange);
     window.addEventListener('focus', onFocusOrVisible);
     document.addEventListener('visibilitychange', onFocusOrVisible);

@@ -20,3 +20,5 @@ export * from './components/swarm/ProjectTaskTimeline';
 export * from './components/marketing/AppemblyLandingPage';
 export * from './components/chat/EmblyChat';
 export * from './components/workbench/AppemblyWorkbench';
+export * from './components/platform';
+export * from './utils/meterboxClient';

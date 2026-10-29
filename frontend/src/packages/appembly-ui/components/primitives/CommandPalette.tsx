@@ -243,8 +243,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                         <span
                           style={{
                             fontWeight: isSelected ? 600 : 500,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
+                            color: 'var(--ui-text-primary, #111618)',
+                            flexShrink: 0,
                             whiteSpace: 'nowrap',
                           }}
                         >
@@ -258,6 +258,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
+                              minWidth: 0,
                             }}
                           >
                             {item.subtitle}

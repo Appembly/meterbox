@@ -27,6 +27,7 @@ import { AdapptyIcon } from '../brand/AdapptyIcon';
 import { CyclodeIcon } from '../brand/CyclodeIcon';
 import { MeterboxIcon } from '../brand/MeterboxIcon';
 import { SauthenIcon } from '../brand/SauthenIcon';
+import { ValiscaleIcon } from '../brand/ValiscaleIcon';
 import { useCountUp, useReducedMotion } from '../../motion';
 import './landing.css';
 
@@ -53,6 +54,7 @@ const DEFAULT_CONTACT_EMAIL = 'hello@appembly.com';
 const SHOT_CYCLODE = '/showcase/cyclode-workstation.png?v=3';
 const SHOT_METERBOX = '/showcase/meterbox-control-plane.png?v=3';
 const SHOT_SAUTHEN = '/showcase/sauthen-trust-graph.png?v=3';
+const SHOT_VALISCALE = '/showcase/valiscale-workspace.png?v=1';
 const SHOT_WIDTH = 1024;
 const SHOT_HEIGHT = 585;
 
@@ -141,13 +143,13 @@ const PRODUCT_SUITE: ProductSuiteItem[] = [
     id: 'valiscale',
     name: 'Valiscale',
     status: 'soon',
-    categoryLabel: 'Product & Venture Studio',
-    tagline: 'From raw concept to validated project and launch.',
+    categoryLabel: 'Validation, Scoping & AI Assembly',
+    tagline: 'Validate, scope, and assemble governed AI apps and agents.',
     description:
-      'Assess market viability, generate structured PRDs, and track a product from idea to growth.',
+      'Ground raw ideas in live market sources beside your chat, scope workflows and approval boundaries interactively, and wire AI routing, zero-trust identity, and cost controls from day one.',
     capabilities: [],
     accentColor: '#4E8067',
-    icon: <Rocket className="w-[18px] h-[18px]" />,
+    icon: <ValiscaleIcon size={20} />,
   },
   {
     id: 'swarmteam',
@@ -201,6 +203,8 @@ interface ShowcaseItem {
   icon: React.ReactNode;
   bullets: string[];
   highlights: { title: string; detail: string }[];
+  frameLabel?: string;
+  ctaLabel?: string;
 }
 
 const SHOWCASE: ShowcaseItem[] = [
@@ -263,6 +267,28 @@ const SHOWCASE: ShowcaseItem[] = [
       { title: 'Zero-knowledge', detail: 'Keys stay in vault' },
       { title: 'Sub-millisecond', detail: 'Ed25519 JWKS verify' },
     ],
+  },
+  {
+    id: 'valiscale',
+    name: 'Valiscale',
+    kicker: 'Validation, scoping & AI assembly',
+    headline: 'Validate the wedge. Scope the guardrails. Assemble the stack.',
+    description:
+      'Turn raw ideas into governed AI apps and agents — combining live source verification beside your chat, interactive scoping for workflows and approval boundaries, and built-in AI routing, identity, and cost controls.',
+    image: SHOT_VALISCALE,
+    accent: '#4E8067',
+    icon: <ValiscaleIcon size={20} />,
+    bullets: [
+      'Live web & source verification right beside your session',
+      'Interactive scoping for workflows, data boundaries & autonomy ceilings',
+      'Built-in AI gateway routing, zero-trust identity & cost controls from day one',
+    ],
+    highlights: [
+      { title: 'Source-grounded', detail: 'Live Web & Docs reader' },
+      { title: 'Governed by design', detail: 'Autonomy & step-up bounds' },
+    ],
+    frameLabel: 'Valiscale · In development preview',
+    ctaLabel: 'Join the Valiscale waitlist',
   },
 ];
 
@@ -1223,14 +1249,14 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
       <ModularPatternBackdrop tone="light" />
       <div className="relative max-w-[1320px] mx-auto px-4 sm:px-10">
         <Reveal className="max-w-[760px]">
-          <SectionEyebrow>Now in private beta</SectionEyebrow>
+          <SectionEyebrow>Product showcase</SectionEyebrow>
           <h2 className="mt-4 sm:mt-5 text-[30px] sm:text-[52px] font-semibold tracking-[-0.035em] leading-[1.06] sm:leading-[1.04] text-[var(--ui-text-primary)]">
             Real products, built for real work.
           </h2>
           <p className="mt-4 sm:mt-5 text-[15.5px] sm:text-[17px] leading-[1.65] text-[var(--ui-text-secondary)] max-w-[620px]">
-            Cyclode, Meterbox and Sauthen are running today with early teams. All three share the
-            same calm interface, unified identity and live telemetry — so moving between them feels
-            like one product.
+            Cyclode, Meterbox and Sauthen are running today in private beta alongside Valiscale in
+            active development. Every product shares the same calm interface, unified identity and
+            live telemetry — so moving between them feels like one system.
           </p>
         </Reveal>
 
@@ -1276,7 +1302,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                         <div className="pt-4 sm:pt-5 space-y-4">
                           {/* Inline screenshot preview on mobile/tablet so tapping a tab immediately displays its UI */}
                           <div className="lg:hidden">
-                            <ProductFrame label={`${item.name} · Private beta`}>
+                            <ProductFrame label={item.frameLabel || `${item.name} · Private beta`}>
                               <ProductShot
                                 src={item.image}
                                 alt={`${item.name} — ${item.kicker}`}
@@ -1313,7 +1339,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                             onClick={() => onRequestAccess(item.id)}
                             className="group inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] transition-colors cursor-pointer"
                           >
-                            Request access to {item.name}
+                            {item.ctaLabel || `Request access to ${item.name}`}
                             <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
                           </button>
                         </div>
@@ -1342,7 +1368,7 @@ const Showcase: React.FC<{ onRequestAccess: RequestAccess }> = ({ onRequestAcces
                 className="pointer-events-none absolute -inset-10 rounded-[40px] blur-3xl opacity-40 transition-colors duration-1000"
                 style={{ background: `radial-gradient(closest-side, ${active.accent}55, transparent)` }}
               />
-              <ProductFrame label={`${active.name} · Private beta`} className="relative">
+              <ProductFrame label={active.frameLabel || `${active.name} · Private beta`} className="relative">
                 <div className="relative aspect-[1024/585] bg-[var(--ui-bg-subtle)]">
                   {SHOWCASE.map((item, idx) => (
                     <div key={item.id} data-active={idx === activeIdx ? 'true' : 'false'} className="ap-shot absolute inset-0">

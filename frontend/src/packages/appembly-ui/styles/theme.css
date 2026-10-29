@@ -159,8 +159,8 @@ body {
 /* Smooth subtle scrollbars */
 .appembly-scrollbar::-webkit-scrollbar,
 .apporay-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 3px;
+  height: 3px;
 }
 .appembly-scrollbar::-webkit-scrollbar-track,
 .apporay-scrollbar::-webkit-scrollbar-track {

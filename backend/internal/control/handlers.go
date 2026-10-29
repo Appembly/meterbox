@@ -168,10 +168,17 @@ func (s *Server) handleIngestEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, res)
 }
 
+func resolveAppFilter(r *http.Request) string {
+	if q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("app"))); q != "" {
+		return q
+	}
+	return strings.ToLower(strings.TrimSpace(r.Header.Get("X-Appembly-App")))
+}
+
 func (s *Server) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	events := s.Store.ListRecentEvents(tc.Namespace, limit)
+	events := s.Store.ListRecentEventsForApp(tc.Namespace, limit, resolveAppFilter(r))
 	writeJSON(w, http.StatusOK, events)
 }
 
@@ -201,7 +208,7 @@ func (s *Server) handleQueryMeter(w http.ResponseWriter, r *http.Request) {
 	slug := r.PathValue("slug")
 	subject := r.URL.Query().Get("subject")
 	window := r.URL.Query().Get("window")
-	res, err := s.Store.QueryMeter(tc.Namespace, slug, subject, nil, nil, window)
+	res, err := s.Store.QueryMeterForApp(tc.Namespace, slug, subject, resolveAppFilter(r), nil, nil, window)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "meter_not_found", err.Error())
 		return
@@ -211,7 +218,7 @@ func (s *Server) handleQueryMeter(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListSubjects(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
-	writeJSON(w, http.StatusOK, s.Store.ListSubjects(tc.Namespace))
+	writeJSON(w, http.StatusOK, s.Store.ListSubjectsForApp(tc.Namespace, resolveAppFilter(r)))
 }
 
 func (s *Server) handleUpsertSubject(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +242,7 @@ func (s *Server) handleUpsertSubject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListEntitlements(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
 	subject := r.URL.Query().Get("subject")
-	writeJSON(w, http.StatusOK, s.Store.ListEntitlements(tc.Namespace, subject))
+	writeJSON(w, http.StatusOK, s.Store.ListEntitlementsForApp(tc.Namespace, subject, resolveAppFilter(r)))
 }
 
 func (s *Server) handleCreateEntitlement(w http.ResponseWriter, r *http.Request) {
@@ -350,7 +357,7 @@ func (s *Server) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 
 func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
-	writeJSON(w, http.StatusOK, s.Store.ListInvoices(tc.Namespace))
+	writeJSON(w, http.StatusOK, s.Store.ListInvoicesForApp(tc.Namespace, resolveAppFilter(r)))
 }
 
 func (s *Server) handleGenerateInvoice(w http.ResponseWriter, r *http.Request) {
@@ -496,7 +503,7 @@ func (s *Server) handleResetSandbox(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetTelemetry(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
-	writeJSON(w, http.StatusOK, s.Store.GetTelemetry(tc.Namespace))
+	writeJSON(w, http.StatusOK, s.Store.GetTelemetryForApp(tc.Namespace, resolveAppFilter(r)))
 }
 
 func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
@@ -541,7 +548,7 @@ func (s *Server) handleRevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListDLQ(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
-	writeJSON(w, http.StatusOK, s.Store.ListDLQEvents(tc.Namespace))
+	writeJSON(w, http.StatusOK, s.Store.ListDLQEventsForApp(tc.Namespace, resolveAppFilter(r)))
 }
 
 func (s *Server) handleReplayDLQ(w http.ResponseWriter, r *http.Request) {
@@ -627,7 +634,7 @@ func (s *Server) handlePortalSummary(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListGrants(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
 	subject := r.URL.Query().Get("subject")
-	writeJSON(w, http.StatusOK, s.Store.ListAllGrants(tc.Namespace, subject))
+	writeJSON(w, http.StatusOK, s.Store.ListAllGrantsForApp(tc.Namespace, subject, resolveAppFilter(r)))
 }
 
 func (s *Server) handlePostHogCapture(w http.ResponseWriter, r *http.Request) {
@@ -675,7 +682,7 @@ func (s *Server) handlePostHogBatch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetCostIntelligence(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
-	writeJSON(w, http.StatusOK, s.Store.GetCostIntelligence(tc.Namespace))
+	writeJSON(w, http.StatusOK, s.Store.GetCostIntelligenceForApp(tc.Namespace, resolveAppFilter(r)))
 }
 
 func (s *Server) handleGetProductAnalytics(w http.ResponseWriter, r *http.Request) {
@@ -686,6 +693,7 @@ func (s *Server) handleGetProductAnalytics(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 	tc := auth.TenantFromContext(r.Context())
 	ns := tc.Namespace
+	appFilter := resolveAppFilter(r)
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 35
@@ -695,22 +703,22 @@ func (s *Server) handleGetSnapshot(w http.ResponseWriter, r *http.Request) {
 		Namespace:         ns,
 		Organizations:     s.scopedOrganizations(tc),
 		Environments:      s.scopedEnvironments(tc),
-		Telemetry:         s.Store.GetTelemetry(ns),
+		Telemetry:         s.Store.GetTelemetryForApp(ns, appFilter),
 		Meters:            s.Store.ListMeters(ns),
-		Subjects:          s.Store.ListSubjects(ns),
-		Entitlements:      s.Store.ListEntitlements(ns, ""),
-		Grants:            s.Store.ListAllGrants(ns, ""),
+		Subjects:          s.Store.ListSubjectsForApp(ns, appFilter),
+		Entitlements:      s.Store.ListEntitlementsForApp(ns, "", appFilter),
+		Grants:            s.Store.ListAllGrantsForApp(ns, "", appFilter),
 		Plans:             s.Store.ListPlans(ns),
 		Subscriptions:     s.Store.ListSubscriptions(ns),
-		Invoices:          s.Store.ListInvoices(ns),
+		Invoices:          s.Store.ListInvoicesForApp(ns, appFilter),
 		PaymentMethods:    s.Store.ListPaymentMethods(ns, ""),
 		AutoRechargeRules: s.Store.ListAutoRechargeRules(ns, ""),
 		CheckoutSessions:  s.Store.ListCheckoutSessions(ns, ""),
 		PaymentWebhooks:   s.Store.ListPaymentWebhooks(ns),
 		APIKeys:           s.Store.ListAPIKeys(ns),
-		DLQEvents:         s.Store.ListDLQEvents(ns),
-		RecentEvents:      s.Store.ListRecentEvents(ns, limit),
-		CostIntelligence:  s.Store.GetCostIntelligence(ns),
+		DLQEvents:         s.Store.ListDLQEventsForApp(ns, appFilter),
+		RecentEvents:      s.Store.ListRecentEventsForApp(ns, limit, appFilter),
+		CostIntelligence:  s.Store.GetCostIntelligenceForApp(ns, appFilter),
 		ProductAnalytics:  s.Store.GetProductAnalytics(ns),
 	}
 	writeJSON(w, http.StatusOK, snap)
@@ -802,7 +810,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Meterbox-Key, X-OpenMeter-Namespace, X-Meterbox-Env-ID, X-Meterbox-Lane")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Meterbox-Key, X-OpenMeter-Namespace, X-Meterbox-Env-ID, X-Meterbox-Lane, X-Appembly-App")
 		w.Header().Set("Access-Control-Expose-Headers", "X-OpenMeter-Namespace, X-Meterbox-Cache, X-Meterbox-Lane")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

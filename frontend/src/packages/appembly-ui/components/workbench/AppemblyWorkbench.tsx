@@ -133,6 +133,7 @@ export interface WorkbenchAuxTab {
 export interface AppemblyWorkbenchProps {
   preset?: WorkbenchPreset;
   accentColor?: string;
+  sessionId?: string;
   sessionTitle?: string;
   sessionStatus?: string;
   messages: WorkbenchMessage[];
@@ -481,13 +482,19 @@ export function extractDecisionCardsFromMarkdown(rawContent: string): {
     /```(?:xml|html)?\s*(<(?:decision-card|decision_card)\b[\s\S]*?<\/(?:decision-card|decision_card)>)\s*```/gi,
     '$1'
   );
+  const extractAttr = (attrs: string, name: string): string | undefined => {
+    const re = new RegExp(`\\b${name}=(?:"([^"]*)"|'([^']*)')`, 'i');
+    const m = attrs.match(re);
+    return m ? (m[1] !== undefined ? m[1] : m[2]) : undefined;
+  };
+
   const cardRegex = /<(?:decision-card|decision_card)\b([^>]*)>([\s\S]*?)<\/(?:decision-card|decision_card)>/gi;
   let cardMatch: RegExpExecArray | null;
   while ((cardMatch = cardRegex.exec(unwrapped)) !== null) {
     const cardAttrs = cardMatch[1] || '';
     const cardInner = cardMatch[2] || '';
-    const titleMatch = cardAttrs.match(/\btitle=["']([^"']+)["']/i);
-    const stageMatch = cardAttrs.match(/\bstage=["']([^"']+)["']/i);
+    const cardTitle = extractAttr(cardAttrs, 'title');
+    const cardStage = extractAttr(cardAttrs, 'stage');
     const questions: DecisionCardQuestion[] = [];
 
     const qRegex = /<question\b([^>]*)>([\s\S]*?)<\/question>/gi;
@@ -495,9 +502,9 @@ export function extractDecisionCardsFromMarkdown(rawContent: string): {
     while ((qMatch = qRegex.exec(cardInner)) !== null) {
       const qAttrs = qMatch[1] || '';
       const qInner = qMatch[2] || '';
-      const qId = (qAttrs.match(/\bid=["']([^"']+)["']/i) || [])[1] || `q_${questions.length + 1}`;
-      const qLabel = (qAttrs.match(/\blabel=["']([^"']+)["']/i) || [])[1] || `Question ${questions.length + 1}`;
-      const multiStr = ((qAttrs.match(/\bmulti=["']([^"']+)["']/i) || [])[1] || 'false').toLowerCase();
+      const qId = extractAttr(qAttrs, 'id') || `q_${questions.length + 1}`;
+      const qLabel = extractAttr(qAttrs, 'label') || `Question ${questions.length + 1}`;
+      const multiStr = (extractAttr(qAttrs, 'multi') || 'false').toLowerCase();
       const options: DecisionCardOption[] = [];
 
       const optRegex = /<option\b([^>]*?)(?:\/>|>([\s\S]*?)<\/option>)/gi;
@@ -505,10 +512,10 @@ export function extractDecisionCardsFromMarkdown(rawContent: string): {
       while ((optMatch = optRegex.exec(qInner)) !== null) {
         const oAttrs = optMatch[1] || '';
         const oInner = (optMatch[2] || '').trim();
-        const oId = (oAttrs.match(/\bid=["']([^"']+)["']/i) || [])[1] || `opt_${options.length + 1}`;
-        const oLabel = (oAttrs.match(/\blabel=["']([^"']+)["']/i) || [])[1] || oInner || oId;
-        const oDesc = (oAttrs.match(/\bdescription=["']([^"']+)["']/i) || [])[1];
-        const oDefault = ((oAttrs.match(/\bdefault=["']([^"']+)["']/i) || [])[1] || '').toLowerCase() === 'true';
+        const oId = extractAttr(oAttrs, 'id') || `opt_${options.length + 1}`;
+        const oLabel = extractAttr(oAttrs, 'label') || oInner || oId;
+        const oDesc = extractAttr(oAttrs, 'description');
+        const oDefault = (extractAttr(oAttrs, 'default') || '').toLowerCase() === 'true';
         options.push({
           id: oId,
           label: oLabel,
@@ -529,8 +536,8 @@ export function extractDecisionCardsFromMarkdown(rawContent: string): {
 
     if (questions.length > 0) {
       decisionCards.push({
-        title: titleMatch ? titleMatch[1] : 'Quick Scope & Stack Defaults',
-        stage: stageMatch ? stageMatch[1] : 'Stage 1 · Consultative Defaults',
+        title: cardTitle || 'Quick Scope & Stack Defaults',
+        stage: cardStage || 'Stage 1 · Consultative Defaults',
         questions,
       });
     }
@@ -701,16 +708,16 @@ const InteractiveDecisionCard: React.FC<{
   };
 
   return (
-    <div className="my-3 rounded-xl border border-[var(--ui-border)] bg-[color-mix(in_srgb,var(--ui-bg-subtle)_95%,transparent)] p-4 space-y-3.5 shadow-md">
+    <div className="my-3 rounded-xl border border-[var(--ui-border)] bg-[var(--ui-bg-surface)] p-4 space-y-3.5 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[color-mix(in_srgb,var(--ui-border)_70%,transparent)]">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-[color-mix(in_srgb,var(--ui-accent)_15%,transparent)] border border-[color-mix(in_srgb,var(--ui-accent)_30%,transparent)] flex items-center justify-center text-[var(--ui-accent)] shrink-0">
+          <div className="w-6 h-6 rounded-lg bg-[color-mix(in_srgb,var(--ui-accent)_12%,transparent)] flex items-center justify-center text-[var(--ui-accent)] shrink-0">
             <Sparkles className="w-3.5 h-3.5" />
           </div>
           <span className="text-[13.5px] font-semibold text-[var(--ui-text-primary)]">{card.title}</span>
         </div>
         {card.stage && (
-          <span className="px-2 py-0.5 rounded-md text-[10.5px] font-mono font-medium bg-[var(--ui-bg-surface)] text-[var(--ui-accent)] border border-[var(--ui-border)]">
+          <span className="px-2 py-0.5 rounded-md text-[10.5px] font-mono font-medium bg-[var(--ui-bg-subtle)] text-[var(--ui-text-secondary)] border border-[var(--ui-border)]">
             {card.stage}
           </span>
         )}
@@ -741,8 +748,8 @@ const InteractiveDecisionCard: React.FC<{
                       title={opt.description || opt.label}
                       className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left text-[12.5px] transition-colors cursor-pointer disabled:cursor-default ${
                         isSelected
-                          ? 'bg-[color-mix(in_srgb,var(--ui-accent)_15%,transparent)] border-[var(--ui-accent)] text-[var(--ui-text-primary)] font-medium shadow-2xs'
-                          : 'bg-[color-mix(in_srgb,var(--ui-bg-surface)_40%,transparent)] hover:bg-[var(--ui-bg-surface)] border-[var(--ui-border)] text-[var(--ui-text-secondary)]'
+                          ? 'bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-bg-subtle))] border-[var(--ui-border-strong)] text-[var(--ui-text-primary)] font-medium'
+                          : 'bg-[color-mix(in_srgb,var(--ui-bg-subtle)_55%,transparent)] hover:bg-[var(--ui-bg-subtle)] border-[var(--ui-border)] text-[var(--ui-text-primary)]'
                       }`}
                     >
                       <span
@@ -750,18 +757,13 @@ const InteractiveDecisionCard: React.FC<{
                           q.multi ? 'rounded' : 'rounded-full'
                         } border flex items-center justify-center shrink-0 ${
                           isSelected
-                            ? 'bg-[var(--ui-accent)] border-[var(--ui-accent)] text-[var(--ui-bg-subtle)]'
-                            : 'border-[color-mix(in_srgb,var(--ui-text-muted)_50%,transparent)] bg-[color-mix(in_srgb,var(--ui-bg-subtle)_60%,transparent)]'
+                            ? 'bg-[var(--ui-accent)] border-[var(--ui-accent)] text-white'
+                            : 'border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]'
                         }`}
                       >
                         {isSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                       </span>
                       <span>{opt.label}</span>
-                      {opt.isDefault && (
-                        <span className="px-1.5 py-0.2 rounded text-[9.5px] font-mono bg-[color-mix(in_srgb,var(--ui-bg-surface)_90%,transparent)] text-[var(--ui-accent)] border border-[color-mix(in_srgb,var(--ui-border)_80%,transparent)]">
-                          Recommended
-                        </span>
-                      )}
                     </button>
                   );
                 })}
@@ -774,8 +776,8 @@ const InteractiveDecisionCard: React.FC<{
                   title="Specify a custom answer for this question"
                   className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-left text-[12.5px] transition-colors cursor-pointer disabled:cursor-default ${
                     isOtherSelected
-                      ? 'bg-[color-mix(in_srgb,var(--ui-accent)_15%,transparent)] border-[var(--ui-accent)] text-[var(--ui-text-primary)] font-medium shadow-2xs'
-                      : 'bg-[color-mix(in_srgb,var(--ui-bg-surface)_40%,transparent)] hover:bg-[var(--ui-bg-surface)] border-[var(--ui-border)] text-[var(--ui-text-secondary)]'
+                      ? 'bg-[color-mix(in_srgb,var(--ui-accent)_9%,var(--ui-bg-subtle))] border-[var(--ui-border-strong)] text-[var(--ui-text-primary)] font-medium'
+                      : 'bg-[color-mix(in_srgb,var(--ui-bg-subtle)_55%,transparent)] hover:bg-[var(--ui-bg-subtle)] border-[var(--ui-border)] text-[var(--ui-text-primary)]'
                   }`}
                 >
                   <span
@@ -783,8 +785,8 @@ const InteractiveDecisionCard: React.FC<{
                       q.multi ? 'rounded' : 'rounded-full'
                     } border flex items-center justify-center shrink-0 ${
                       isOtherSelected
-                        ? 'bg-[var(--ui-accent)] border-[var(--ui-accent)] text-[var(--ui-bg-subtle)]'
-                        : 'border-[color-mix(in_srgb,var(--ui-text-muted)_50%,transparent)] bg-[color-mix(in_srgb,var(--ui-bg-subtle)_60%,transparent)]'
+                        ? 'bg-[var(--ui-accent)] border-[var(--ui-accent)] text-white'
+                        : 'border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)]'
                     }`}
                   >
                     {isOtherSelected && <Check className="w-2.5 h-2.5 stroke-[3]" />}
@@ -1963,9 +1965,24 @@ function formatTurnDatetime(msg: WorkbenchMessage): { display: string; tooltip: 
   return { display, tooltip };
 }
 
+function sliceMarkdownSafely(text: string, maxLen: number): string {
+  if (!text || maxLen <= 0) return '';
+  if (maxLen >= text.length) return text;
+  let sliceEnd = maxLen;
+  const lineStart = text.lastIndexOf('\n', sliceEnd - 1) + 1;
+  const lineTail = text.slice(lineStart, sliceEnd);
+  // Avoid cutting inside an incomplete markdown link [label](url) so raw [Label](https: never flashes
+  const unclosedLinkMatch = lineTail.match(/\[[^\]]*(?:\]\([^)]*)?$/);
+  if (unclosedLinkMatch && unclosedLinkMatch.index !== undefined) {
+    sliceEnd = lineStart + unclosedLinkMatch.index;
+  }
+  return text.slice(0, sliceEnd);
+}
+
 export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   preset = 'appembly_dash',
   accentColor = 'var(--ui-accent)',
+  sessionId,
   sessionTitle = 'Interactive Assembly Session',
   sessionStatus = 'AI Gateway · Zero-Trust Guardrails Active',
   messages,
@@ -2069,16 +2086,122 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatViewportRef = useRef<HTMLDivElement | null>(null);
+  const messageNodeRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Track which assistant turns are already settled (visited session history or finished revealing)
+  const effectiveSessionKey = sessionId || sessionTitle || 'default';
+  const lastSessionKeyRef = useRef<string | null>(null);
+  const lastScrolledUserMsgIdRef = useRef<string | null>(null);
+  const settledAssistantIdsRef = useRef<Set<string>>(new Set());
+  const [revealedLengths, setRevealedLengths] = useState<Record<string, number>>({});
+
+  // Synchronize settled IDs immediately when switching to an existing non-streaming session
+  const sessionJustSwitchedRef = useRef<boolean>(false);
+  if (lastSessionKeyRef.current !== effectiveSessionKey) {
+    lastSessionKeyRef.current = effectiveSessionKey;
+    sessionJustSwitchedRef.current = true;
+    lastScrolledUserMsgIdRef.current = null;
+    if (!isStreaming) {
+      messages.forEach((m) => {
+        if (m.role === 'assistant' && m.timestamp !== 'Streaming…') {
+          settledAssistantIdsRef.current.add(m.id);
+        }
+      });
+    }
+  }
 
   const activePersona =
     availablePersonas.find((p) => p.id === activePersonaId) || availablePersonas[0];
   const activeModel =
     models.find((m) => m.id === activeModelId) || models[0];
 
+  // Anchor viewport to the latest user message both when visiting a session and when sending a new message
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages.length, isStreaming]);
+    const userMsgs = messages.filter((m) => m.role === 'user');
+    const latestUser = userMsgs[userMsgs.length - 1];
+    if (!latestUser) {
+      if (sessionJustSwitchedRef.current && chatViewportRef.current) {
+        sessionJustSwitchedRef.current = false;
+        chatViewportRef.current.scrollTop = 0;
+      }
+      return;
+    }
+    if (latestUser.id !== lastScrolledUserMsgIdRef.current || sessionJustSwitchedRef.current) {
+      const isSessionSwitch = sessionJustSwitchedRef.current;
+      sessionJustSwitchedRef.current = false;
+      lastScrolledUserMsgIdRef.current = latestUser.id;
+      requestAnimationFrame(() => {
+        const vp = chatViewportRef.current;
+        const userEl = messageNodeRefs.current[latestUser.id];
+        if (vp && userEl) {
+          const targetTop = Math.max(0, userEl.offsetTop - 18);
+          vp.scrollTo({
+            top: targetTop,
+            behavior: isSessionSwitch ? 'auto' : 'smooth',
+          });
+        }
+      });
+    }
+  }, [messages, effectiveSessionKey]);
+
+  // Smooth progressive top-down text reveal for active assistant responses
+  useEffect(() => {
+    const activeTargets: Array<{ id: string; targetLen: number; streaming: boolean }> = [];
+    messages.forEach((m, idx) => {
+      if (m.role !== 'assistant') return;
+      if (settledAssistantIdsRef.current.has(m.id)) return;
+      const cleanProse = extractQuickActionsFromMarkdown(
+        extractDecisionCardsFromMarkdown(m.content || '').cleanedContent
+      ).cleanedContent;
+      const turnStreaming =
+        m.timestamp === 'Streaming…' || (Boolean(isStreaming) && idx === messages.length - 1);
+      const currentRev = revealedLengths[m.id] ?? 0;
+      if (currentRev < cleanProse.length) {
+        activeTargets.push({ id: m.id, targetLen: cleanProse.length, streaming: turnStreaming });
+      } else if (!turnStreaming && cleanProse.length > 0) {
+        settledAssistantIdsRef.current.add(m.id);
+      }
+    });
+
+    if (activeTargets.length === 0) return;
+
+    const timer = window.setInterval(() => {
+      setRevealedLengths((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const t of activeTargets) {
+          const msgObj = messages.find((m) => m.id === t.id);
+          const cleanProse = extractQuickActionsFromMarkdown(
+            extractDecisionCardsFromMarkdown(msgObj?.content || '').cleanedContent
+          ).cleanedContent;
+          const cur = next[t.id] ?? 0;
+          if (cur < cleanProse.length) {
+            // Advance ~22 chars per 28ms tick, snapping to the next word/newline boundary so words don't flicker mid-token
+            let step = 22;
+            const remaining = cleanProse.length - cur;
+            if (remaining > step) {
+              const sliceAhead = cleanProse.slice(cur + step, cur + step + 14);
+              const boundaryIdx = sliceAhead.search(/[\s\n]/);
+              if (boundaryIdx >= 0) {
+                step += boundaryIdx + 1;
+              }
+            }
+            const nextVal = Math.min(cleanProse.length, cur + step);
+            next[t.id] = nextVal;
+            changed = true;
+            if (nextVal >= cleanProse.length && !t.streaming) {
+              settledAssistantIdsRef.current.add(t.id);
+            }
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 28);
+
+    return () => window.clearInterval(timer);
+  }, [messages, isStreaming, revealedLengths]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -2097,6 +2220,14 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, []);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = composerText.length > 0 ? Math.min(144, Math.max(24, el.scrollHeight)) : 24;
+    el.style.height = `${nextHeight}px`;
+  }, [composerText]);
 
   const handleSend = () => {
     const trimmed = composerText.trim();
@@ -2379,7 +2510,10 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
             className="flex flex-col h-full min-w-0 bg-[var(--ui-bg-canvas)] select-text"
           >
             {/* Scrollable Conversation or Overview Viewport */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 pt-5 pb-8 space-y-6 chat-scroll-viewport">
+            <div
+              ref={chatViewportRef}
+              className="flex-1 overflow-y-auto px-4 sm:px-6 pt-5 pb-8 space-y-6 chat-scroll-viewport"
+            >
               {showOverviewLanding && renderOverviewLanding ? (
                 renderOverviewLanding({
                   prefillComposer,
@@ -2410,6 +2544,9 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                     return (
                       <div
                         key={msg.id}
+                        ref={(el) => {
+                          messageNodeRefs.current[msg.id] = el;
+                        }}
                         className="group flex flex-col items-end space-y-1.5 ap-stream-fade-in"
                       >
                         <div className="flex items-center gap-2 text-[11px] text-[var(--ui-text-muted)]">
@@ -2603,60 +2740,54 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                   const isTurnStreaming =
                     msg.timestamp === 'Streaming…' ||
                     (Boolean(isStreaming) && msgIdx === messages.length - 1);
+                  const cleanProseContent = extractQuickActionsFromMarkdown(
+                    extractDecisionCardsFromMarkdown(msg.content || '').cleanedContent
+                  ).cleanedContent;
+                  const revealedLen = revealedLengths[msg.id] ?? 0;
+                  const isTurnRevealing =
+                    !settledAssistantIdsRef.current.has(msg.id) &&
+                    cleanProseContent.length > 0 &&
+                    revealedLen < cleanProseContent.length;
+                  const isTurnReady = !isTurnStreaming && !isTurnRevealing;
+                  const displayedProseContent = isTurnReady
+                    ? msg.content
+                    : revealedLen > 0
+                    ? sliceMarkdownSafely(
+                        cleanProseContent,
+                        Math.min(cleanProseContent.length, revealedLen + 110)
+                      )
+                    : '';
+                  const completedSteps = (msg.steps || []).filter((s: any) => s.status !== 'running');
+                  const runningStep = (msg.steps || []).find((s: any) => s.status === 'running');
                   const precedingUserMsg = [...messages.slice(0, msgIdx)]
                     .reverse()
                     .find((m) => m.role === 'user');
 
-                  const turnDatetime = !isTurnStreaming ? formatTurnDatetime(msg) : null;
+                  const turnDatetime = isTurnReady ? formatTurnDatetime(msg) : null;
 
                   return (
                     <div
                       key={msg.id}
-                      className={`group flex flex-col space-y-3 ap-stream-fade-in ${
-                        msgIdx < messages.length - 1 && !isTurnStreaming
+                      ref={(el) => {
+                        messageNodeRefs.current[msg.id] = el;
+                      }}
+                      className={`group flex flex-col space-y-2 ap-stream-fade-in ${
+                        msgIdx < messages.length - 1 && isTurnReady
                           ? 'pb-5 border-b border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)]'
                           : 'pb-2'
                       }`}
                     >
-                      {/* Turn Header */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-[var(--ui-bg-surface)] border border-[var(--ui-border)] flex items-center justify-center shrink-0">
-                            <AppemblyLogo
-                              variant="mark"
-                              size={16}
-                              strokeColor={accentColor}
-                              animated={isTurnStreaming}
-                              speed="loader"
-                            />
-                          </div>
-                          <span className="text-[13.5px] font-semibold text-[var(--ui-text-primary)]">
-                            {msg.personaLabel || activePersona.label}
-                          </span>
-                          {msg.modelLabel && (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-secondary)] border border-[var(--ui-border)]">
-                              {msg.modelLabel}
-                            </span>
-                          )}
-                          {!isTurnStreaming && turnDatetime?.display && (
-                            <span
-                              className="text-[11px] text-[var(--ui-text-muted)]"
-                              title={turnDatetime.tooltip}
-                            >
-                              {turnDatetime.display}
-                            </span>
+                      {/* Quiet Faint Turn Eyebrow: Agent: General Assistant · 12:24 PM */}
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--ui-text-muted)]">
+                        <div className="flex items-center gap-2">
+                          <span>Agent: {msg.personaLabel || activePersona.label}</span>
+                          {isTurnReady && turnDatetime?.display && (
+                            <>
+                              <span>·</span>
+                              <span title={turnDatetime.tooltip}>{turnDatetime.display}</span>
+                            </>
                           )}
                         </div>
-
-                        {!isTurnStreaming && (msg.tokens || msg.latencySec) && (
-                          <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-mono text-[var(--ui-text-muted)] hidden sm:inline">
-                              {msg.tokens ? `~${msg.tokens} tok` : ''}
-                              {msg.tokens && msg.latencySec ? ' · ' : ''}
-                              {msg.latencySec ? msg.latencySec : ''}
-                            </span>
-                          </div>
-                        )}
                       </div>
 
                       {/* Collapsible Plan / Approach Card */}
@@ -2745,7 +2876,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                       )}
 
                       {/* Collapsible Tool Action Step Accordion (Cyclode Style) */}
-                      {msg.steps && msg.steps.length > 0 && (
+                      {completedSteps.length > 0 && (
                         <div className="rounded-lg border border-[var(--ui-border)] bg-[color-mix(in_srgb,var(--ui-bg-subtle)_75%,transparent)] overflow-hidden">
                           <button
                             type="button"
@@ -2760,11 +2891,11 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                             <div className="flex items-center gap-2 min-w-0">
                               <Terminal className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" />
                               <span className="font-medium text-[var(--ui-text-primary)] shrink-0">
-                                {msg.steps.length} {msg.steps.length === 1 ? 'step' : 'steps'} completed
+                                {completedSteps.length} {completedSteps.length === 1 ? 'step' : 'steps'} completed
                               </span>
                               {!isTraceOpen && (
                               <div className="flex items-center gap-1 overflow-hidden">
-                                {msg.steps.slice(0, 2).map((s: any, idx) => {
+                                {completedSteps.slice(0, 2).map((s: any, idx) => {
                                   const meta = parseToolStepMeta(s);
                                   return (
                                     <span
@@ -2775,8 +2906,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                                     </span>
                                   );
                                 })}
-                                {msg.steps.length > 2 && (
-                                  <span className="text-[11px] text-[var(--ui-text-muted)] shrink-0">+{msg.steps.length - 2} more</span>
+                                {completedSteps.length > 2 && (
+                                  <span className="text-[11px] text-[var(--ui-text-muted)] shrink-0">+{completedSteps.length - 2} more</span>
                                 )}
                               </div>
                               )}
@@ -2793,7 +2924,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
 
                           {isTraceOpen && (
                             <div className="p-2.5 border-t border-[var(--ui-border)] space-y-1.5 bg-[color-mix(in_srgb,var(--ui-bg-canvas)_50%,transparent)]">
-                              {msg.steps.map((step: any, sIdx) => {
+                              {completedSteps.map((step: any, sIdx) => {
                                 const stepKey = `${msg.id}-step-${sIdx}`;
                                 const meta = parseToolStepMeta(step);
                                 const hasExpandable = Boolean(
@@ -2868,24 +2999,52 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         </div>
                       )}
 
-                      {/* Rich Assistant Markdown Response */}
+                      {/* Rich Assistant Markdown Response + Editorial Phase Indicator (Thinking… → Sourcing… → Synthesizing…) */}
                       <div className="pl-0.5">
-                        {isTurnStreaming && !msg.content ? (
-                          <div className="inline-flex items-center gap-2.5 text-[13.5px] text-[var(--ui-text-secondary)] py-1">
-                            <span className="ap-typing" aria-hidden><i /><i /><i /></span>
-                            <span>{msg.steps && msg.steps.length > 0 ? 'Writing the answer…' : 'Thinking…'}</span>
+                        {!displayedProseContent && !isTurnReady ? (
+                          <div className="inline-flex flex-wrap items-center gap-2.5 text-[13.5px] text-[var(--ui-text-secondary)] py-1">
+                            <AppemblyLogo
+                              variant="mark"
+                              size={16}
+                              strokeColor={accentColor}
+                              animated
+                              speed="loader"
+                            />
+                            <span className="font-medium text-[var(--ui-text-primary)]">
+                              {runningStep
+                                ? 'Sourcing…'
+                                : completedSteps.length > 0
+                                ? 'Synthesizing…'
+                                : 'Thinking…'}
+                            </span>
+                            {runningStep && runningStep.target && (
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)] max-w-[360px] truncate"
+                                title={runningStep.target}
+                              >
+                                <Globe className="w-3 h-3 text-[var(--ui-accent)] shrink-0" />
+                                <span className="truncate">{runningStep.target}</span>
+                              </span>
+                            )}
                           </div>
                         ) : (
-                          <RichMarkdownContent
-                            content={msg.content}
-                            onOpenSourceUrl={onOpenSourceUrl}
-                          />
+                          <div className={!isTurnReady ? 'ap-reveal-stage' : undefined}>
+                            <div className={!isTurnReady ? 'ap-reveal-prose--active' : undefined}>
+                              <RichMarkdownContent
+                                content={displayedProseContent}
+                                onOpenSourceUrl={onOpenSourceUrl}
+                              />
+                            </div>
+                            {!isTurnReady && (
+                              <div className="ap-reveal-veil" aria-hidden="true" />
+                            )}
+                          </div>
                         )}
                       </div>
 
-                      {/* Grounded Web Sources Pills (1-click inspect in Web & Docs tab) */}
-                      {msg.sources && msg.sources.length > 0 && (
-                        <div className="pt-1.5 flex flex-col gap-1.5">
+                      {/* Grounded Web Sources Pills (only shown once the entire response is ready) */}
+                      {isTurnReady && msg.sources && msg.sources.length > 0 && (
+                        <div className="pt-1.5 flex flex-col gap-1.5 ap-stream-fade-in">
                           <div className="flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-[var(--ui-text-muted)]">
                             <Globe className="w-3 h-3 text-[var(--ui-accent)]" />
                             <span>Grounded Web Sources ({msg.sources.length}) · Click to inspect in Web &amp; Docs</span>
@@ -2935,12 +3094,12 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         </div>
                       )}
 
-                      {/* Interactive Stage 1/2 Scope & Defaults Decision Cards (<decision-card>) */}
-                      {(() => {
+                      {/* Interactive Stage 1/2 Scope & Defaults Decision Cards (<decision-card>, shown once ready) */}
+                      {isTurnReady && (() => {
                         const { decisionCards } = extractDecisionCardsFromMarkdown(msg.content);
                         if (decisionCards.length === 0) return null;
                         return (
-                          <div className="space-y-2">
+                          <div className="space-y-2 ap-stream-fade-in">
                             {decisionCards.map((dc, dcIdx) => (
                               <InteractiveDecisionCard
                                 key={dcIdx}
@@ -2960,8 +3119,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         );
                       })()}
 
-                      {/* Guided Follow-Up Action Chips (explicit followUps + parsed <quick-actions>) */}
-                      {(() => {
+                      {/* Guided Follow-Up Action Chips (explicit followUps + parsed <quick-actions>, shown once ready) */}
+                      {isTurnReady && (() => {
                         const { quickActions } = extractQuickActionsFromMarkdown(msg.content);
                         const mergedFollowUps = [
                           ...(msg.followUps || []),
@@ -2971,7 +3130,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                         ];
                         if (mergedFollowUps.length === 0) return null;
                         return (
-                          <div className="flex flex-wrap items-center gap-2 pt-1.5">
+                          <div className="flex flex-wrap items-center gap-2 pt-1.5 ap-stream-fade-in">
                             {mergedFollowUps.map((f, fIdx) => (
                               <button
                                 key={fIdx}
@@ -3000,8 +3159,8 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                       })()}
 
                       {/* Assistant Turn Footer Actions (Retry & Copy at the bottom of the response) */}
-                      {!isTurnStreaming && (
-                        <div className="flex items-center gap-1.5 pt-0.5">
+                      {isTurnReady && (
+                        <div className="flex items-center gap-1.5 pt-0.5 ap-stream-fade-in">
                           {precedingUserMsg && (
                             <button
                               type="button"
@@ -3055,7 +3214,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
             </div>
 
             {/* DOCKED 2-ZONE CYCLODE COMPOSER */}
-            <div className="px-4 sm:px-6 pt-2 pb-4 bg-[var(--ui-bg-canvas)] shrink-0">
+            <div className="px-4 sm:px-6 pt-1.5 pb-3 bg-[var(--ui-bg-canvas)] shrink-0">
               <div className="max-w-3xl xl:max-w-4xl mx-auto relative rounded-2xl border border-[var(--ui-border-strong)] bg-[var(--ui-bg-surface)] shadow-[0_1px_2px_rgba(17,22,24,0.04),0_8px_24px_-12px_rgba(17,22,24,0.12)] focus-within:border-[color-mix(in_srgb,var(--ui-accent-deep)_70%,var(--ui-border-strong))] focus-within:shadow-[0_0_0_4px_color-mix(in_srgb,var(--ui-accent)_14%,transparent)] transition-[border-color,box-shadow]">
                 {openMenu && (
                   <div
@@ -3325,10 +3484,10 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                   </div>
                 )}
 
-                <div className="px-4 pt-3 pb-1">
+                <div className="px-3.5 pt-2.5 pb-0.5">
                   <textarea
                     ref={textareaRef}
-                    rows={3}
+                    rows={1}
                     value={composerText}
                     onChange={(e) => setComposerText(e.target.value)}
                     onKeyDown={(e) => {
@@ -3338,12 +3497,12 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
                       }
                     }}
                     placeholder={composerPlaceholder}
-                    className="w-full bg-transparent text-[14.5px] leading-[1.6] text-[var(--ui-text-primary)] placeholder:text-[var(--ui-text-muted)] resize-none focus:outline-none"
+                    className="w-full min-h-[24px] max-h-[144px] bg-transparent text-[14px] leading-[24px] text-[var(--ui-text-primary)] placeholder:text-[var(--ui-text-muted)] resize-none overflow-y-auto focus:outline-none block"
                   />
                 </div>
 
                 {/* Zone 2: Bottom Action & Selector Strip */}
-                <div className="flex items-center justify-between gap-2 px-3 pt-1 pb-2.5 rounded-b-2xl">
+                <div className="flex items-center justify-between gap-2 px-3 pt-1 pb-2 rounded-b-2xl">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <input
                       ref={fileInputRef}
