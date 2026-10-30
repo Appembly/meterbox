@@ -8,6 +8,7 @@ import {
   Maximize2,
   Minimize2,
   ArrowLeftRight,
+  ArrowUpToLine,
   Sparkles,
   ZoomIn,
   ZoomOut,
@@ -427,48 +428,96 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
   const cleanCode = useMemo(() => sanitizeMermaidCode(code), [code]);
   const summary = useMemo(() => extractDiagramSummary(cleanCode), [cleanCode]);
 
-  const calculateInlineFitZoom = useCallback(() => {
-    if (!containerRef.current || !svgDims) return 1.0;
+  // Calculate initial view focusing on the first part (entry layer) of the diagram
+  const calculateInlineInitialView = useCallback(() => {
+    if (!containerRef.current || !svgDims) return { zoom: 1.0, panX: 0, panY: 0 };
     const rect = containerRef.current.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return 1.0;
+    if (rect.width <= 0 || rect.height <= 0) return { zoom: 1.0, panX: 0, panY: 0 };
+
+    const padX = 36;
+    const padY = 24;
+    const fitWidth = (rect.width - padX) / svgDims.width;
+    const fitHeight = (rect.height - padY) / svgDims.height;
+    const fullFit = Math.min(fitWidth, fitHeight);
+
+    // If the entire diagram naturally fits vertically and horizontally at >= 0.85 scale, use centered full fit
+    if (fullFit >= 0.85) {
+      const zoom = Number(Math.min(fullFit, 1.05).toFixed(2));
+      return { zoom, panX: 0, panY: 0 };
+    }
+
+    // For large/multi-tier flowcharts: focus on the first part (entry layer)
+    // Maintain a legibility floor (0.85 - 1.0), adapting to canvas width
+    const zoom = Number(Math.min(Math.max(fitWidth, 0.85), 1.0).toFixed(2));
+    const scaledHeight = svgDims.height * zoom;
+
+    // Anchor top of the diagram 20px below top edge of canvas
+    let panY = 0;
+    if (scaledHeight > rect.height - 40) {
+      panY = Math.round((scaledHeight - rect.height) / 2 + 20);
+    }
+
+    return { zoom, panX: 0, panY };
+  }, [svgDims]);
+
+  // Full diagram bounding-box fit (bird's-eye view)
+  const calculateInlineFullFit = useCallback(() => {
+    if (!containerRef.current || !svgDims) return { zoom: 1.0, panX: 0, panY: 0 };
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return { zoom: 1.0, panX: 0, panY: 0 };
     const padX = 36;
     const padY = 28;
     const scaleX = (rect.width - padX) / svgDims.width;
     const scaleY = (rect.height - padY) / svgDims.height;
-    const fit = Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1.15);
-    return Number(fit.toFixed(2));
+    const zoom = Number(Math.min(Math.max(Math.min(scaleX, scaleY), 0.15), 1.15).toFixed(2));
+    return { zoom, panX: 0, panY: 0 };
   }, [svgDims]);
 
-  const handleInlineFitView = useCallback(() => {
-    const fit = calculateInlineFitZoom();
-    setInlineZoom(fit);
-    setInlinePan({ x: 0, y: 0 });
-  }, [calculateInlineFitZoom]);
+  const handleInlineFocusTop = useCallback(() => {
+    const { zoom, panX, panY } = calculateInlineInitialView();
+    setInlineZoom(zoom);
+    setInlinePan({ x: panX, y: panY });
+  }, [calculateInlineInitialView]);
+
+  const handleInlineFitEntire = useCallback(() => {
+    const { zoom, panX, panY } = calculateInlineFullFit();
+    setInlineZoom(zoom);
+    setInlinePan({ x: panX, y: panY });
+  }, [calculateInlineFullFit]);
 
   const handleInlineResetZoom = useCallback(() => {
     setInlineZoom(1.0);
-    setInlinePan({ x: 0, y: 0 });
-  }, []);
+    if (!containerRef.current || !svgDims) {
+      setInlinePan({ x: 0, y: 0 });
+      return;
+    }
+    const rect = containerRef.current.getBoundingClientRect();
+    const scaledHeight = svgDims.height * 1.0;
+    const panY = scaledHeight > rect.height - 40
+      ? Math.round((scaledHeight - rect.height) / 2 + 20)
+      : 0;
+    setInlinePan({ x: 0, y: panY });
+  }, [svgDims]);
 
   const handleInlineDoubleClick = useCallback(() => {
-    const fit = calculateInlineFitZoom();
-    if (Math.abs(inlineZoom - fit) > 0.05) {
-      handleInlineFitView();
+    const fullFit = calculateInlineFullFit();
+    if (Math.abs(inlineZoom - fullFit.zoom) <= 0.05 && Math.abs(inlinePan.y - fullFit.panY) <= 10) {
+      handleInlineFocusTop();
     } else {
-      handleInlineResetZoom();
+      handleInlineFitEntire();
     }
-  }, [calculateInlineFitZoom, inlineZoom, handleInlineFitView, handleInlineResetZoom]);
+  }, [calculateInlineFullFit, inlineZoom, inlinePan.y, handleInlineFocusTop, handleInlineFitEntire]);
 
-  // Auto-fit diagram inside the compact 260px inline canvas whenever SVG dimensions or layout change
+  // Auto-focus diagram on the entry layer at readable scale whenever SVG dimensions or layout change
   useEffect(() => {
     if (!isExpanded || showSource || !svgDims) return;
     const rafId = requestAnimationFrame(() => {
-      const fit = calculateInlineFitZoom();
-      setInlineZoom(fit);
-      setInlinePan({ x: 0, y: 0 });
+      const { zoom, panX, panY } = calculateInlineInitialView();
+      setInlineZoom(zoom);
+      setInlinePan({ x: panX, y: panY });
     });
     return () => cancelAnimationFrame(rafId);
-  }, [svgDims, isExpanded, isFullWidth, showSource, calculateInlineFitZoom]);
+  }, [svgDims, isExpanded, isFullWidth, showSource, calculateInlineInitialView]);
 
   // Non-passive cursor-centered wheel zoom on the inline 260px canvas
   useEffect(() => {
@@ -730,22 +779,22 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             isExpanded ? 'border-b border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)]' : ''
           } text-[11px] text-[var(--ui-text-muted)] font-mono select-none cursor-pointer transition-colors`}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
             {isExpanded ? (
               <ChevronDown className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
             ) : (
               <ChevronRight className="w-3.5 h-3.5 text-[var(--ui-text-muted)] shrink-0" />
             )}
             <Sparkles className="w-3.5 h-3.5 text-[var(--ui-accent)] shrink-0" />
-            <span className="text-[var(--ui-text-primary)] font-semibold text-[11.5px] shrink-0">
+            <span className="text-[var(--ui-text-primary)] font-semibold text-[11.5px] truncate">
               Architecture Diagram
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)] shrink-0">
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] border border-[var(--ui-border)] shrink-0 hidden sm:inline-flex">
               {summary.kindLabel}
               {summary.nodeCount > 0 ? ` · ${summary.nodeCount} nodes` : ''}
             </span>
             {!isExpanded && summary.previewLabel && (
-              <span className="text-[11.5px] font-sans text-[var(--ui-text-muted)] truncate hidden sm:inline">
+              <span className="text-[11.5px] font-sans text-[var(--ui-text-muted)] truncate hidden md:inline">
                 — {summary.previewLabel}
               </span>
             )}
@@ -755,43 +804,6 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
             className="flex items-center space-x-1 shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
-            {isExpanded && !showSource && (
-              <div className="flex items-center bg-[color-mix(in_srgb,var(--ui-bg-subtle)_90%,transparent)] border border-[var(--ui-border)] rounded-md p-0.5 mr-1">
-                <button
-                  type="button"
-                  onClick={() => setInlineZoom((z) => Math.max(0.15, Number((z - 0.2).toFixed(2))))}
-                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
-                  title="Zoom Out"
-                >
-                  <ZoomOut className="w-3 h-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleInlineResetZoom}
-                  className="px-1.5 py-0.2 text-[10px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[40px] text-center cursor-pointer"
-                  title="Reset to 100%"
-                >
-                  {Math.round(inlineZoom * 100)}%
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInlineZoom((z) => Math.min(4.0, Number((z + 0.2).toFixed(2))))}
-                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer"
-                  title="Zoom In"
-                >
-                  <ZoomIn className="w-3 h-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleInlineFitView}
-                  className="p-0.5 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] ml-0.5 border-l border-[color-mix(in_srgb,var(--ui-border)_60%,transparent)] cursor-pointer"
-                  title="Fit Diagram to 260px Viewport"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                </button>
-              </div>
-            )}
-
             {isExpanded && (
               <>
                 <button
@@ -814,9 +826,10 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                       ? 'bg-[color-mix(in_srgb,var(--ui-accent)_20%,transparent)] text-[var(--ui-accent)] font-semibold'
                       : 'hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)]'
                   }`}
+                  title={isFullWidth ? 'Standard Width' : 'Full Width'}
                 >
                   <ArrowLeftRight className="w-3 h-3" />
-                  <span>{isFullWidth ? 'Standard' : 'Full Width'}</span>
+                  <span className="hidden sm:inline">{isFullWidth ? 'Standard' : 'Full Width'}</span>
                 </button>
 
                 <button
@@ -824,9 +837,10 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   onClick={handleDownloadSvg}
                   disabled={!svgHtml}
                   className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer disabled:opacity-40"
+                  title="Download SVG"
                 >
                   <Download className="w-3 h-3" />
-                  <span>SVG</span>
+                  <span className="hidden sm:inline">SVG</span>
                 </button>
               </>
             )}
@@ -838,31 +852,24 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
               title="Open full-screen pan & zoom diagram viewer"
             >
               <Maximize2 className="w-3 h-3" />
-              <span>Expand</span>
+              <span className="hidden sm:inline">Expand</span>
             </button>
 
             <button
               type="button"
               onClick={handleCopy}
               className="flex items-center space-x-1 px-2 py-0.5 rounded text-[10.5px] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] text-[var(--ui-text-muted)] transition-colors cursor-pointer"
+              title="Copy Diagram Code"
             >
               {copied ? <Check className="w-3 h-3 text-[var(--ui-ok)]" /> : <Copy className="w-3 h-3" />}
-              <span>{copied ? 'Copied' : 'Copy'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setIsExpanded((prev) => !prev)}
-              className="px-2 py-0.5 rounded text-[10.5px] text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] transition-colors cursor-pointer"
-            >
-              {isExpanded ? 'Hide' : 'Show'}
+              <span className="hidden sm:inline">{copied ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
         </div>
 
         {isExpanded &&
           (showSource ? (
-            <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-[var(--ui-text-primary)] overflow-x-auto max-h-[260px] overflow-y-auto">
+            <pre className="p-3.5 text-[12px] font-mono leading-[1.55] text-[var(--ui-text-primary)] overflow-x-auto max-h-[290px] overflow-y-auto">
               <code>{cleanCode}</code>
             </pre>
           ) : (
@@ -901,7 +908,7 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                   (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
                 } catch {}
               }}
-              className={`relative h-[260px] overflow-hidden flex items-center justify-center select-none bg-[color-mix(in_srgb,var(--ui-bg-canvas)_35%,transparent)] ${
+              className={`relative h-[290px] overflow-hidden flex items-center justify-center select-none bg-[color-mix(in_srgb,var(--ui-bg-canvas)_35%,transparent)] ${
                 isInlineDragging ? 'cursor-grabbing' : 'cursor-grab'
               }`}
             >
@@ -918,12 +925,61 @@ export const MermaidDiagram: React.FC<MermaidDiagramProps> = ({
                     className="flex items-center justify-center pointer-events-none [&>svg]:!w-full [&>svg]:!h-full [&>svg]:!max-w-none [&>svg]:pointer-events-auto"
                     dangerouslySetInnerHTML={{ __html: svgHtml }}
                   />
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--ui-bg-surface)_90%,transparent)] backdrop-blur-xs border border-[var(--ui-border)] text-[10px] font-mono text-[var(--ui-text-muted)] pointer-events-none flex items-center space-x-1.5 select-none opacity-0 group-hover/mermaid:opacity-100 transition-opacity shadow-xs">
+
+                  {/* Floating Calm UI Canvas Viewport Dock */}
+                  <div
+                    className="absolute bottom-3 right-3 z-10 flex items-center bg-[color-mix(in_srgb,var(--ui-bg-surface)_85%,transparent)] backdrop-blur-md border border-[var(--ui-border)] rounded-lg p-0.5 shadow-md"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setInlineZoom((z) => Math.max(0.15, Number((z - 0.2).toFixed(2))))}
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer transition-colors"
+                      title="Zoom Out"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInlineResetZoom}
+                      className="px-1.5 py-0.5 text-[10.5px] font-mono font-medium text-[var(--ui-text-primary)] hover:text-[var(--ui-accent)] min-w-[42px] text-center cursor-pointer transition-colors"
+                      title="Reset to 100% Zoom"
+                    >
+                      {Math.round(inlineZoom * 100)}%
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInlineZoom((z) => Math.min(4.0, Number((z + 0.2).toFixed(2))))}
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer transition-colors"
+                      title="Zoom In"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="w-[1px] h-3.5 bg-[var(--ui-border)] mx-0.5" />
+                    <button
+                      type="button"
+                      onClick={handleInlineFocusTop}
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer transition-colors"
+                      title="Focus First Part (Entry Nodes)"
+                    >
+                      <ArrowUpToLine className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleInlineFitEntire}
+                      className="p-1 rounded text-[var(--ui-text-muted)] hover:text-[var(--ui-text-primary)] hover:bg-[var(--ui-bg-surface)] cursor-pointer transition-colors"
+                      title="Fit Entire Diagram in View"
+                    >
+                      <Minimize2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[color-mix(in_srgb,var(--ui-bg-surface)_90%,transparent)] backdrop-blur-xs border border-[var(--ui-border)] text-[10px] font-mono text-[var(--ui-text-muted)] pointer-events-none flex items-center space-x-1.5 select-none opacity-0 group-hover/mermaid:opacity-100 transition-opacity shadow-xs">
                     <span>Drag to pan</span>
                     <span className="opacity-40">·</span>
                     <span>Scroll to zoom</span>
                     <span className="opacity-40">·</span>
-                    <span>Double-click to toggle fit</span>
+                    <span>Double-click to fit</span>
                   </div>
                 </>
               ) : (
