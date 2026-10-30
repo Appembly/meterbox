@@ -77,14 +77,30 @@ export const MODEL_GROUPS = [
     items: [{ id: 'auto', label: 'Auto Tiering', sub: 'Dynamic Complexity Routing' }],
   },
   {
+    group: 'DeepSeek AI',
+    provider: 'deepseek',
+    items: [
+      { id: 'deepseek-flash', label: 'DeepSeek-V4.1-Flash', sub: '552B MoE / 1M Context' },
+      { id: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro', sub: 'High Capacity Frontier' },
+      { id: 'deepseek-reasoner', label: 'DeepSeek-R1', sub: 'Hybrid CoT' },
+    ],
+  },
+  {
+    group: 'Google Gemini',
+    provider: 'gemini',
+    items: [
+      { id: 'gemini-3.8-pro', label: 'Gemini 3.8 Pro', sub: 'Deep Reasoning & Multimodal' },
+      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', sub: 'Sub-second Agentic' },
+      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', sub: 'Agentic Workhorse' },
+    ],
+  },
+  {
     group: 'Anthropic Claude',
     provider: 'anthropic',
     items: [
       { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', sub: 'Flagship Autonomous & Coding' },
       { id: 'claude-fable-5-1', label: 'Claude Fable 5.1', sub: 'Mythos Frontier Long-Horizon' },
       { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', sub: 'Balanced Intelligence' },
-      { id: 'claude-3-7-sonnet', label: 'Claude 3.7 Sonnet', sub: 'Hybrid Thinking' },
-      { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', sub: 'Fast Sub-agents' },
     ],
   },
   {
@@ -94,28 +110,6 @@ export const MODEL_GROUPS = [
       { id: 'gpt-6-astra', label: 'GPT-6 Astra', sub: 'Flagship Autonomous' },
       { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', sub: 'Complex Work' },
       { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex', sub: 'Agentic Coding' },
-      { id: 'o3-pro', label: 'o3-pro', sub: 'High-Compute Reasoning' },
-      { id: 'o3', label: 'o3', sub: 'Frontier Reasoning' },
-      { id: 'gpt-4.1', label: 'GPT-4.1', sub: 'Smartest General' },
-      { id: 'gpt-4o', label: 'GPT-4o', sub: 'Omni Multimodal' },
-    ],
-  },
-  {
-    group: 'Google Gemini',
-    provider: 'gemini',
-    items: [
-      { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', sub: 'Sub-second Agentic' },
-      { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', sub: 'Agentic Workhorse' },
-    ],
-  },
-  {
-    group: 'DeepSeek AI',
-    provider: 'deepseek',
-    items: [
-      { id: 'deepseek-flash', label: 'DeepSeek-V4.1-Flash', sub: '552B MoE / 1M Context' },
-      { id: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro', sub: 'High Capacity Frontier' },
-      { id: 'deepseek-chat', label: 'DeepSeek-V3', sub: 'General Agentic' },
-      { id: 'deepseek-reasoner', label: 'DeepSeek-R1', sub: 'Hybrid CoT' },
     ],
   },
 ];
@@ -125,7 +119,7 @@ export const ALL_MODELS = MODEL_GROUPS.flatMap((g) =>
 );
 
 export function getModelOption(id: string) {
-  return ALL_MODELS.find((m) => m.id === id) || ALL_MODELS[3];
+  return ALL_MODELS.find((m) => m.id === id) || ALL_MODELS[0];
 }
 
 export interface ByokProviderMeta {
@@ -141,10 +135,30 @@ export interface ByokProviderMeta {
 
 export const BYOK_PROVIDERS: ByokProviderMeta[] = [
   {
+    id: 'deepseek',
+    name: 'DeepSeek AI',
+    shortLabel: 'DeepSeek (V4.1-Flash / V4-Pro / R1)',
+    modelsSummary: 'DeepSeek-V4.1-Flash, DeepSeek-V4-Pro, DeepSeek-R1',
+    keyPrefixPlaceholder: 'sk-...',
+    defaultHandleLabel: 'deepseek-byok-key',
+    latency: '480ms',
+    uptime: '99.94%',
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    shortLabel: 'Google (Gemini 3.8 Pro / 3.8 Flash / 3.7 Flash)',
+    modelsSummary: 'Gemini 3.8 Pro, Gemini 3.8 Flash, Gemini 3.7 Flash',
+    keyPrefixPlaceholder: 'AIzaSy...',
+    defaultHandleLabel: 'gemini-byok-key',
+    latency: '290ms',
+    uptime: '99.99%',
+  },
+  {
     id: 'anthropic',
     name: 'Anthropic Claude',
     shortLabel: 'Anthropic (Claude Opus 5.5 / Fable 5.1 / Sonnet 5.5)',
-    modelsSummary: 'Claude Opus 5.5, Claude Fable 5.1, Claude Sonnet 5.5, Claude Haiku 5.5',
+    modelsSummary: 'Claude Opus 5.5, Claude Fable 5.1, Claude Sonnet 5.5',
     keyPrefixPlaceholder: 'sk-ant-api03-...',
     defaultHandleLabel: 'anthropic-byok-key',
     latency: '380ms',
@@ -154,31 +168,11 @@ export const BYOK_PROVIDERS: ByokProviderMeta[] = [
     id: 'openai',
     name: 'OpenAI / Codex',
     shortLabel: 'OpenAI (GPT-6 Astra / GPT-6.1 Sol / GPT-5.3 Codex)',
-    modelsSummary: 'GPT-6 Astra, GPT-6.1 Sol, GPT-5.3 Codex, o3-pro, o3',
+    modelsSummary: 'GPT-6 Astra, GPT-6.1 Sol, GPT-5.3 Codex',
     keyPrefixPlaceholder: 'sk-proj-...',
     defaultHandleLabel: 'openai-byok-key',
     latency: '410ms',
     uptime: '99.95%',
-  },
-  {
-    id: 'gemini',
-    name: 'Google Gemini',
-    shortLabel: 'Google (Gemini 3.8 Flash / 3.7 Flash)',
-    modelsSummary: 'Gemini 3.8 Flash, Gemini 3.7 Flash',
-    keyPrefixPlaceholder: 'AIzaSy...',
-    defaultHandleLabel: 'gemini-byok-key',
-    latency: '290ms',
-    uptime: '99.99%',
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek AI',
-    shortLabel: 'DeepSeek (V4.1-Flash / V4-Pro / R1)',
-    modelsSummary: 'DeepSeek-V4.1-Flash, DeepSeek-V4-Pro, DeepSeek-V3, DeepSeek-R1',
-    keyPrefixPlaceholder: 'sk-...',
-    defaultHandleLabel: 'deepseek-byok-key',
-    latency: '480ms',
-    uptime: '99.94%',
   },
 ];
 
@@ -348,7 +342,7 @@ export const DEFAULT_ORG_AGENTS: OrgAgent[] = [
     role: 'Customer Success & Identity Guide',
     goal: 'Guides new enterprise tenants through OIDC SSO setup, BYOK Vault key sealing, and initial quota provisioning.',
     model: 'gpt-5.3-codex',
-    fallbackModel: 'claude-3-7-sonnet',
+    fallbackModel: 'claude-sonnet-5-5',
     status: 'Active · Production',
     repo: 'acme-corp/onboarding-copilot-agent',
     skills: ['Customer Onboarding Playbook', 'SQL Read-Only Analytics'],

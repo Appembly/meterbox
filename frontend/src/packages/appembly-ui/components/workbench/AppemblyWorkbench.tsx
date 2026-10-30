@@ -286,32 +286,32 @@ const DEFAULT_PERSONAS_BY_PRESET: Record<WorkbenchPreset, WorkbenchPersonaOption
 
 const DEFAULT_MODELS: WorkbenchModelOption[] = [
   {
-    id: 'claude-3-7-sonnet',
-    label: 'Claude 3.7 Sonnet',
-    provider: 'Anthropic · Gateway Primary',
-    latency: '0.8s TTFT',
+    id: 'deepseek-flash',
+    label: 'DeepSeek-V4.1-Flash',
+    provider: 'DeepSeek · 552B MoE',
+    latency: '0.5s TTFT',
+    tier: 'High Efficiency',
+  },
+  {
+    id: 'gemini-3.8-flash',
+    label: 'Gemini 3.8 Flash',
+    provider: 'Google · Sub-second Agentic',
+    latency: '0.4s TTFT',
+    tier: 'Sub-second Agentic',
+  },
+  {
+    id: 'claude-opus-5-5',
+    label: 'Claude Opus 5.5',
+    provider: 'Anthropic · Flagship Autonomous',
+    latency: '0.7s TTFT',
     tier: 'Frontier Reasoning',
   },
   {
-    id: 'gpt-4o',
-    label: 'GPT-4o Production',
-    provider: 'OpenAI · Fallback #1',
+    id: 'gpt-6-astra',
+    label: 'GPT-6 Astra',
+    provider: 'OpenAI · Flagship Autonomous',
     latency: '0.6s TTFT',
-    tier: 'Multimodal Fast',
-  },
-  {
-    id: 'gemini-2-5-pro',
-    label: 'Gemini 2.5 Pro',
-    provider: 'Google Vertex · 2M Context',
-    latency: '0.9s TTFT',
-    tier: 'Deep Context',
-  },
-  {
-    id: 'deepseek-r1-graviton',
-    label: 'DeepSeek R1 Distill',
-    provider: 'Bedrock arm64 · Low Cost',
-    latency: '0.5s TTFT',
-    tier: 'High Efficiency',
+    tier: 'Complex Autonomous',
   },
 ];
 
@@ -2026,7 +2026,7 @@ export const AppemblyWorkbench: React.FC<AppemblyWorkbenchProps> = ({
     onSelectPersonaId?.(id);
   };
 
-  const [internalModelId, setInternalModelId] = useState<string>(models[0]?.id || 'claude-3-7-sonnet');
+  const [internalModelId, setInternalModelId] = useState<string>(models[0]?.id || 'deepseek-flash');
   const activeModelId = controlledModelId ?? internalModelId;
   const setActiveModelId = (id: string) => {
     setInternalModelId(id);
